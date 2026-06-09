@@ -41,6 +41,7 @@ from ..schemas import (
     StageCreate,
     StageOut,
     StageUpdate,
+    WizardStateUpdate,
 )
 from ..services import storage
 
@@ -189,6 +190,27 @@ def get_project_detail(
     user: User = Depends(get_current_user),
 ):
     return get_project(db, project_id, user)
+
+
+@router.put("/projects/{project_id}/wizard", response_model=ProjectOut)
+def save_wizard_state(
+    project_id: int,
+    body: WizardStateUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Salva o rascunho do assistente (wizard) de criação.
+
+    Salvar pelo wizard torna o rascunho a referência da intenção do usuário, então
+    limpa a marca de defasagem (wizard_dirty=False por padrão). Stages/código
+    continuam canônicos.
+    """
+    project = get_project(db, project_id, user)
+    project.wizard_state = body.state
+    project.wizard_dirty = body.dirty
+    db.commit()
+    db.refresh(project)
+    return project
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
