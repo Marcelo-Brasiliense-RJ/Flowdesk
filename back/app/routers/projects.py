@@ -75,6 +75,13 @@ def get_project(db: Session, project_id: int, user: User) -> Project:
     return project
 
 
+def _mark_wizard_dirty(project: Project) -> None:
+    """Edição manual (modo avançado) pode defasar o rascunho do assistente.
+    Só marca se o fluxo já tiver sido montado pelo wizard (`_built`)."""
+    if (project.wizard_state or {}).get("_built"):
+        project.wizard_dirty = True
+
+
 # ---- folders ----
 @router.get("/folders", response_model=list[FolderOut])
 def list_folders(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -298,7 +305,7 @@ def create_stage(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
     if body.type not in ("form", "script", "job", "hook", "agent"):
         raise HTTPException(status_code=400, detail="Tipo de nó inválido")
     key = body.key or slugify(body.name)
@@ -324,6 +331,7 @@ def create_stage(
         pos_y=body.pos_y,
     )
     db.add(stage)
+    _mark_wizard_dirty(project)
     db.commit()
     db.refresh(stage)
     # scaffold a source file for executable stages (skip if one already exists)
@@ -353,12 +361,13 @@ def update_stage(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
     stage = db.get(Stage, stage_id)
     if stage is None or stage.project_id != project_id:
         raise HTTPException(status_code=404, detail="Nó não encontrado")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(stage, field, value)
+    _mark_wizard_dirty(project)
     db.commit()
     db.refresh(stage)
     return stage
@@ -371,10 +380,11 @@ def delete_stage(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
     stage = db.get(Stage, stage_id)
     if stage is None or stage.project_id != project_id:
         raise HTTPException(status_code=404, detail="Nó não encontrado")
+    _mark_wizard_dirty(project)
     db.query(Edge).filter(
         (Edge.source_stage_id == stage_id) | (Edge.target_stage_id == stage_id)
     ).delete(synchronize_session=False)
@@ -401,7 +411,8 @@ def create_edge(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
+    _mark_wizard_dirty(project)
     edge = Edge(
         project_id=project_id,
         source_stage_id=body.source_stage_id,
@@ -421,9 +432,10 @@ def delete_edge(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
     edge = db.get(Edge, edge_id)
     if edge and edge.project_id == project_id:
+        _mark_wizard_dirty(project)
         db.delete(edge)
         db.commit()
     return {"ok": True}
@@ -452,9 +464,10 @@ def write_source_file(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
     if unsafe_source_path(body.path):
         raise HTTPException(status_code=400, detail="Caminho de arquivo inválido")
+    _mark_wizard_dirty(project)
     existing = (
         db.query(SourceFile)
         .filter(SourceFile.project_id == project_id, SourceFile.path == body.path)
@@ -484,7 +497,8 @@ def delete_source_file(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
+    _mark_wizard_dirty(project)
     db.query(SourceFile).filter(
         SourceFile.project_id == project_id, SourceFile.path == path
     ).delete()

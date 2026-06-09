@@ -39,6 +39,7 @@ export default function Wizard() {
   const [building, setBuilding] = useState(false);
   const [build, setBuild] = useState<BuildResult | null>(null);
   const [buildError, setBuildError] = useState("");
+  const [dismissedDirty, setDismissedDirty] = useState(false);
 
   useEffect(() => {
     api.get<Project>(`/api/projects/${projectId}`).then((p) => {
@@ -119,6 +120,27 @@ export default function Wizard() {
           Modo avançado →
         </Link>
       </header>
+
+      {project.wizard_dirty && !dismissedDirty && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm">
+          <span className="text-amber-800">
+            Esta automação foi ajustada manualmente no modo avançado. Editar pelo
+            assistente pode sobrescrever esses ajustes.
+          </span>
+          <button
+            onClick={() => setDismissedDirty(true)}
+            className="btn-outline py-1 text-xs"
+          >
+            Continuar mesmo assim
+          </button>
+          <Link
+            to={`/projects/${projectId}/editor`}
+            className="text-xs font-medium text-amber-700 hover:underline"
+          >
+            Abrir no modo avançado
+          </Link>
+        </div>
+      )}
 
       {/* trilha de progresso */}
       <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-6 py-3">
