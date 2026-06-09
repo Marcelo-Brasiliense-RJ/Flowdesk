@@ -293,6 +293,23 @@ def main():
     except Exception as exc:
         check("ws envia 'connected'", False, str(exc)[:80])
 
+    section("Wizard (assistente de automacao)")
+    wstate = {"step": 3, "trigger": "manual", "input": {"kind": "file"},
+              "process": "remover duplicados pela coluna Valor", "output": {"kind": "download"}}
+    pw = c.put(f"{BASE}/api/projects/{pid}/wizard", headers=H,
+               json={"state": wstate, "dirty": False}).json()
+    check("wizard_state salvo e devolvido",
+          pw.get("wizard_state", {}).get("process") == wstate["process"],
+          f"got={pw.get('wizard_state')}")
+    check("wizard_dirty inicia falso", pw.get("wizard_dirty") is False)
+    got = c.get(f"{BASE}/api/projects/{pid}", headers=H).json()
+    check("wizard_state persiste no GET do projeto", got.get("wizard_state", {}).get("step") == 3)
+    pw2 = c.put(f"{BASE}/api/projects/{pid}/wizard", headers=H,
+                json={"state": wstate, "dirty": True}).json()
+    check("wizard_dirty pode ser marcado (edicao no modo avancado)", pw2.get("wizard_dirty") is True)
+    nf = c.put(f"{BASE}/api/projects/999999/wizard", headers=H, json={"state": {}, "dirty": False})
+    check("wizard em projeto inexistente -> 404", nf.status_code == 404, f"status={nf.status_code}")
+
     section("Limpeza")
     for ppid in CREATED_PROJECTS:
         c.delete(f"{BASE}/api/projects/{ppid}", headers=H)
