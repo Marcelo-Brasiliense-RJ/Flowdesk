@@ -53,6 +53,15 @@ class WizardStateUpdate(BaseModel):
     dirty: bool = False
 
 
+class WizardBuildOut(BaseModel):
+    """Resultado da montagem do fluxo pelo assistente."""
+
+    explanation: str
+    script_file: str
+    stage_ids: dict
+    ai_enabled: bool
+
+
 class ProjectOut(ORMModel):
     id: int
     name: str
