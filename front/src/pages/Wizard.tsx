@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import type {
+  Execution,
   InputKind,
   OutputKind,
   Project,
@@ -13,13 +14,19 @@ import { Logo, Spinner } from "../components/ui";
 
 const STEPS = ["Gatilho", "Entrada", "Processamento", "Resultado", "Revisão"];
 
+interface BuildResult {
+  explanation: string;
+  script_file: string;
+  stage_ids: { input?: number; script?: number; result?: number; trigger?: number };
+  ai_enabled: boolean;
+}
+
 /**
  * Assistente (wizard) de criação para o usuário não-técnico.
  *
- * Esta é a casca navegável: captura a intenção nas 4 etapas e persiste em
- * project.wizard_state. A geração de código, a montagem dos nós (Stage/Edge) e o
- * teste obrigatório antes de publicar são incrementos seguintes. O frontend é dono
- * da estrutura das etapas (previsibilidade); a IA entra só na etapa Processamento.
+ * O frontend é dono das 4 etapas (previsibilidade); a IA entra só no Processamento.
+ * Ao entrar na Revisão, o fluxo é montado no backend (POST /wizard/build) e o usuário
+ * precisa rodar um teste com dados de exemplo (status `success`) antes de publicar.
  */
 export default function Wizard() {
   const { id } = useParams();
@@ -28,6 +35,10 @@ export default function Wizard() {
   const [state, setState] = useState<WizardState>({});
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  const [building, setBuilding] = useState(false);
+  const [build, setBuild] = useState<BuildResult | null>(null);
+  const [buildError, setBuildError] = useState("");
 
   useEffect(() => {
     api.get<Project>(`/api/projects/${projectId}`).then((p) => {
@@ -45,9 +56,8 @@ export default function Wizard() {
   async function persist(next: number) {
     setSaving(true);
     try {
-      const toSave: WizardState = { ...state, step: next };
       await api.put(`/api/projects/${projectId}/wizard`, {
-        state: toSave,
+        state: { ...state, step: next },
         dirty: false,
       });
       setStep(next);
@@ -56,8 +66,25 @@ export default function Wizard() {
     }
   }
 
-  function goBack() {
-    if (step > 0) setStep(step - 1);
+  async function buildFlow() {
+    setBuilding(true);
+    setBuildError("");
+    try {
+      const res = await api.post<BuildResult>(
+        `/api/projects/${projectId}/wizard/build`
+      );
+      setBuild(res);
+    } catch (e: any) {
+      setBuildError(e?.message || "Falha ao montar a automação.");
+    } finally {
+      setBuilding(false);
+    }
+  }
+
+  async function handleContinue() {
+    const next = step + 1;
+    await persist(next);
+    if (next === 4) buildFlow();
   }
 
   if (!project)
@@ -71,8 +98,7 @@ export default function Wizard() {
     (step === 0 && !!state.trigger?.kind) ||
     (step === 1 && !!state.input?.kind) ||
     (step === 2 && !!state.process?.description?.trim()) ||
-    (step === 3 && !!state.output?.kind) ||
-    step === 4;
+    (step === 3 && !!state.output?.kind);
 
   return (
     <div className="flex h-full flex-col bg-slate-50">
@@ -127,13 +153,22 @@ export default function Wizard() {
           {step === 1 && <InputStep state={state} patch={patch} />}
           {step === 2 && <ProcessStep state={state} patch={patch} />}
           {step === 3 && <OutputStep state={state} patch={patch} />}
-          {step === 4 && <ReviewStep state={state} />}
+          {step === 4 && (
+            <ReviewStep
+              projectId={projectId}
+              state={state}
+              building={building}
+              build={build}
+              buildError={buildError}
+              onRebuild={buildFlow}
+            />
+          )}
         </div>
       </div>
 
       <footer className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
         <button
-          onClick={goBack}
+          onClick={() => step > 0 && setStep(step - 1)}
           disabled={step === 0}
           className="btn-outline py-1.5 text-sm disabled:opacity-40"
         >
@@ -144,20 +179,14 @@ export default function Wizard() {
         </span>
         {step < STEPS.length - 1 ? (
           <button
-            onClick={() => persist(step + 1)}
+            onClick={handleContinue}
             disabled={!canAdvance || saving}
             className="btn-primary py-1.5 text-sm disabled:opacity-40"
           >
-            {saving ? "Salvando…" : "Continuar"}
+            {saving ? "Salvando…" : step === 3 ? "Montar e revisar" : "Continuar"}
           </button>
         ) : (
-          <button
-            disabled
-            className="btn-primary py-1.5 text-sm disabled:opacity-40"
-            title="O teste obrigatório e a publicação chegam no próximo incremento"
-          >
-            Testar e publicar (em breve)
-          </button>
+          <span className="w-24" />
         )}
       </footer>
     </div>
@@ -375,8 +404,8 @@ function ProcessStep({ state, patch }: StepProps) {
         onChange={(e) => patch({ process: { description: e.target.value } })}
       />
       <p className="mt-2 text-xs text-slate-400">
-        No próximo incremento, ao continuar, a IA vai gerar a automação e mostrar uma
-        explicação em português antes de qualquer publicação.
+        Ao continuar, a IA vai montar a automação e mostrar uma explicação em
+        português. Nada é publicado sem você testar antes.
       </p>
     </div>
   );
@@ -409,7 +438,40 @@ function OutputStep({ state, patch }: StepProps) {
   );
 }
 
-function ReviewStep({ state }: { state: WizardState }) {
+/** Traduz erros técnicos comuns do Python para uma mensagem em português.
+ * Cobre os casos frequentes; o resto cai num texto genérico + modo avançado. */
+function translateError(stderr: string): string {
+  const s = stderr || "";
+  const key = s.match(/KeyError:\s*['"]?([^'"\n]+)/);
+  if (key) return `A coluna ou campo "${key[1]}" não foi encontrado nos dados.`;
+  if (/BadZipFile|not a zip file|openpyxl.*cannot/i.test(s))
+    return "O arquivo enviado não parece ser um Excel (.xlsx) válido.";
+  if (/EmptyDataError|No columns to parse|empty/i.test(s))
+    return "O arquivo enviado parece estar vazio.";
+  if (/FileNotFoundError|No such file/i.test(s))
+    return "O arquivo de entrada não foi encontrado. Suba um exemplo e tente de novo.";
+  if (/could not convert|invalid literal|ValueError/i.test(s))
+    return "Algum dado veio em um formato inesperado (ex: texto onde se esperava número).";
+  if (/ModuleNotFoundError|No module named/i.test(s))
+    return "A automação depende de um pacote que ainda não está instalado.";
+  return "A automação encontrou um erro ao processar. Tente ajustar a descrição na etapa Processamento.";
+}
+
+function ReviewStep({
+  projectId,
+  state,
+  building,
+  build,
+  buildError,
+  onRebuild,
+}: {
+  projectId: number;
+  state: WizardState;
+  building: boolean;
+  build: BuildResult | null;
+  buildError: string;
+  onRebuild: () => void;
+}) {
   const triggerText =
     state.trigger?.kind === "manual"
       ? "Você executa manualmente"
@@ -438,18 +500,58 @@ function ReviewStep({ state }: { state: WizardState }) {
   return (
     <div>
       <StepTitle
-        title="Revisão"
-        hint="Confira o que você montou. O teste obrigatório com dados de exemplo chega no próximo incremento."
+        title="Revisão e teste"
+        hint="Confira o que foi montado e rode um teste com dados de exemplo antes de publicar."
       />
+
       <div className="space-y-3">
         <ReviewRow label="Começa" value={triggerText} />
         <ReviewRow label="Recebe" value={inputText} />
-        <ReviewRow
-          label="Faz"
-          value={state.process?.description?.trim() || "—"}
-        />
+        <ReviewRow label="Faz" value={state.process?.description?.trim() || "—"} />
         <ReviewRow label="Entrega" value={outputText} />
       </div>
+
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="font-semibold text-brand-900">O que a automação vai fazer</h3>
+          <button
+            onClick={onRebuild}
+            disabled={building}
+            className="text-xs text-slate-400 hover:text-brand-700 disabled:opacity-50"
+          >
+            {building ? "Montando…" : "Montar de novo"}
+          </button>
+        </div>
+        {building ? (
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <Spinner className="h-4 w-4" /> Montando a automação…
+          </div>
+        ) : buildError ? (
+          <p className="text-sm text-red-600">{buildError}</p>
+        ) : build ? (
+          <>
+            <p className="whitespace-pre-wrap text-sm text-slate-600">
+              {build.explanation}
+            </p>
+            {!build.ai_enabled && (
+              <p className="mt-2 text-xs text-amber-600">
+                IA em modo simulado: o código gerado é um exemplo. Configure a chave da
+                IA para geração real.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-slate-400">Ainda não montado.</p>
+        )}
+      </div>
+
+      {build?.stage_ids?.script && (
+        <TestPanel
+          projectId={projectId}
+          scriptStageId={build.stage_ids.script}
+          state={state}
+        />
+      )}
     </div>
   );
 }
@@ -461,6 +563,195 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-0.5 text-sm text-slate-700">{value}</div>
+    </div>
+  );
+}
+
+function TestPanel({
+  projectId,
+  scriptStageId,
+  state,
+}: {
+  projectId: number;
+  scriptStageId: number;
+  state: WizardState;
+}) {
+  const [samplePath, setSamplePath] = useState<string>("");
+  const [sampleName, setSampleName] = useState<string>("");
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [testing, setTesting] = useState(false);
+  const [exec, setExec] = useState<Execution | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
+
+  const inputKind = state.input?.kind ?? "none";
+  const fields = state.input?.fields ?? [];
+  const passed = exec?.status === "success";
+
+  async function uploadSample(file: File) {
+    const fd = new FormData();
+    fd.append("path", "uploads");
+    fd.append("file", file);
+    const r = await api.postForm<{ name: string }>(
+      `/api/projects/${projectId}/fs/upload`,
+      fd
+    );
+    setSamplePath(`uploads/${r.name}`);
+    setSampleName(r.name);
+  }
+
+  function buildPayload(): Record<string, unknown> {
+    if (inputKind === "file") return samplePath ? { arquivo: samplePath } : {};
+    if (inputKind === "fields") return { ...fieldValues };
+    return {};
+  }
+
+  async function runTest() {
+    setTesting(true);
+    setExec(null);
+    try {
+      const started = await api.post<Execution>(
+        `/api/projects/${projectId}/stages/${scriptStageId}/run`,
+        buildPayload()
+      );
+      let last = started;
+      for (let i = 0; i < 25; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        last = await api.get<Execution>(
+          `/api/projects/${projectId}/executions/${started.id}`
+        );
+        if (last.status === "success" || last.status === "error") break;
+      }
+      setExec(last);
+    } catch (e: any) {
+      setExec({
+        status: "error",
+        stderr: e?.message || "Falha ao iniciar o teste.",
+      } as Execution);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function publish() {
+    setPublishing(true);
+    try {
+      await api.post(`/api/projects/${projectId}/publish`);
+      setPublished(true);
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  const needsSample = inputKind === "file" && !samplePath;
+  const summary = exec?.output_data?.resumo;
+  const resultFile = exec?.output_data?.arquivo_resultado as string | undefined;
+
+  return (
+    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="font-semibold text-brand-900">Testar com dados de exemplo</h3>
+      <p className="mt-1 text-sm text-slate-500">
+        Rode a automação de verdade antes de publicar. Publicar só fica disponível após
+        um teste bem-sucedido.
+      </p>
+
+      {inputKind === "file" && (
+        <div className="mt-3 flex items-center gap-2 text-sm">
+          <label className="btn-outline cursor-pointer py-1.5 text-xs">
+            {sampleName ? `Trocar arquivo (${sampleName})` : "Subir arquivo de exemplo"}
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadSample(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {sampleName && <span className="text-emerald-600">✓ {sampleName}</span>}
+        </div>
+      )}
+
+      {inputKind === "fields" && (
+        <div className="mt-3 space-y-2">
+          {fields.map((f, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className="w-40 shrink-0 text-slate-500">{f.label || `Campo ${i + 1}`}</span>
+              <input
+                className="input"
+                value={fieldValues[f.label] ?? ""}
+                onChange={(e) =>
+                  setFieldValues((v) => ({ ...v, [f.label]: e.target.value }))
+                }
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={runTest}
+        disabled={testing || needsSample}
+        className="btn-accent mt-4 py-1.5 text-sm disabled:opacity-50"
+        title={needsSample ? "Suba um arquivo de exemplo primeiro" : ""}
+      >
+        {testing ? "Testando…" : "Testar agora"}
+      </button>
+
+      {exec && (
+        <div className="mt-4">
+          {passed ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-sm font-medium text-emerald-700">
+                Teste concluído com sucesso
+              </div>
+              {summary && (
+                <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs text-slate-600">
+                  {JSON.stringify(summary, null, 2)}
+                </pre>
+              )}
+              {resultFile && (
+                <div className="mt-2 text-xs text-slate-500">
+                  Arquivo gerado: {String(resultFile).split(/[\\/]/).pop()} (disponível
+                  no app publicado e no modo avançado).
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="text-sm font-medium text-red-700">
+                {translateError(exec.stderr || "")}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Ajuste a descrição na etapa Processamento e monte de novo, ou abra o modo
+                avançado para ver os detalhes técnicos.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
+        <button
+          onClick={publish}
+          disabled={!passed || publishing || published}
+          className="btn-primary py-1.5 text-sm disabled:opacity-40"
+          title={passed ? "" : "Rode um teste com sucesso antes de publicar"}
+        >
+          {published ? "Publicado ✓" : publishing ? "Publicando…" : "Publicar"}
+        </button>
+        {!passed && !published && (
+          <span className="text-xs text-slate-400">
+            Publicar libera após um teste bem-sucedido.
+          </span>
+        )}
+        {published && (
+          <span className="text-xs text-emerald-600">
+            Automação no ar. Veja em Versões ou abra o app publicado.
+          </span>
+        )}
+      </div>
     </div>
   );
 }
