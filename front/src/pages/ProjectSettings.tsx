@@ -1,0 +1,464 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { api } from "../lib/api";
+import { useDialog } from "../components/Dialog";
+import type { EnvVar, Project } from "../lib/types";
+import ProjectLayout, { useProject } from "../components/ProjectLayout";
+
+const SUB = [
+  ["", "Visão geral", "📋"],
+  ["tables", "Tabelas", "🗄️"],
+  ["connectors", "Conectores", "🔌"],
+  ["keys", "Chaves de API", "🔑"],
+  ["env", "Variáveis de Ambiente", "🔒"],
+  ["subdomain", "Subdomínio", "🌐"],
+];
+
+export default function ProjectSettings() {
+  const { id, project, setProject } = useProject();
+  const params = useParams();
+  const sub = (params["*"] || "").replace(/^\//, "");
+
+  return (
+    <ProjectLayout project={project}>
+      <div className="flex h-full">
+        <nav className="w-56 shrink-0 border-r border-slate-200 bg-white p-3">
+          <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Configurações
+          </div>
+          {SUB.map(([key, label, icon]) => (
+            <Link
+              key={key}
+              to={`/projects/${id}/settings${key ? "/" + key : ""}`}
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+                sub === key
+                  ? "bg-brand-50 font-medium text-brand-700 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-brand-700"
+              }`}
+            >
+              <span className="w-4 text-center text-xs">{icon}</span>
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="flex-1 overflow-auto p-6">
+          {sub === "" && <Overview project={project} />}
+          {sub === "tables" && <Tables id={id} />}
+          {sub === "connectors" && <Connectors id={id} />}
+          {sub === "keys" && <ApiKeys id={id} />}
+          {sub === "env" && <EnvVars id={id} />}
+          {sub === "subdomain" && project && <Subdomain project={project} setProject={setProject} />}
+        </div>
+      </div>
+    </ProjectLayout>
+  );
+}
+
+function Header({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="mb-4">
+      <h1 className="text-xl font-bold text-brand-900">{title}</h1>
+      {sub && <p className="text-sm text-slate-500">{sub}</p>}
+    </div>
+  );
+}
+
+function Overview({ project }: { project: any }) {
+  return (
+    <div>
+      <Header title="Configurações do Projeto" />
+      <div className="card max-w-lg divide-y divide-slate-100 p-5 text-sm">
+        <Row label="Nome" value={project?.name} />
+        <Row label="Subdomínio" value={`/app/${project?.subdomain}`} />
+        <Row label="Status" value={project?.status} />
+        <Row label="Pasta de saída" value={project?.output_folder_name} />
+        <Row label="Política de acesso" value={project?.access_mode} />
+      </div>
+    </div>
+  );
+}
+function Row({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="flex justify-between py-2">
+      <span className="text-slate-400">{label}</span>
+      <span className="font-medium text-brand-900">{value}</span>
+    </div>
+  );
+}
+
+/* ---------------- Tabelas (banco interno, CRUD visual) ---------------- */
+interface DTable { id: number; name: string; columns: { name: string; type: string }[] }
+interface DRow { id: number; values: Record<string, any> }
+
+function Tables({ id }: { id: number }) {
+  const dlg = useDialog();
+  const [tables, setTables] = useState<DTable[]>([]);
+  const [sel, setSel] = useState<DTable | null>(null);
+  const [rows, setRows] = useState<DRow[]>([]);
+
+  async function loadTables() {
+    setTables(await api.get<DTable[]>(`/api/projects/${id}/tables`));
+  }
+  useEffect(() => {
+    loadTables();
+  }, [id]);
+
+  async function openTable(t: DTable) {
+    setSel(t);
+    setRows(await api.get<DRow[]>(`/api/projects/${id}/tables/${t.id}/rows`));
+  }
+  async function createTable() {
+    const name = await dlg.prompt({ title: "Nova tabela", label: "Nome da tabela", placeholder: "Ex: clientes" });
+    if (!name?.trim()) return;
+    await api.post(`/api/projects/${id}/tables?name=${encodeURIComponent(name.trim())}`);
+    loadTables();
+  }
+  async function delTable(t: DTable) {
+    if (!(await dlg.confirm({ title: "Excluir tabela", message: `"${t.name}" e seus dados serão removidos.`, danger: true, confirmLabel: "Excluir" }))) return;
+    await api.del(`/api/projects/${id}/tables/${t.id}`);
+    if (sel?.id === t.id) setSel(null);
+    loadTables();
+  }
+  async function addColumn() {
+    if (!sel) return;
+    const name = await dlg.prompt({ title: "Nova coluna", label: "Nome da coluna" });
+    if (!name?.trim()) return;
+    const type = await dlg.selectOption({
+      title: "Tipo da coluna",
+      label: name,
+      options: [
+        { value: "text", label: "Texto" },
+        { value: "number", label: "Número" },
+        { value: "date", label: "Data" },
+      ],
+    });
+    const columns = [...(sel.columns || []), { name: name.trim(), type: type || "text" }];
+    const upd = await api.patch<DTable>(`/api/projects/${id}/tables/${sel.id}`, { columns });
+    setSel(upd);
+  }
+  async function addRow() {
+    if (!sel) return;
+    const r = await api.post<DRow>(`/api/projects/${id}/tables/${sel.id}/rows`, { values: {} });
+    setRows((rs) => [...rs, r]);
+  }
+  async function saveCell(row: DRow, col: string, value: string) {
+    if (!sel) return;
+    const values = { ...row.values, [col]: value };
+    await api.patch(`/api/projects/${id}/tables/${sel.id}/rows/${row.id}`, { values });
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, values } : r)));
+  }
+  async function delRow(row: DRow) {
+    if (!sel) return;
+    await api.del(`/api/projects/${id}/tables/${sel.id}/rows/${row.id}`);
+    setRows((rs) => rs.filter((r) => r.id !== row.id));
+  }
+
+  return (
+    <div>
+      <Header title="Tabelas" sub="Banco de dados interno do projeto" />
+      <div className="flex gap-4">
+        {/* tables list */}
+        <div className="w-52 shrink-0">
+          <button onClick={createTable} className="btn-primary mb-2 w-full py-1.5 text-sm">
+            + Nova tabela
+          </button>
+          <div className="space-y-1">
+            {tables.map((t) => (
+              <div
+                key={t.id}
+                className={`group flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                  sel?.id === t.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <button onClick={() => openTable(t)} className="flex-1 truncate text-left">
+                  🗄️ {t.name}
+                </button>
+                <button onClick={() => delTable(t)} className="hidden text-slate-400 hover:text-red-600 group-hover:block">
+                  ×
+                </button>
+              </div>
+            ))}
+            {tables.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">Nenhuma tabela.</div>}
+          </div>
+        </div>
+
+        {/* table data grid */}
+        <div className="min-w-0 flex-1">
+          {!sel ? (
+            <div className="card flex h-48 items-center justify-center text-sm text-slate-400">
+              Selecione ou crie uma tabela.
+            </div>
+          ) : (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
+                <span className="font-semibold text-brand-900">{sel.name}</span>
+                <div className="flex gap-2">
+                  <button onClick={addColumn} className="btn-outline py-1 text-xs">+ Coluna</button>
+                  <button onClick={addRow} disabled={!sel.columns?.length} className="btn-primary py-1 text-xs disabled:opacity-50">
+                    + Linha
+                  </button>
+                </div>
+              </div>
+              {!sel.columns?.length ? (
+                <div className="p-6 text-center text-sm text-slate-400">
+                  Adicione colunas para começar.
+                </div>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+                      <tr>
+                        {sel.columns.map((c) => (
+                          <th key={c.name} className="px-3 py-2">
+                            {c.name} <span className="text-[9px] text-slate-300">{c.type}</span>
+                          </th>
+                        ))}
+                        <th className="w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.id} className="border-t border-slate-100">
+                          {sel.columns.map((c) => (
+                            <td key={c.name} className="px-1 py-1">
+                              <input
+                                className="w-full rounded px-2 py-1 text-sm outline-none focus:bg-brand-50"
+                                type={c.type === "number" ? "number" : c.type === "date" ? "date" : "text"}
+                                defaultValue={row.values[c.name] ?? ""}
+                                onBlur={(e) => saveCell(row, c.name, e.target.value)}
+                              />
+                            </td>
+                          ))}
+                          <td className="px-2">
+                            <button onClick={() => delRow(row)} className="text-slate-300 hover:text-red-600">×</button>
+                          </td>
+                        </tr>
+                      ))}
+                      {rows.length === 0 && (
+                        <tr><td colSpan={sel.columns.length + 1} className="px-3 py-4 text-center text-slate-400">Sem linhas.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Conectores (funcional) ---------------- */
+const CONNECTOR_TYPES = [
+  { value: "google_sheets", label: "Google Sheets" },
+  { value: "slack", label: "Slack" },
+  { value: "http", label: "HTTP / API externa" },
+];
+
+function Connectors({ id }: { id: number }) {
+  const dlg = useDialog();
+  const [items, setItems] = useState<any[]>([]);
+  async function load() {
+    setItems(await api.get<any[]>(`/api/projects/${id}/connectors`));
+  }
+  useEffect(() => {
+    load();
+  }, [id]);
+
+  async function add() {
+    const type = await dlg.selectOption({ title: "Novo conector", label: "Tipo", options: CONNECTOR_TYPES });
+    if (!type) return;
+    const label = CONNECTOR_TYPES.find((t) => t.value === type)?.label || type;
+    const name = await dlg.prompt({ title: "Nome do conector", label: "Identificação", defaultValue: label });
+    if (!name?.trim()) return;
+    const secret = await dlg.prompt({ title: "Configuração", label: "URL / token / chave (opcional)", placeholder: "https://… ou token" });
+    await api.post(`/api/projects/${id}/connectors`, { type, name: name.trim(), config: secret ? { secret } : {} });
+    load();
+  }
+  async function del(c: any) {
+    if (!(await dlg.confirm({ title: "Remover conector", message: c.name, danger: true, confirmLabel: "Remover" }))) return;
+    await api.del(`/api/projects/${id}/connectors/${c.id}`);
+    load();
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <Header title="Conectores" sub="Integrações externas do projeto" />
+        <button onClick={add} className="btn-primary py-1.5 text-sm">+ Novo conector</button>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {items.map((c) => (
+          <div key={c.id} className="card p-4">
+            <div className="flex items-start justify-between">
+              <div className="font-medium text-brand-900">{c.name}</div>
+              <button onClick={() => del(c)} className="text-slate-300 hover:text-red-600">×</button>
+            </div>
+            <div className="text-xs text-slate-400">{CONNECTOR_TYPES.find((t) => t.value === c.type)?.label || c.type}</div>
+            <span className={`badge mt-2 ${c.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+              {c.connected ? "Conectado" : "Não conectado"}
+            </span>
+          </div>
+        ))}
+        {items.length === 0 && (
+          <div className="col-span-full rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
+            Nenhum conector. Adicione Google Sheets, Slack ou uma API externa.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Chaves de API ---------------- */
+function ApiKeys({ id }: { id: number }) {
+  const dlg = useDialog();
+  const [keys, setKeys] = useState<any[]>([]);
+  async function load() {
+    setKeys(await api.get<any[]>(`/api/projects/${id}/api-keys`));
+  }
+  useEffect(() => {
+    load();
+  }, [id]);
+  async function create() {
+    const name = await dlg.prompt({ title: "Nova chave de API", label: "Nome da chave" });
+    if (!name?.trim()) return;
+    await api.post(`/api/projects/${id}/api-keys?name=${encodeURIComponent(name.trim())}`);
+    load();
+  }
+  async function del(k: any) {
+    if (!(await dlg.confirm({ title: "Revogar chave", message: k.name, danger: true, confirmLabel: "Revogar" }))) return;
+    await api.del(`/api/projects/${id}/api-keys/${k.id}`);
+    load();
+  }
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <Header title="Chaves de API" sub="Tokens para acesso programático" />
+        <button onClick={create} className="btn-primary py-1.5 text-sm">+ Gerar chave</button>
+      </div>
+      <div className="card overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <tbody>
+            {keys.map((k) => (
+              <tr key={k.id} className="border-t border-slate-100 first:border-0">
+                <td className="px-4 py-2 font-medium">🔑 {k.name}</td>
+                <td className="px-4 py-2 font-mono text-xs text-slate-500">{k.token}</td>
+                <td className="px-4 py-2 text-right">
+                  <button onClick={() => del(k)} className="text-xs text-red-500 hover:text-red-700">revogar</button>
+                </td>
+              </tr>
+            ))}
+            {keys.length === 0 && (
+              <tr><td className="px-4 py-6 text-center text-slate-400">Nenhuma chave gerada.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Variáveis de Ambiente ---------------- */
+function EnvVars({ id }: { id: number }) {
+  const [vars, setVars] = useState<EnvVar[]>([]);
+  const [reveal, setReveal] = useState<Record<number, boolean>>({});
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  async function load() {
+    setVars(await api.get<EnvVar[]>(`/api/projects/${id}/env`));
+  }
+  useEffect(() => {
+    load();
+  }, [id]);
+  async function save() {
+    if (!key) return;
+    await api.put(`/api/projects/${id}/env`, { key, value, secret: true });
+    setKey("");
+    setValue("");
+    load();
+  }
+  return (
+    <div>
+      <Header title="Variáveis de Ambiente" sub="Injetadas no subprocesso dos scripts. Valores ocultos por padrão." />
+      <div className="card overflow-hidden">
+        <div className="flex gap-2 border-b border-slate-100 p-3">
+          <input className="input max-w-[180px] font-mono" placeholder="CHAVE" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} />
+          <input className="input" type="password" autoComplete="off" placeholder="valor (oculto)" value={value} onChange={(e) => setValue(e.target.value)} />
+          <button onClick={save} className="btn-primary py-1.5 text-sm">Adicionar</button>
+        </div>
+        <table className="w-full text-left text-sm">
+          <tbody>
+            {vars.map((v) => (
+              <tr key={v.id} className="border-t border-slate-100">
+                <td className="px-4 py-2 font-mono">🔒 {v.key}</td>
+                <td className="px-4 py-2 font-mono text-slate-500">{reveal[v.id] ? v.value : "••••••••"}</td>
+                <td className="px-4 py-2 text-right">
+                  <button onClick={() => setReveal((r) => ({ ...r, [v.id]: !r[v.id] }))} className="mr-3 text-xs text-brand-600">
+                    {reveal[v.id] ? "ocultar" : "revelar"}
+                  </button>
+                  <button onClick={() => api.del(`/api/projects/${id}/env/${v.id}`).then(load)} className="text-xs text-red-500">excluir</button>
+                </td>
+              </tr>
+            ))}
+            {vars.length === 0 && (
+              <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">Nenhuma variável.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Subdomínio (editável) ---------------- */
+function Subdomain({ project, setProject }: { project: Project; setProject: (p: Project) => void }) {
+  const dlg = useDialog();
+  const [sub, setSub] = useState(project.subdomain);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function save() {
+    setSaving(true);
+    setErr("");
+    try {
+      const p = await api.patch<Project>(`/api/projects/${project.id}`, { subdomain: sub });
+      setProject(p);
+      setSub(p.subdomain);
+    } catch (e: any) {
+      setErr(e?.message || "Erro ao salvar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <Header title="Subdomínio" sub="URL pública da aplicação publicada" />
+      <div className="card max-w-lg p-5">
+        <label className="mb-1 block text-sm font-medium text-slate-700">Endereço</label>
+        <div className="flex items-center gap-1">
+          <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-400">/app/</span>
+          <input
+            className="input rounded-l-none font-mono"
+            value={sub}
+            onChange={(e) => setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+          />
+        </div>
+        {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
+        <div className="mt-4 flex items-center gap-2">
+          <button onClick={save} disabled={saving} className="btn-primary py-1.5 text-sm">
+            {saving ? "Salvando…" : "Salvar subdomínio"}
+          </button>
+          <a href={`/app/${project.subdomain}`} target="_blank" rel="noreferrer" className="btn-outline py-1.5 text-sm">
+            Abrir aplicação →
+          </a>
+        </div>
+        <p className="mt-3 text-xs text-slate-400">
+          URL completa: <code>{location.origin}/app/{sub}</code>
+        </p>
+      </div>
+    </div>
+  );
+}

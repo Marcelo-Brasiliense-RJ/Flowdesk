@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# FlowDesk runtime data and DB
+back/flowdesk.db
+back/storage/
+back/.env
+
+# Node / frontend
+node_modules/
+front/dist/
+front/.vite/
+
+# Local agent / editor state
+.claude/
+front/tsconfig.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# loose test spreadsheets generated during QA
+/teste_planilha_*.xlsx
+/exemplo_base.xlsx

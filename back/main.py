@@ -1,0 +1,90 @@
+"""FlowDesk backend entrypoint.
+
+Run with:  uvicorn main:app --reload
+"""
+from __future__ import annotations
+
+import asyncio
+import sys
+from contextlib import asynccontextmanager
+
+# No Windows, garanta o ProactorEventLoop (necessário para subprocessos do runtime).
+# Sem isso, com `--reload` o uvicorn usa um SelectorEventLoop e os scripts falham
+# com NotImplementedError ao iniciar o subprocesso.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
+from app.config import settings
+from app.database import Base, engine
+from app.runtime.runner import runtime
+from app.runtime.scheduler import scheduler
+from app.routers import (
+    auth,
+    builds,
+    chat,
+    dashboard,
+    executions,
+    filemanager,
+    hooks,
+    projects,
+    published,
+    realtime,
+    settings as settings_router,
+)
+from app.seed import seed_if_empty
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    # índices para colunas consultadas com frequência (seguro em DB existente)
+    with engine.begin() as conn:
+        for stmt in (
+            "CREATE INDEX IF NOT EXISTS ix_exec_project_started ON executions (project_id, started_at)",
+            "CREATE INDEX IF NOT EXISTS ix_exec_stage ON executions (stage_id)",
+            "CREATE INDEX IF NOT EXISTS ix_stage_project ON stages (project_id)",
+            "CREATE INDEX IF NOT EXISTS ix_edge_project ON edges (project_id)",
+            "CREATE INDEX IF NOT EXISTS ix_srcfile_project ON source_files (project_id)",
+            "CREATE INDEX IF NOT EXISTS ix_chat_project ON chat_messages (project_id)",
+        ):
+            conn.execute(text(stmt))
+    seed_if_empty()
+    loop = asyncio.get_event_loop()
+    runtime.start(loop)
+    scheduler.start(loop)
+    yield
+
+
+app = FastAPI(title="FlowDesk API", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin, "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+for module in (
+    auth,
+    projects,
+    executions,
+    builds,
+    filemanager,
+    settings_router,
+    chat,
+    published,
+    realtime,
+    dashboard,
+    hooks,
+):
+    app.include_router(module.router)
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "ai_enabled": settings.ai_enabled}

@@ -1,0 +1,20 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import { AuthProvider } from "./lib/auth";
+import { DialogProvider } from "./components/Dialog";
+import "reactflow/dist/style.css";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <DialogProvider>
+          <App />
+        </DialogProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
