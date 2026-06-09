@@ -34,6 +34,7 @@ from app.routers import (
     published,
     realtime,
     settings as settings_router,
+    wizard,
 )
 from app.seed import seed_if_empty
 
@@ -92,6 +93,7 @@ for module in (
     realtime,
     dashboard,
     hooks,
+    wizard,
 ):
     app.include_router(module.router)
 
