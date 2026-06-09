@@ -335,6 +335,11 @@ def main():
                  if (s.get("config") or {}).get("_wizard_role")]
     check("rebuild idempotente (sem duplicar, <=4 nos do wizard)",
           len(wiz_nodes) <= 4, f"wiz_nodes={len(wiz_nodes)}")
+    c.put(f"{BASE}/api/projects/{pid}/files", headers=H,
+          json={"path": sfile, "content": "# editado manualmente no modo avancado\nx=1\n"})
+    proj_after = c.get(f"{BASE}/api/projects/{pid}", headers=H).json()
+    check("edicao manual (modo avancado) marca wizard_dirty=True",
+          proj_after.get("wizard_dirty") is True, f"dirty={proj_after.get('wizard_dirty')}")
     pe = new_project(c, H, "QA Wizard Vazio")
     nodesc = c.post(f"{BASE}/api/projects/{pe['id']}/wizard/build", headers=H)
     check("build sem descricao -> 400", nodesc.status_code == 400, f"status={nodesc.status_code}")
