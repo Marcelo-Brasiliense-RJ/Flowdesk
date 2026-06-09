@@ -252,6 +252,13 @@ export default function Editor() {
               : "Nenhum problema encontrado"}
           </span>
           <Link
+            to={`/projects/${projectId}/assistente`}
+            className="btn-outline py-1.5 text-sm"
+            title="Modo guiado para usuário não-técnico"
+          >
+            Assistente
+          </Link>
+          <Link
             to={`/projects/${projectId}/builds`}
             className="btn-outline py-1.5 text-sm"
           >
