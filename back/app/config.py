@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
     supabase_db_url: str = ""
     database_url: str = ""
+    # Quando true, o app PUBLICADO (/app/<sub>) fica aberto, SEM login.
+    # Temporário/dev: deixa qualquer pessoa com o link executar. Desligue para
+    # restaurar o controle de acesso (whitelist/domínio).
+    public_apps_open: bool = False
 
     @property
     def db_url(self) -> str:

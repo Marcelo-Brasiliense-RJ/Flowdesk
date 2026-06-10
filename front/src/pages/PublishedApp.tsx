@@ -27,7 +27,11 @@ export default function PublishedApp() {
   useEffect(() => {
     fetch(`${base}/info`)
       .then((r) => r.json())
-      .then(setInfo)
+      .then((data) => {
+        setInfo(data);
+        // modo aberto (sem login): entra direto, sem pedir credenciais
+        if (data.open && !token) setToken("open");
+      })
       .catch(() => setInfo({ error: true }));
   }, [subdomain]);
 
