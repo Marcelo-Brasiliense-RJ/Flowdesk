@@ -543,6 +543,13 @@ def approve_action(
     if action.status != "pending":
         return {"ok": True, "status": action.status}
     _apply_action(db, project_id, action)
+    # auto-monta um fluxo executável quando o chat gera um script e o projeto
+    # ainda não tem workflow (senão o usuário recebe só um .py que não roda).
+    if action.kind in ("create_file", "edit_file"):
+        p = action.payload or {}
+        path = p.get("path", "")
+        if path.endswith(".py") and "set_output" in (p.get("content") or ""):
+            _ensure_runnable_workflow(db, project_id, path)
     action.status = "approved"
     db.commit()
     return {"ok": True, "status": "approved"}
@@ -559,6 +566,59 @@ def reject_action(
     action.status = "rejected"
     db.commit()
     return {"ok": True, "status": "rejected"}
+
+
+def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) -> None:
+    """Garante Form(entrada) -> Script -> Form(resultado) para um script gerado,
+    quando o projeto ainda não tem nenhum nó executável. Sem isso, o Chat entrega
+    só o código e nada roda pela interface."""
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    if any(s.type == "script" for s in stages):
+        return  # já existe workflow; não duplica
+
+    used = {s.key for s in stages}
+
+    def uk(base: str) -> str:
+        k, n = base, 1
+        while k in used:
+            n += 1
+            k = f"{base}-{n}"
+        used.add(k)
+        return k
+
+    form_in = Stage(
+        project_id=project_id, type="form", name="Entrada", key=uk("entrada"),
+        config={
+            "title": "Enviar arquivo",
+            "mode": "input",
+            "submit_label": "Executar",
+            "fields": [{"name": "arquivo", "label": "Arquivo", "type": "file"}],
+        },
+        pos_x=40, pos_y=120,
+    )
+    script = Stage(
+        project_id=project_id, type="script", name="Processamento", key=uk("processamento"),
+        entry_file=script_path, config={}, pos_x=360, pos_y=120,
+    )
+    form_out = Stage(
+        project_id=project_id, type="form", name="Resultado", key=uk("resultado"),
+        config={
+            "title": "Resultado",
+            "mode": "result",
+            "summary_key": "resumo",
+            "result_file_key": "arquivo_resultado",
+        },
+        pos_x=680, pos_y=120,
+    )
+    db.add_all([form_in, script, form_out])
+    db.flush()
+    db.add_all([
+        Edge(project_id=project_id, source_stage_id=form_in.id,
+             target_stage_id=script.id, variable_label="entrada"),
+        Edge(project_id=project_id, source_stage_id=script.id,
+             target_stage_id=form_out.id, variable_label="resultado"),
+    ])
+    db.flush()
 
 
 def _apply_action(db: Session, project_id: int, action: PendingAction) -> None:

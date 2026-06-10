@@ -24,6 +24,18 @@ def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
+def _is_transient_import_error(stderr: str) -> bool:
+    """Falhas intermitentes de import de numpy/pandas em cold start no Windows
+    (a primeira carga dos .pyd às vezes é interrompida ou falha no PyCapsule).
+    Uma nova tentativa costuma resolver, então vale re-executar uma vez."""
+    s = stderr or ""
+    return (
+        "PyCapsule_Import could not import module" in s
+        or ("KeyboardInterrupt" in s and "import" in s.lower())
+        or ("numpy" in s and "_multiarray" in s)
+    )
+
+
 class RuntimeManager:
     def __init__(self) -> None:
         self.queue: "asyncio.Queue[str]" = asyncio.Queue()
@@ -112,7 +124,7 @@ class RuntimeManager:
             }
             entry = stage.entry_file or f"{stage.key}.py"
 
-            code, out, err = await self._spawn(
+            spawn_kwargs = dict(
                 src_dir=src_dir,
                 cwd=root,
                 entry=entry,
@@ -123,6 +135,11 @@ class RuntimeManager:
                 env_vars=env_vars,
                 timeout=stage.timeout_seconds or 120,
             )
+            code, out, err = await self._spawn(**spawn_kwargs)
+            # cold start de numpy/pandas falha de forma intermitente no Windows;
+            # uma única nova tentativa resolve sem mascarar erros reais de código.
+            if code != 0 and not output_path.exists() and _is_transient_import_error(err):
+                code, out, err = await self._spawn(**spawn_kwargs)
 
             output_data: dict = {}
             if output_path.exists():
