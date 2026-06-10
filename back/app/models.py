@@ -82,6 +82,11 @@ class Project(Base):
     # whitelist | domain
     access_mode: Mapped[str] = mapped_column(String(20), default="whitelist")
     allowed_domain: Mapped[str] = mapped_column(String(160), default="")
+    # Rascunho do assistente (wizard) de criação: a intenção do usuário nas 4 etapas.
+    # NÃO é fonte de verdade (stages/código continuam canônicos). wizard_dirty=True
+    # sinaliza edição no modo avançado, então o rascunho pode estar defasado.
+    wizard_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    wizard_dirty: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow

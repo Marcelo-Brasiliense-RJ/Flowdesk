@@ -293,6 +293,57 @@ def main():
     except Exception as exc:
         check("ws envia 'connected'", False, str(exc)[:80])
 
+    section("Wizard (assistente de automacao)")
+    wstate = {"step": 3, "trigger": "manual", "input": {"kind": "file"},
+              "process": "remover duplicados pela coluna Valor", "output": {"kind": "download"}}
+    pw = c.put(f"{BASE}/api/projects/{pid}/wizard", headers=H,
+               json={"state": wstate, "dirty": False}).json()
+    check("wizard_state salvo e devolvido",
+          pw.get("wizard_state", {}).get("process") == wstate["process"],
+          f"got={pw.get('wizard_state')}")
+    check("wizard_dirty inicia falso", pw.get("wizard_dirty") is False)
+    got = c.get(f"{BASE}/api/projects/{pid}", headers=H).json()
+    check("wizard_state persiste no GET do projeto", got.get("wizard_state", {}).get("step") == 3)
+    pw2 = c.put(f"{BASE}/api/projects/{pid}/wizard", headers=H,
+                json={"state": wstate, "dirty": True}).json()
+    check("wizard_dirty pode ser marcado (edicao no modo avancado)", pw2.get("wizard_dirty") is True)
+    nf = c.put(f"{BASE}/api/projects/999999/wizard", headers=H, json={"state": {}, "dirty": False})
+    check("wizard em projeto inexistente -> 404", nf.status_code == 404, f"status={nf.status_code}")
+
+    # montar o fluxo a partir do rascunho (modo simulado gera um script pandas)
+    c.put(f"{BASE}/api/projects/{pid}/wizard", headers=H, json={"state": {
+        "trigger": {"kind": "manual"}, "input": {"kind": "file"},
+        "process": {"description": "remover duplicados pela coluna Valor"},
+        "output": {"kind": "download"}}, "dirty": False})
+    build = c.post(f"{BASE}/api/projects/{pid}/wizard/build", headers=H).json()
+    check("build retorna explicacao + script .py",
+          bool(build.get("explanation")) and build.get("script_file", "").endswith(".py"),
+          f"got={build}")
+    stids = build.get("stage_ids", {})
+    check("build criou nos input/script/result",
+          all(k in stids for k in ("input", "script", "result")), f"stage_ids={stids}")
+    by_id = {s["id"]: s for s in c.get(f"{BASE}/api/projects/{pid}/stages", headers=H).json()}
+    sfile = by_id.get(stids.get("script"), {}).get("entry_file", "")
+    check("script tem entry_file .py", sfile.endswith(".py"), f"entry={sfile}")
+    wfiles = c.get(f"{BASE}/api/projects/{pid}/files", headers=H).json()
+    check("codigo do script foi gravado",
+          any(f["path"] == sfile and len(f["content"]) > 10 for f in wfiles), f"file={sfile}")
+    check("edges do grafo do wizard criados (>=2)",
+          len(c.get(f"{BASE}/api/projects/{pid}/edges", headers=H).json()) >= 2)
+    c.post(f"{BASE}/api/projects/{pid}/wizard/build", headers=H)
+    wiz_nodes = [s for s in c.get(f"{BASE}/api/projects/{pid}/stages", headers=H).json()
+                 if (s.get("config") or {}).get("_wizard_role")]
+    check("rebuild idempotente (sem duplicar, <=4 nos do wizard)",
+          len(wiz_nodes) <= 4, f"wiz_nodes={len(wiz_nodes)}")
+    c.put(f"{BASE}/api/projects/{pid}/files", headers=H,
+          json={"path": sfile, "content": "# editado manualmente no modo avancado\nx=1\n"})
+    proj_after = c.get(f"{BASE}/api/projects/{pid}", headers=H).json()
+    check("edicao manual (modo avancado) marca wizard_dirty=True",
+          proj_after.get("wizard_dirty") is True, f"dirty={proj_after.get('wizard_dirty')}")
+    pe = new_project(c, H, "QA Wizard Vazio")
+    nodesc = c.post(f"{BASE}/api/projects/{pe['id']}/wizard/build", headers=H)
+    check("build sem descricao -> 400", nodesc.status_code == 400, f"status={nodesc.status_code}")
+
     section("Limpeza")
     for ppid in CREATED_PROJECTS:
         c.delete(f"{BASE}/api/projects/{ppid}", headers=H)

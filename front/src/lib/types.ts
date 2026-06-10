@@ -15,8 +15,27 @@ export interface Project {
   output_folder_name: string;
   access_mode: "whitelist" | "domain";
   allowed_domain: string;
+  wizard_state: WizardState;
+  wizard_dirty: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export type TriggerKind = "manual" | "schedule" | "webhook";
+export type InputKind = "file" | "fields" | "none";
+export type OutputKind = "download" | "summary";
+
+export interface WizardField {
+  label: string;
+  type: "text" | "number" | "date" | "select";
+}
+
+export interface WizardState {
+  step?: number;
+  trigger?: { kind: TriggerKind; every?: number; unit?: "hours" | "days" };
+  input?: { kind: InputKind; fields?: WizardField[]; sample_file?: string };
+  process?: { description: string };
+  output?: { kind: OutputKind };
 }
 
 export interface Folder {
