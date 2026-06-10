@@ -53,17 +53,19 @@ async def lifespan(app: FastAPI):
             "CREATE INDEX IF NOT EXISTS ix_chat_project ON chat_messages (project_id)",
         ):
             conn.execute(text(stmt))
-        # micro-migração: colunas novas em DB já existente
-        # (SQLite não suporta "ADD COLUMN IF NOT EXISTS").
-        proj_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)"))}
-        if "wizard_state" not in proj_cols:
-            conn.execute(
-                text("ALTER TABLE projects ADD COLUMN wizard_state TEXT NOT NULL DEFAULT '{}'")
-            )
-        if "wizard_dirty" not in proj_cols:
-            conn.execute(
-                text("ALTER TABLE projects ADD COLUMN wizard_dirty BOOLEAN NOT NULL DEFAULT 0")
-            )
+        # micro-migração SQLite: colunas novas em DB já existente
+        # (PRAGMA é específico do SQLite; no Postgres/Supabase o schema já vem
+        # com essas colunas, então não rodamos isto lá).
+        if engine.dialect.name == "sqlite":
+            proj_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)"))}
+            if "wizard_state" not in proj_cols:
+                conn.execute(
+                    text("ALTER TABLE projects ADD COLUMN wizard_state TEXT NOT NULL DEFAULT '{}'")
+                )
+            if "wizard_dirty" not in proj_cols:
+                conn.execute(
+                    text("ALTER TABLE projects ADD COLUMN wizard_dirty BOOLEAN NOT NULL DEFAULT 0")
+                )
     seed_if_empty()
     loop = asyncio.get_event_loop()
     runtime.start(loop)

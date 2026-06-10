@@ -62,6 +62,13 @@ class WizardBuildOut(BaseModel):
     ai_enabled: bool
 
 
+class WizardAnalyzeIn(BaseModel):
+    """Pedido em linguagem natural para o assistente analisar e segmentar."""
+
+    prompt: str = ""
+    sample_file: Optional[str] = None
+
+
 class ProjectOut(ORMModel):
     id: int
     name: str
