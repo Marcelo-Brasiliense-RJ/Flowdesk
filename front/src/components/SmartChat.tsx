@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
 import { api, getToken } from "../lib/api";
 import { useDialog } from "./Dialog";
 import type { ChatMessage, PendingAction } from "../lib/types";
@@ -432,7 +433,7 @@ function Bubble({
             : "rounded-bl-md border border-slate-200 bg-white text-slate-700"
         }`}
       >
-        <MessageContent text={message.content} />
+        <MessageContent text={message.content} markdown={!isUser} />
         {streaming && (
           <motion.span
             aria-hidden
@@ -738,13 +739,34 @@ function splitCode(text: string) {
   return parts;
 }
 
-function MessageContent({ text }: { text: string }) {
+/** Componentes de estilo para o markdown do assistente (sem plugin typography). */
+const MD_COMPONENTS = {
+  p: (props: any) => <p className="mb-2 leading-relaxed last:mb-0" {...props} />,
+  strong: (props: any) => <strong className="font-semibold text-brand-900" {...props} />,
+  em: (props: any) => <em className="italic" {...props} />,
+  ul: (props: any) => <ul className="my-2 list-disc space-y-1 pl-5" {...props} />,
+  ol: (props: any) => <ol className="my-2 list-decimal space-y-1 pl-5" {...props} />,
+  li: (props: any) => <li className="leading-relaxed" {...props} />,
+  a: (props: any) => <a className="font-medium text-brand-600 underline" {...props} />,
+  h1: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  h2: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  h3: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  code: (props: any) => (
+    <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px] text-brand-800" {...props} />
+  ),
+};
+
+function MessageContent({ text, markdown }: { text: string; markdown?: boolean }) {
   const parts = useMemo(() => splitCode(text), [text]);
   return (
     <>
       {parts.map((p, i) =>
         p.type === "code" ? (
           <CodeBlock key={i} lang={p.lang} body={p.body} />
+        ) : markdown ? (
+          <ReactMarkdown key={i} components={MD_COMPONENTS}>
+            {p.body}
+          </ReactMarkdown>
         ) : (
           <span key={i} className="whitespace-pre-wrap">
             {p.body}
