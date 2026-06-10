@@ -11,6 +11,8 @@ bcrypt==4.0.1
 python-multipart==0.0.20
 openai==1.59.6
 httpx==0.28.1
+# Postgres driver (Supabase). Sem SUPABASE_DB_URL no .env o app usa SQLite.
+psycopg[binary]==3.3.4
 # Used by the seeded "Conciliador de Planilhas" example script (runs in subprocess)
 pandas==2.2.3
 openpyxl==3.1.5

@@ -22,6 +22,14 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     script_python: str = ""
     frontend_origin: str = "http://localhost:5173"
+    # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
+    supabase_db_url: str = ""
+    database_url: str = ""
+
+    @property
+    def db_url(self) -> str:
+        """URL do banco a usar. Prefere Postgres (Supabase) se configurado."""
+        return (self.supabase_db_url or self.database_url).strip()
 
     @property
     def python_executable(self) -> str:
