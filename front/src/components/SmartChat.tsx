@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { api, getToken } from "../lib/api";
 import { useDialog } from "./Dialog";
 import type { ChatMessage, PendingAction } from "../lib/types";
-import { Spinner } from "./ui";
 
 export default function SmartChat({
   projectId,
   onApplied,
   autoStart,
+  centered = false,
 }: {
   projectId: number;
   onApplied: () => void;
   autoStart?: { content: string; files: File[] };
+  /** Quando true, centraliza mensagens e input numa coluna de leitura (tela cheia). */
+  centered?: boolean;
 }) {
   const dlg = useDialog();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -177,6 +180,8 @@ export default function SmartChat({
       ? (last.meta.questions as any[])
       : null;
 
+  const colCls = centered ? "mx-auto w-full max-w-3xl" : "w-full";
+
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
@@ -216,34 +221,35 @@ export default function SmartChat({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-        {messages.length === 0 && (
-          <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
-            Descreva a automação que você quer criar. A IA fará perguntas e
-            proporá ações que você aprova antes de aplicar.
-          </div>
-        )}
-        {messages.map((m) => (
-          <Bubble key={m.id} message={m} />
-        ))}
-        {streaming && (
-          <Bubble
-            message={{
-              id: -1,
-              role: "assistant",
-              content: streaming,
-              meta: {},
-              tokens: 0,
-              created_at: "",
-            }}
-          />
-        )}
-        {busy && !streaming && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Spinner className="h-4 w-4" /> pensando...
-          </div>
-        )}
-        <div ref={bottomRef} />
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className={`${colCls} space-y-3`}>
+          {messages.length === 0 && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
+              Descreva a automação que você quer criar. A IA fará perguntas e
+              proporá ações que você aprova antes de aplicar.
+            </div>
+          )}
+          <AnimatePresence initial={false}>
+            {messages.map((m) => (
+              <Bubble key={m.id} message={m} />
+            ))}
+          </AnimatePresence>
+          {streaming && (
+            <Bubble
+              streaming
+              message={{
+                id: -1,
+                role: "assistant",
+                content: streaming,
+                meta: {},
+                tokens: 0,
+                created_at: "",
+              }}
+            />
+          )}
+          {busy && !streaming && <TypingIndicator />}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {pending.length > 0 && (
@@ -336,6 +342,7 @@ export default function SmartChat({
       )}
 
       <div className="border-t border-slate-200 p-3">
+        <div className={colCls}>
         {attached.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
             {attached.map((f, i) => (
@@ -384,29 +391,90 @@ export default function SmartChat({
               }}
             />
           </label>
-          <button onClick={() => send()} disabled={busy} className="btn-primary px-4 py-2">
+          <motion.button
+            onClick={() => send()}
+            disabled={busy}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            className="btn-primary px-4 py-2"
+          >
             Enviar
-          </button>
+          </motion.button>
+        </div>
         </div>
       </div>
     </div>
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+function Bubble({
+  message,
+  streaming = false,
+}: {
+  message: ChatMessage;
+  streaming?: boolean;
+}) {
   const isUser = message.role === "user";
+  const reduce = useReducedMotion();
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <motion.div
+      layout="position"
+      initial={reduce ? false : { opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+      className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+    >
+      {!isUser && <Avatar />}
       <div
-        className={`max-w-[90%] rounded-2xl px-3.5 py-2 text-sm ${
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
           isUser
-            ? "bg-brand-700 text-white"
-            : "border border-slate-200 bg-white text-slate-700"
+            ? "rounded-br-md bg-brand-700 text-white"
+            : "rounded-bl-md border border-slate-200 bg-white text-slate-700"
         }`}
       >
         <MessageContent text={message.content} />
+        {streaming && (
+          <motion.span
+            aria-hidden
+            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-full bg-accent-500 align-middle"
+            animate={{ opacity: [1, 0.15, 1] }}
+            transition={{ duration: 0.9, repeat: Infinity }}
+          />
+        )}
       </div>
+    </motion.div>
+  );
+}
+
+/** Avatar do assistente — gradiente da marca, dá rosto à conversa. */
+function Avatar() {
+  return (
+    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-accent-500 text-[11px] font-bold text-white shadow-sm">
+      FD
     </div>
+  );
+}
+
+/** Indicador "digitando" com três pontos saltitantes. */
+function TypingIndicator() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-end gap-2"
+    >
+      <Avatar />
+      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-3 shadow-sm">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-slate-400"
+            animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+          />
+        ))}
+      </div>
+    </motion.div>
   );
 }
 
