@@ -361,6 +361,11 @@ def _generate_build(messages: list[dict]):
             "Inclua SEMPRE pelo menos um create_file com o script Python completo, "
             "usando o SDK (get_file() para ler entrada, output_path() e set_output(DICT) "
             "para saída), pandas 2.x (NÃO use df.append; use pd.concat). "
+            "Quando gerar arquivo, grave com output_path('nome.xlsx') e devolva "
+            "set_output({'arquivo_resultado': str(caminho), 'resumo': {...números...}}); "
+            "inclua SEMPRE a chave 'resumo' com os principais números. "
+            "Use chaves simples { } em dicionários Python; NUNCA escreva chaves "
+            "duplicadas {{ }} (isso quebra o código). "
             "Não peça caminhos de arquivo. Só use require_env se houver integração "
             "externa real (e-mail/API)."
         ),
