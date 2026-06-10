@@ -52,6 +52,9 @@ def _published_token(email: str, subdomain: str) -> str:
 
 
 def _require_app_user(db: Session, subdomain: str, token: str | None) -> str:
+    # modo aberto (temporário): app publicado sem login
+    if settings.public_apps_open:
+        return "anonimo@aberto"
     if not token:
         raise HTTPException(status_code=401, detail="Login necessário")
     try:
@@ -91,6 +94,7 @@ def app_info(subdomain: str, db: Session = Depends(get_db)):
         "status": project.status,
         "access_mode": project.access_mode,
         "allowed_domain": project.allowed_domain,
+        "open": settings.public_apps_open,
     }
 
 
