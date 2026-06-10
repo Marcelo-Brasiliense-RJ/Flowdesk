@@ -550,14 +550,32 @@ def approve_action(
     _apply_action(db, project_id, action)
     # auto-monta um fluxo executável quando o chat gera um script e o projeto
     # ainda não tem workflow (senão o usuário recebe só um .py que não roda).
+    workflow_created = False
     if action.kind in ("create_file", "edit_file"):
         p = action.payload or {}
         path = p.get("path", "")
         if path.endswith(".py") and "set_output" in (p.get("content") or ""):
-            _ensure_runnable_workflow(db, project_id, path)
+            workflow_created = _ensure_runnable_workflow(db, project_id, path)
     action.status = "approved"
+    # mensagem de fechamento: sem isto a conversa "morre" após aprovar (parece
+    # travada). Confirma o que foi feito e aponta o próximo passo.
+    if action.kind in ("create_file", "edit_file"):
+        if workflow_created:
+            closing = (
+                "Pronto! Apliquei as ações e montei o fluxo: **Entrada → "
+                "Processamento → Resultado**. Agora clique em **Testar** para rodar "
+                "com um arquivo de exemplo, ou **Abrir no editor** para ajustar."
+            )
+        else:
+            closing = "Pronto! Apliquei as alterações no projeto."
+        db.add(
+            ChatMessage(
+                project_id=project_id, role="assistant", content=closing,
+                meta={}, tokens=0,
+            )
+        )
     db.commit()
-    return {"ok": True, "status": "approved"}
+    return {"ok": True, "status": "approved", "workflow_created": workflow_created}
 
 
 @router.post("/projects/{project_id}/pending-actions/{action_id}/reject")
@@ -579,7 +597,7 @@ def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) ->
     só o código e nada roda pela interface."""
     stages = db.query(Stage).filter(Stage.project_id == project_id).all()
     if any(s.type == "script" for s in stages):
-        return  # já existe workflow; não duplica
+        return False  # já existe workflow; não duplica
 
     used = {s.key for s in stages}
 
@@ -624,6 +642,7 @@ def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) ->
              target_stage_id=form_out.id, variable_label="resultado"),
     ])
     db.flush()
+    return True
 
 
 def _apply_action(db: Session, project_id: int, action: PendingAction) -> None:
