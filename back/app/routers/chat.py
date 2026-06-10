@@ -354,7 +354,9 @@ def _generate_build(messages: list[dict]):
         "role": "system",
         "content": (
             "Responda SOMENTE em JSON válido: "
-            '{"message": "frase curta de resumo", "actions": [...]}. '
+            '{"message": "explicação curta e amigável, em português simples e sem jargão '
+            'técnico, do que a automação vai fazer (1 a 2 frases, pensando num usuário não '
+            'técnico)", "actions": [...]}. '
             "Tipos de action: create_file {kind,title,path,content}, "
             "create_stage {kind,title,stage_type,name}, "
             "require_env {kind,title,key,description,example}. "
@@ -562,12 +564,19 @@ def approve_action(
     if action.kind in ("create_file", "edit_file"):
         if workflow_created:
             closing = (
-                "Pronto! Apliquei as ações e montei o fluxo: **Entrada → "
-                "Processamento → Resultado**. Agora clique em **Testar** para rodar "
-                "com um arquivo de exemplo, ou **Abrir no editor** para ajustar."
+                "**Tudo pronto!** Sua automação foi criada e já está montada em três etapas:\n\n"
+                "1. **Entrada** — a pessoa envia o arquivo (a planilha).\n"
+                "2. **Processamento** — o sistema lê os dados e gera o resultado que você pediu.\n"
+                "3. **Resultado** — a planilha final fica disponível para baixar.\n\n"
+                "**Próximo passo:** clique em **Testar** (no topo) para rodar com um arquivo de "
+                "exemplo e conferir o resultado, ou em **Abrir no editor** para ver e ajustar "
+                "cada etapa. Se algo não ficar como você esperava, é só me dizer o que mudar."
             )
         else:
-            closing = "Pronto! Apliquei as alterações no projeto."
+            closing = (
+                "**Pronto!** Apliquei as alterações no seu projeto. Clique em **Testar** para "
+                "conferir o resultado, ou me diga o que você quer ajustar."
+            )
         db.add(
             ChatMessage(
                 project_id=project_id, role="assistant", content=closing,

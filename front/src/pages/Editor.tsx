@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ReactFlow, {
   Background,
@@ -44,6 +44,15 @@ export default function Editor() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const rfRef = useRef<any>(null);
+
+  // centraliza o fluxo sempre que os nós mudam (ex.: após o Smart Chat montar a
+  // automação), para o usuário ver o resultado na hora, sem precisar procurar.
+  useEffect(() => {
+    if (!nodes.length || !rfRef.current) return;
+    const t = setTimeout(() => rfRef.current?.fitView({ padding: 0.2, duration: 400 }), 60);
+    return () => clearTimeout(t);
+  }, [nodes.length]);
 
   const loadGraph = useCallback(async () => {
     const [st, ed] = await Promise.all([
@@ -432,6 +441,7 @@ export default function Editor() {
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
+              onInit={(inst) => (rfRef.current = inst)}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
