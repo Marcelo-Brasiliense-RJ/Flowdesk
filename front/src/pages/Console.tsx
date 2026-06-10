@@ -28,7 +28,7 @@ export default function Console() {
     const p = await api.post<Project>("/api/projects", { name: newName });
     setCreating(false);
     setNewName("");
-    nav(`/projects/${p.id}/editor`);
+    nav(`/projects/${p.id}/assistente`);
   }
 
   async function deleteProject(id: number) {
@@ -285,7 +285,7 @@ function ProjectCard({
         e.dataTransfer.setData("text/plain", String(project.id));
         e.dataTransfer.effectAllowed = "move";
       }}
-      onClick={() => nav(`/projects/${project.id}/editor`)}
+      onClick={() => nav(`/projects/${project.id}/assistente`)}
       className="card group relative cursor-pointer p-5 transition hover:border-brand-300 hover:shadow-md active:cursor-grabbing"
     >
       <div className="flex items-start justify-between gap-2">
