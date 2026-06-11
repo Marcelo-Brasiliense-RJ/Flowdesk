@@ -22,7 +22,9 @@ from app.config import settings
 from app.database import Base, engine
 from app.runtime.runner import runtime
 from app.runtime.scheduler import scheduler
+from app import metrics
 from app.routers import (
+    admin,
     auth,
     builds,
     chat,
@@ -30,9 +32,11 @@ from app.routers import (
     executions,
     filemanager,
     hooks,
+    manage,
     projects,
     published,
     realtime,
+    repair,
     settings as settings_router,
     wizard,
 )
@@ -83,8 +87,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def _count_requests(request, call_next):
+    metrics.record_request(request.method)
+    return await call_next(request)
+
+
 for module in (
     auth,
+    admin,
     projects,
     executions,
     builds,
@@ -96,6 +107,8 @@ for module in (
     dashboard,
     hooks,
     wizard,
+    repair,
+    manage,
 ):
     app.include_router(module.router)
 

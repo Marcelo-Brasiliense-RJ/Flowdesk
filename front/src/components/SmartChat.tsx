@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { api, getToken } from "../lib/api";
 import { useDialog } from "./Dialog";
-import type { ChatMessage, PendingAction } from "../lib/types";
+import type { ChatMessage, PendingAction, Stage } from "../lib/types";
 
 export default function SmartChat({
   projectId,
@@ -18,6 +19,8 @@ export default function SmartChat({
   centered?: boolean;
 }) {
   const dlg = useDialog();
+  const nav = useNavigate();
+  const [built, setBuilt] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [streaming, setStreaming] = useState("");
@@ -35,6 +38,13 @@ export default function SmartChat({
       await api.get<PendingAction[]>(`/api/projects/${projectId}/pending-actions`)
     );
     setCtx(await api.get(`/api/projects/${projectId}/chat/context`));
+    // a automação está "montada" quando já existe um nó de script no fluxo
+    try {
+      const stages = await api.get<Stage[]>(`/api/projects/${projectId}/stages`);
+      setBuilt(stages.some((s) => s.type === "script" || s.type === "agent"));
+    } catch {
+      /* ignore */
+    }
   }
   useEffect(() => {
     // reset state when switching projects so no stale conversation leaks in
@@ -338,8 +348,28 @@ export default function SmartChat({
           projectId={projectId}
           questions={activeQuestions}
           busy={busy}
+          centered={centered}
           onAnswer={(t, a) => send(t, a)}
         />
+      )}
+
+      {built && !activeQuestions && (
+        <div className="border-t border-accent-100 bg-accent-50/60 px-4 py-2.5">
+          <div className={`${colCls} flex flex-wrap items-center justify-between gap-2`}>
+            <span className="text-sm text-brand-800">
+              Sua automação está pronta para testar.
+            </span>
+            <button
+              onClick={() => nav(`/projects/${projectId}/assistente`)}
+              className="btn-accent py-1.5 text-sm"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M6 4l14 8-14 8V4z" />
+              </svg>
+              Testar agora
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="border-t border-slate-200 p-3">
@@ -384,10 +414,11 @@ export default function SmartChat({
             📎
             <input
               type="file"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setAttached((a) => [...a, f]);
+                const fs = Array.from(e.target.files ?? []);
+                if (fs.length) setAttached((a) => [...a, ...fs]);
                 e.target.value = "";
               }}
             />
@@ -484,11 +515,13 @@ function InterviewPanel({
   projectId,
   questions,
   busy,
+  centered = false,
   onAnswer,
 }: {
   projectId: number;
   questions: any[];
   busy: boolean;
+  centered?: boolean;
   onAnswer: (text: string, attachments?: string[]) => void;
 }) {
   const [idx, setIdx] = useState(0);
@@ -574,14 +607,26 @@ function InterviewPanel({
 
   return (
     <div className="border-t border-slate-200 bg-brand-50/70 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">
-          Entrevista
+      <div className={centered ? "mx-auto w-full max-w-3xl" : "w-full"}>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold text-brand-700">
+          Só mais algumas perguntas para acertar a automação
         </span>
-        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-          {idx + 1}/{total}
+        <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+          {idx + 1} de {total}
         </span>
       </div>
+      <div className="mb-2.5 h-1 w-full overflow-hidden rounded-full bg-brand-100">
+        <div
+          className="h-full rounded-full bg-accent-400 transition-all duration-300"
+          style={{ width: `${((idx + 1) / total) * 100}%` }}
+        />
+      </div>
+      {idx === 0 && (
+        <p className="mb-2 text-xs leading-relaxed text-slate-500">
+          Pode responder clicando em uma opção ou escrevendo. Se não souber, é só pular.
+        </p>
+      )}
 
       <div className="text-sm font-medium text-brand-900">{q.label || q.question || q.text}</div>
 
@@ -673,11 +718,11 @@ function InterviewPanel({
           📎 Subir arquivo base
           <input
             type="file"
+            multiple
             className="hidden"
             disabled={disabled}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadBase(f);
+              Array.from(e.target.files ?? []).forEach((f) => uploadBase(f));
               e.target.value = "";
             }}
           />
@@ -714,6 +759,7 @@ function InterviewPanel({
         >
           Pular
         </button>
+      </div>
       </div>
     </div>
   );

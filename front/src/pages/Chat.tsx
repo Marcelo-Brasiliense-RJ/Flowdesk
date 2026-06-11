@@ -46,6 +46,13 @@ export default function Chat() {
     setAutoStart({ content: prompt.trim() || "Analise o arquivo anexado.", files });
     localStorage.removeItem("flowdesk_chat_draft");
     setCreating(false);
+    // melhora o nome em segundo plano (IA gera um título curto a partir do pedido)
+    if (prompt.trim()) {
+      api
+        .post<{ name: string }>(`/api/projects/${p.id}/auto-name`, { prompt: prompt.trim() })
+        .then((r) => r?.name && setProject((cur) => (cur ? { ...cur, name: r.name } : cur)))
+        .catch(() => {});
+    }
   }
 
   function novaConversa() {
@@ -171,10 +178,11 @@ export default function Chat() {
                     📎 Anexar arquivo
                     <input
                       type="file"
+                      multiple
                       className="hidden"
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) setFiles((fs) => [...fs, f]);
+                        const sel = Array.from(e.target.files ?? []);
+                        if (sel.length) setFiles((fs) => [...fs, ...sel]);
                         e.target.value = "";
                       }}
                     />

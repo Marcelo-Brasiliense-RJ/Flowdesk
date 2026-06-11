@@ -17,7 +17,7 @@ from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
 from ..models import Edge, SourceFile, Stage, User
-from ..schemas import WizardAnalyzeIn, WizardBuildOut
+from ..schemas import ExplanationUpdate, WizardAnalyzeIn, WizardBuildOut
 from .chat import (
     SYSTEM_PROMPT,
     _attachment_context,
@@ -355,6 +355,7 @@ def build_from_wizard(
     # marca que o rascunho está em dia com o que foi montado
     ws["_built"] = True
     ws["_stage_ids"] = stage_ids
+    ws["_explanation"] = explanation  # persiste a descrição p/ reabrir sem perder
     project.wizard_state = ws
     project.wizard_dirty = False
     db.commit()
@@ -365,3 +366,81 @@ def build_from_wizard(
         stage_ids=stage_ids,
         ai_enabled=settings.ai_enabled,
     )
+
+
+def _describe_automation(code: str) -> str:
+    """Gera uma descrição legível (e levemente técnica) do que a automação faz,
+    a partir do código do Script. Vazio se a IA estiver desabilitada ou falhar."""
+    if not settings.ai_enabled or not code.strip():
+        return ""
+    instr = (
+        "Explique em português, de forma clara e levemente técnica (acessível a um "
+        "usuário de negócio, sem jargão de programação), O QUE esta automação faz: "
+        "que entrada recebe, as principais transformações ou cálculos, e o que entrega "
+        "no final. Responda em 2 a 4 frases, sem instruções de uso e sem mostrar código. "
+        "Responda apenas com o texto da descrição."
+    )
+    messages = [
+        {"role": "system", "content": instr},
+        {"role": "user", "content": f"Código da automação:\n\n{code[:6000]}"},
+    ]
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.chat.completions.create(
+            model=settings.openai_model, messages=messages, temperature=0.2,
+        )
+        return (resp.choices[0].message.content or "").strip()
+    except Exception:
+        return ""
+
+
+@router.post("/projects/{project_id}/wizard/describe")
+def describe_wizard(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Devolve a descrição do que a automação faz. Se já existir salva, retorna-a;
+    senão tenta gerar a partir do código e persiste. Vazio => o frontend pede ao
+    usuário para escrever."""
+    project = get_project(db, project_id, user)
+    ws = dict(project.wizard_state or {})
+    existing = (ws.get("_explanation") or "").strip()
+    if existing:
+        return {"description": existing, "ai_enabled": settings.ai_enabled}
+
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    script = next((s for s in stages if s.type in ("script", "agent")), None)
+    code = ""
+    if script and script.entry_file:
+        row = (
+            db.query(SourceFile)
+            .filter(SourceFile.project_id == project_id, SourceFile.path == script.entry_file)
+            .first()
+        )
+        code = row.content if row else ""
+
+    desc = _describe_automation(code)
+    if desc:
+        ws["_explanation"] = desc
+        project.wizard_state = ws
+        db.commit()
+    return {"description": desc, "ai_enabled": settings.ai_enabled}
+
+
+@router.put("/projects/{project_id}/wizard/explanation")
+def set_wizard_explanation(
+    project_id: int,
+    body: ExplanationUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Salva a descrição escrita/editada pelo usuário."""
+    project = get_project(db, project_id, user)
+    ws = dict(project.wizard_state or {})
+    ws["_explanation"] = body.text.strip()
+    project.wizard_state = ws
+    db.commit()
+    return {"ok": True}

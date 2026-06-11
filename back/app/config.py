@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     # Temporário/dev: deixa qualquer pessoa com o link executar. Desligue para
     # restaurar o controle de acesso (whitelist/domínio).
     public_apps_open: bool = False
+    # E-mails com privilégio de admin (ex.: exclusão em massa de projetos).
+    # Lista separada por vírgula via env ADMIN_EMAILS.
+    admin_emails: str = "admin@irko.com.br"
+    # E-mails com papel de Dev (acesso à tela de gerenciamento, junto do admin).
+    dev_emails: str = ""
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
+
+    @property
+    def dev_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.dev_emails.split(",") if e.strip()}
 
     @property
     def db_url(self) -> str:
