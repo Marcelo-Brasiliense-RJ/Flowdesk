@@ -96,9 +96,11 @@ detecta sozinho: PDF com texto extrai direto; PDF escaneado/imagem usa OCR local
 pd.read_excel num PDF nem tente OCR manual.
 - `doc` traz: `doc["text"]` (texto), `doc["mean_confidence"]` (0..1 ou None), \
 `doc["needs_review"]` (True quando o OCR teve baixa confiança) e `doc["low_confidence"]` \
-(linhas duvidosas). SEMPRE que usar OCR, faça a VALIDAÇÃO: inclua no set_output um resumo \
-com `mean_confidence` e, se `doc["needs_review"]`, `revisao_necessaria: True` e a lista de \
-trechos de baixa confiança, para a pessoa conferir antes de confiar no resultado.
+(linhas duvidosas). SEMPRE que a entrada passar por OCR, inclua no set_output a chave \
+`_ocr_review` = {"text": doc["text"], "mean_confidence": doc["mean_confidence"], \
+"needs_review": doc["needs_review"], "low_confidence": [l["text"] for l in doc["low_confidence"]]}. \
+A plataforma usa isso para mostrar a tela de revisão humana (a pessoa confere os trechos \
+destacados antes de confiar no resultado).
 
 DEPENDÊNCIAS DE CONFIGURAÇÃO E SEGREDOS:
 - Use `require_env` APENAS quando o usuário pedir EXPLICITAMENTE uma integração externa \
@@ -378,8 +380,9 @@ def _generate_build(messages: list[dict]):
             "para saída), pandas 2.x (NÃO use df.append; use pd.concat). "
             "Se a entrada for PDF ou imagem, use `from flowdesk_sdk import extract_document` "
             "e `doc = extract_document(get_file())` (NÃO use pd.read_excel num PDF); quando "
-            "doc vier de OCR, inclua no resumo `mean_confidence` e, se doc['needs_review'], "
-            "`revisao_necessaria: True` e os trechos de baixa confiança, para validação. "
+            "doc vier de OCR, inclua no set_output a chave `_ocr_review` = {'text': doc['text'], "
+            "'mean_confidence': doc['mean_confidence'], 'needs_review': doc['needs_review'], "
+            "'low_confidence': [l['text'] for l in doc['low_confidence']]} para a tela de revisão. "
             "Quando gerar arquivo, grave com output_path('nome.xlsx') e devolva "
             "set_output({'arquivo_resultado': str(caminho), 'resumo': {...números...}}); "
             "inclua SEMPRE a chave 'resumo' com os principais números. "
