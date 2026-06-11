@@ -7,13 +7,149 @@ import type {
   InputKind,
   OutputKind,
   Project,
+  Stage,
+  StageType,
   TriggerKind,
   WizardField,
   WizardState,
 } from "../lib/types";
-import { Logo, Spinner } from "../components/ui";
+import { Logo, Spinner, StageIcon, STAGE_META } from "../components/ui";
+import OcrReview from "../components/OcrReview";
 
 const STEPS = ["Gatilho", "Entrada", "Processamento", "Resultado", "Revisão"];
+
+/* ---------- ícones (SVG, nunca emoji) ---------- */
+type StepIcon = (props: { className?: string }) => JSX.Element;
+
+const svgProps = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+const TriggerIcon: StepIcon = ({ className }) => (
+  <svg {...svgProps} className={className} aria-hidden>
+    <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
+  </svg>
+);
+const InputIcon: StepIcon = ({ className }) => (
+  <svg {...svgProps} className={className} aria-hidden>
+    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+    <path d="M5 3h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <path d="M12 17v-6m0 0-2.5 2.5M12 11l2.5 2.5" />
+  </svg>
+);
+const ProcessIcon: StepIcon = ({ className }) => (
+  <svg {...svgProps} className={className} aria-hidden>
+    <path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15l-1.8-4.2L5.5 9l4.7-1.3L12 3z" />
+    <path d="M19 14l.7 1.8L21.5 16l-1.8.7L19 18l-.7-1.3L16.5 16l1.8-.2L19 14z" />
+  </svg>
+);
+const OutputIcon: StepIcon = ({ className }) => (
+  <svg {...svgProps} className={className} aria-hidden>
+    <path d="M12 3v11m0 0 4-4m-4 4-4-4" />
+    <path d="M5 21h14" />
+  </svg>
+);
+const ReviewIcon: StepIcon = ({ className }) => (
+  <svg {...svgProps} className={className} aria-hidden>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8.5 12.5l2.5 2.5 4.5-5" />
+  </svg>
+);
+const CheckIcon: StepIcon = ({ className }) => (
+  <svg {...svgProps} className={className} aria-hidden>
+    <path d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const STEP_ICONS: StepIcon[] = [TriggerIcon, InputIcon, ProcessIcon, OutputIcon, ReviewIcon];
+
+/* ---------- stepper vertical (desktop) ---------- */
+function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
+  return (
+    <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200 bg-white px-5 py-6 lg:flex">
+      <div className="mb-6 px-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          Montagem da automação
+        </div>
+        <div className="mt-1 text-sm text-slate-500">
+          {step >= STEPS.length - 1 ? "Pronta para testar" : `Etapa ${step + 1} de ${STEPS.length}`}
+        </div>
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <motion.div
+            className="h-full rounded-full bg-accent-400"
+            animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+            transition={{ type: "spring", stiffness: 200, damping: 30 }}
+          />
+        </div>
+      </div>
+      <ol className="space-y-1">
+        {STEPS.map((label, i) => {
+          const dimKey = (["trigger", "input", "process", "output"] as const)[i];
+          const confident = i < 4 && (plan?.[dimKey] as DimPlan)?.confident;
+          const done = i < step || (confident && i !== step);
+          const current = i === step;
+          const Icon = STEP_ICONS[i];
+          return (
+            <li key={label} className="relative flex items-center gap-3 rounded-lg px-2 py-2">
+              {current && (
+                <motion.span
+                  layoutId="rail-active"
+                  className="absolute inset-0 rounded-lg bg-brand-50"
+                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                />
+              )}
+              <span
+                className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
+                  current
+                    ? "bg-brand-700 text-white"
+                    : done
+                    ? "bg-accent-500 text-white"
+                    : "bg-slate-100 text-slate-400"
+                }`}
+              >
+                {done ? <CheckIcon className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+              </span>
+              <span
+                className={`relative z-10 text-sm ${
+                  current ? "font-semibold text-brand-900" : done ? "text-slate-600" : "text-slate-400"
+                }`}
+              >
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-400">
+        Nada é publicado sem você testar antes. Você pode abrir o modo avançado a qualquer momento.
+      </div>
+    </aside>
+  );
+}
+
+/* ---------- progresso compacto (mobile) ---------- */
+function MobileProgress({ step }: { step: number }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-3 lg:hidden">
+      <div className="flex flex-1 gap-1.5">
+        {STEPS.map((_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              i <= step ? "bg-accent-400" : "bg-slate-200"
+            }`}
+          />
+        ))}
+      </div>
+      <span className="shrink-0 text-xs font-medium text-slate-500">{STEPS[step]}</span>
+    </div>
+  );
+}
 
 interface DimPlan {
   kind?: string | null;
@@ -35,6 +171,42 @@ interface BuildResult {
   script_file: string;
   stage_ids: { input?: number; script?: number; result?: number; trigger?: number };
   ai_enabled: boolean;
+}
+
+/**
+ * Reconstrói o rascunho do assistente a partir dos nós reais do projeto, para
+ * quando o fluxo foi montado fora do wizard (Chat / modo avançado) e não há
+ * `wizard_state`. Prefere o rascunho salvo quando existir.
+ */
+function deriveBuiltState(ws: WizardState, stages: Stage[]): WizardState {
+  const inputForm = stages.find((s) => s.type === "form" && s.config?.mode === "input");
+  const resultForm = stages.find((s) => s.type === "form" && s.config?.mode === "result");
+  const scriptStage = stages.find((s) => s.type === "script" || s.type === "agent");
+  const jobStage = stages.find((s) => s.type === "job");
+  const hookStage = stages.find((s) => s.type === "hook");
+
+  const fields = (inputForm?.config?.fields ?? []) as Array<{ label?: string; type?: string }>;
+  const hasFile = fields.some((f) => f.type === "file");
+  const inputKind: InputKind = !inputForm ? "none" : hasFile ? "file" : fields.length ? "fields" : "none";
+  const triggerKind: TriggerKind = jobStage ? "schedule" : hookStage ? "webhook" : "manual";
+  const outputKind: OutputKind = resultForm?.config?.result_file_key ? "download" : "summary";
+
+  return {
+    trigger: ws.trigger ?? { kind: triggerKind },
+    input:
+      ws.input ?? {
+        kind: inputKind,
+        fields:
+          inputKind === "fields"
+            ? fields.map((f) => ({
+                label: f.label ?? "",
+                type: (f.type ?? "text") as WizardField["type"],
+              }))
+            : [],
+      },
+    process: ws.process ?? { description: (scriptStage?.config?.description as string) || "" },
+    output: ws.output ?? { kind: outputKind },
+  };
 }
 
 /**
@@ -66,13 +238,35 @@ export default function Wizard() {
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    api.get<Project>(`/api/projects/${projectId}`).then((p) => {
+    Promise.all([
+      api.get<Project>(`/api/projects/${projectId}`),
+      api.get<Stage[]>(`/api/projects/${projectId}/stages`),
+    ]).then(([p, stages]) => {
       setProject(p);
-      const ws = p.wizard_state || {};
-      if ((ws as any)._built) {
-        setState(ws);
-        setStep(4);
-      }
+      const ws = (p.wizard_state || {}) as WizardState;
+      const scriptStage = stages.find((s) => s.type === "script" || s.type === "agent");
+      // o fluxo pode ter sido montado pelo assistente (_built) OU pelo Chat/modo
+      // avançado (sem _built). Reconhecer pela presença real de nós evita reabrir
+      // a tela inicial como se a automação não existisse.
+      const alreadyBuilt = (ws as any)._built || !!scriptStage;
+      if (!alreadyBuilt) return;
+      setState(deriveBuiltState(ws, stages));
+      const ids = ((ws as any)._stage_ids || {}) as BuildResult["stage_ids"];
+      const inputForm = stages.find((s) => s.type === "form" && s.config?.mode === "input");
+      const resultForm = stages.find((s) => s.type === "form" && s.config?.mode === "result");
+      setBuild({
+        // descrição persistida; se vazia, o card gera ou pede ao usuário
+        explanation: ((ws as any)._explanation as string) || "",
+        script_file: scriptStage?.entry_file || "",
+        stage_ids: {
+          input: ids.input ?? inputForm?.id,
+          script: ids.script ?? scriptStage?.id,
+          result: ids.result ?? resultForm?.id,
+          trigger: ids.trigger,
+        },
+        ai_enabled: false,
+      });
+      setStep(4);
     });
   }, [projectId]);
 
@@ -166,6 +360,34 @@ export default function Wizard() {
     (step === 2 && !!state.process?.description?.trim()) ||
     (step === 3 && !!state.output?.kind);
 
+  const renderStep = () => {
+    switch (step) {
+      case 0:
+        return <TriggerStep state={state} patch={patch} plan={plan?.trigger} />;
+      case 1:
+        return <InputStep state={state} patch={patch} plan={plan?.input} />;
+      case 2:
+        return <ProcessStep state={state} patch={patch} plan={plan?.process} />;
+      case 3:
+        return <OutputStep state={state} patch={patch} plan={plan?.output} />;
+      case 4:
+        return (
+          <ReviewStep
+            projectId={projectId}
+            projectName={project.name}
+            projectDescription={project.description}
+            state={state}
+            building={building}
+            build={build}
+            buildError={buildError}
+            onRebuild={buildFlow}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex h-full flex-col bg-slate-50">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
@@ -204,98 +426,64 @@ export default function Wizard() {
         </div>
       )}
 
-      {step >= 0 && (
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-6 py-3">
-          {STEPS.map((label, i) => {
-            const dimKey = (["trigger", "input", "process", "output"] as const)[i];
-            const confident = i < 4 && (plan?.[dimKey] as DimPlan)?.confident;
-            const done = i < step || (confident && i !== step);
-            return (
-              <div key={label} className="flex items-center gap-2">
-                <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                    i === step
-                      ? "bg-brand-600 text-white"
-                      : done
-                      ? "bg-emerald-500 text-white"
-                      : "bg-slate-200 text-slate-500"
-                  }`}
-                >
-                  {done ? "✓" : i + 1}
-                </div>
-                <span className={`text-sm ${i === step ? "font-medium text-brand-900" : "text-slate-400"}`}>
-                  {label}
-                </span>
-                {i < STEPS.length - 1 && <span className="mx-1 text-slate-300">·</span>}
+      {step === -1 ? (
+        <div className="min-h-0 flex-1 overflow-auto p-8">
+          <div className="mx-auto max-w-2xl">
+            <DescribeStep
+              prompt={prompt}
+              setPrompt={setPrompt}
+              sampleName={sampleName}
+              onUpload={uploadSample}
+              onAnalyze={analyze}
+              analyzing={analyzing}
+              error={analyzeError}
+              taRef={taRef}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <StepRail step={step} plan={plan} />
+          <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+            <MobileProgress step={step} />
+            <div className="min-h-0 flex-1 overflow-auto p-6 lg:p-10">
+              <div className={`mx-auto ${step === 4 ? "max-w-6xl" : "max-w-2xl"}`}>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={step}
+                    initial={reduce ? false : { opacity: 0, x: 24 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={reduce ? undefined : { opacity: 0, x: -24 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 30 }}
+                  >
+                    {renderStep()}
+                  </motion.div>
+                </AnimatePresence>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-auto p-8">
-        <div className="mx-auto max-w-2xl">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={step}
-              initial={reduce ? false : { opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={reduce ? undefined : { opacity: 0, x: -24 }}
-              transition={{ type: "spring", stiffness: 320, damping: 30 }}
-            >
-              {step === -1 && (
-                <DescribeStep
-                  prompt={prompt}
-                  setPrompt={setPrompt}
-                  sampleName={sampleName}
-                  onUpload={uploadSample}
-                  onAnalyze={analyze}
-                  analyzing={analyzing}
-                  error={analyzeError}
-                  taRef={taRef}
-                />
+            </div>
+            <footer className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
+              <button
+                onClick={() => setStep(step - 1)}
+                disabled={step === 0}
+                className="btn-outline py-1.5 text-sm disabled:opacity-40"
+              >
+                ← Voltar
+              </button>
+              <span className="text-xs text-slate-400">Etapa {step + 1} de {STEPS.length}</span>
+              {step < STEPS.length - 1 ? (
+                <button
+                  onClick={handleContinue}
+                  disabled={!canAdvance}
+                  className="btn-primary py-1.5 text-sm disabled:opacity-40"
+                >
+                  {step === 3 ? "Montar e revisar" : "Continuar"}
+                </button>
+              ) : (
+                <span className="w-24" />
               )}
-              {step === 0 && <TriggerStep state={state} patch={patch} plan={plan?.trigger} />}
-              {step === 1 && <InputStep state={state} patch={patch} plan={plan?.input} />}
-              {step === 2 && <ProcessStep state={state} patch={patch} plan={plan?.process} />}
-              {step === 3 && <OutputStep state={state} patch={patch} plan={plan?.output} />}
-              {step === 4 && (
-                <ReviewStep
-                  projectId={projectId}
-                  state={state}
-                  building={building}
-                  build={build}
-                  buildError={buildError}
-                  onRebuild={buildFlow}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
+            </footer>
+          </div>
         </div>
-      </div>
-
-      {step >= 0 && (
-        <footer className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
-          <button
-            onClick={() => setStep(step - 1)}
-            disabled={step === 0}
-            className="btn-outline py-1.5 text-sm disabled:opacity-40"
-          >
-            ← Voltar
-          </button>
-          <span className="text-xs text-slate-400">Etapa {step + 1} de {STEPS.length}</span>
-          {step < STEPS.length - 1 ? (
-            <button
-              onClick={handleContinue}
-              disabled={!canAdvance}
-              className="btn-primary py-1.5 text-sm disabled:opacity-40"
-            >
-              {step === 3 ? "Montar e revisar" : "Continuar"}
-            </button>
-          ) : (
-            <span className="w-24" />
-          )}
-        </footer>
       )}
     </div>
   );
@@ -628,58 +816,134 @@ function translateError(stderr: string): string {
 }
 
 function ReviewStep({
-  projectId, state, building, build, buildError, onRebuild,
+  projectId, projectName, projectDescription, state, building, build, buildError, onRebuild,
 }: {
   projectId: number;
+  projectName: string;
+  projectDescription: string;
   state: WizardState;
   building: boolean;
   build: BuildResult | null;
   buildError: string;
   onRebuild: () => void;
 }) {
+  // estado de execução do teste, espelhado no fluxo (qual nó está rodando / erro)
+  const [flow, setFlow] = useState<{
+    active: string | null;
+    status: "idle" | "running" | "success" | "error";
+  }>({ active: null, status: "idle" });
+
+  // o "Faz" pode vir vazio em fluxos criados fora do assistente: usa a descrição
+  // ou o próprio nome do projeto como melhor resumo disponível.
+  const faz =
+    state.process?.description?.trim() ||
+    projectDescription?.trim() ||
+    projectName?.trim() ||
+    "—";
+  // etapas do fluxo com explicação amigável por nó
+  const inKind = state.input?.kind;
+  const flowSteps: FlowStep[] = [];
+  if (inKind === "file" || inKind === "fields") {
+    flowSteps.push({
+      key: "input",
+      type: "form",
+      name: "Entrada",
+      desc:
+        inKind === "file"
+          ? "Você envia um arquivo (ex: uma planilha) para a automação."
+          : `Você preenche ${state.input?.fields?.length ?? 0} campo(s) antes de rodar.`,
+    });
+  }
+  flowSteps.push({
+    key: "script",
+    type: "script",
+    name: "Processamento",
+    desc: "Os dados são processados automaticamente por um código que aplica a regra definida.",
+    edge: flowSteps.length ? "entrada" : undefined,
+  });
+  flowSteps.push({
+    key: "result",
+    type: "form",
+    name: "Resultado",
+    desc:
+      state.output?.kind === "summary"
+        ? "Você vê um resumo do que foi processado, direto na tela."
+        : "Você baixa o arquivo gerado com o resultado.",
+    edge: "resultado",
+  });
+
   return (
     <div>
-      <StepTitle title="Revisão e teste" hint="Confira o que foi montado e rode um teste com dados de exemplo antes de publicar." />
-      <div className="space-y-3">
-        <ReviewRow label="Começa" value={capitalize(triggerText(state.trigger?.kind))} />
-        <ReviewRow label="Recebe" value={capitalize(inputText(state.input?.kind, state.input?.fields?.length ?? 0))} />
-        <ReviewRow label="Faz" value={state.process?.description?.trim() || "—"} />
-        <ReviewRow label="Entrega" value={capitalize(outputText(state.output?.kind))} />
-      </div>
+      <StepTitle
+        title="Revisão e teste"
+        hint="Rode um teste com dados de exemplo antes de publicar. Abaixo, veja o passo a passo do que a automação faz."
+      />
 
-      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="font-semibold text-brand-900">O que a automação vai fazer</h3>
-          <button onClick={onRebuild} disabled={building}
-            className="text-xs text-slate-400 hover:text-brand-700 disabled:opacity-50">
-            {building ? "Montando…" : "Montar de novo"}
-          </button>
-        </div>
-        {building ? (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Spinner className="h-4 w-4" /> Montando a automação…
+      {/* Visão consolidada: teste domina (2/3), contexto como suporte (1/3) */}
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        {/* AÇÃO PRINCIPAL: teste, com o fluxo logo abaixo */}
+        <div className="space-y-6 lg:col-span-2">
+          {build?.stage_ids?.script ? (
+            <TestPanel
+              projectId={projectId}
+              scriptStageId={build.stage_ids.script}
+              state={state}
+              onFlow={(active, status) => setFlow({ active, status })}
+            />
+          ) : (
+            <div className="flex items-center gap-2 rounded-2xl border-2 border-accent-200 bg-white p-5 text-sm text-slate-400 shadow-md">
+              <Spinner className="h-4 w-4" /> Preparando o teste…
+            </div>
+          )}
+
+          {/* fluxo da automação: passo a passo visual e animado, logo abaixo do teste */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Fluxo da automação
+            </div>
+            <AutomationFlow steps={flowSteps} activeKey={flow.active} status={flow.status} />
           </div>
-        ) : buildError ? (
-          <p className="text-sm text-red-600">{buildError}</p>
-        ) : build ? (
-          <p className="whitespace-pre-wrap text-sm text-slate-600">{build.explanation}</p>
-        ) : (
-          <p className="text-sm text-slate-400">Ainda não montado.</p>
-        )}
+        </div>
+
+        {/* COMPLEMENTOS (suporte): contexto da automação, na mesma tela */}
+        <aside className="space-y-3 lg:col-span-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Sobre esta automação
+          </div>
+          {/* o que esta automação faz */}
+          <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-4">
+            <div className="mb-1.5 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-brand-900">O que esta automação faz</h3>
+              <button onClick={onRebuild} disabled={building}
+                className="text-xs text-slate-400 hover:text-brand-700 disabled:opacity-50">
+                {building ? "Montando…" : "Montar de novo"}
+              </button>
+            </div>
+            {building ? (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <Spinner className="h-4 w-4" /> Montando a automação…
+              </div>
+            ) : buildError ? (
+              <p className="text-sm text-red-600">{buildError}</p>
+            ) : (
+              <AutomationDescription projectId={projectId} initial={build?.explanation || ""} />
+            )}
+          </div>
+
+          {/* resumo em palavras */}
+          <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-4">
+            <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Resumo em palavras
+            </div>
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3">
+              <Word term="Começa" desc={capitalize(triggerText(state.trigger?.kind))} />
+              <Word term="Recebe" desc={capitalize(inputText(state.input?.kind, state.input?.fields?.length ?? 0))} />
+              <Word term="Faz" desc={faz} />
+              <Word term="Entrega" desc={capitalize(outputText(state.output?.kind))} />
+            </dl>
+          </div>
+        </aside>
       </div>
-
-      {build?.stage_ids?.script && (
-        <TestPanel projectId={projectId} scriptStageId={build.stage_ids.script} state={state} />
-      )}
-    </div>
-  );
-}
-
-function ReviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-0.5 text-sm text-slate-700">{value}</div>
     </div>
   );
 }
@@ -688,12 +952,261 @@ function capitalize(s: string) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
+/* ---------- fluxo da automação (passo a passo visual e animado) ---------- */
+interface FlowStep {
+  key: string;
+  type: StageType;
+  name: string;
+  desc: string;
+  edge?: string;
+}
+
+const flowContainerV: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.14, delayChildren: 0.05 } },
+};
+const flowItemV: Variants = {
+  hidden: { opacity: 0, y: 16, scale: 0.96 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 22 } },
+};
+
+type FlowExecStatus = "idle" | "running" | "success" | "error";
+
+function AutomationFlow({
+  steps,
+  activeKey = null,
+  status = "idle",
+}: {
+  steps: FlowStep[];
+  activeKey?: string | null;
+  status?: FlowExecStatus;
+}) {
+  const reduce = useReducedMotion();
+  const activeIdx = activeKey ? steps.findIndex((s) => s.key === activeKey) : -1;
+
+  function stepState(idx: number): "idle" | "running" | "done" | "error" {
+    if (status === "idle" || activeIdx < 0) return "idle";
+    if (status === "error") return idx === activeIdx ? "error" : idx < activeIdx ? "done" : "idle";
+    if (status === "success") return "done";
+    return idx < activeIdx ? "done" : idx === activeIdx ? "running" : "idle";
+  }
+
+  return (
+    <motion.div
+      variants={reduce ? undefined : flowContainerV}
+      initial={reduce ? false : "hidden"}
+      animate="show"
+      className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0"
+    >
+      {steps.map((s, i) => {
+        const meta = STAGE_META[s.type];
+        const st = stepState(i);
+        const ring =
+          st === "done"
+            ? "ring-2 ring-emerald-300"
+            : st === "error"
+            ? "ring-2 ring-red-300"
+            : "";
+        return (
+          <div key={s.key} className="flex flex-col lg:min-w-0 lg:flex-1 lg:flex-row lg:items-stretch">
+            {i > 0 && <FlowArrow label={s.edge} active={st === "running" || st === "done" || st === "error"} />}
+            <motion.div
+              variants={reduce ? undefined : flowItemV}
+              className={`relative flex w-full flex-col gap-2 rounded-xl border-2 bg-white p-3 shadow-sm lg:min-w-0 lg:flex-1 ${ring}`}
+              style={{ borderColor: meta.color }}
+            >
+              {st === "running" && (
+                <motion.span
+                  className="pointer-events-none absolute inset-0 rounded-xl ring-4 ring-accent-400/70"
+                  animate={reduce ? undefined : { opacity: [0.35, 1, 0.35] }}
+                  transition={{ repeat: Infinity, duration: 1.2 }}
+                  aria-hidden
+                />
+              )}
+              {st !== "idle" && (
+                <span
+                  className={`absolute -right-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full text-white shadow ${
+                    st === "done" ? "bg-emerald-500" : st === "error" ? "bg-red-500" : "bg-accent-500"
+                  }`}
+                  title={st === "done" ? "Concluído" : st === "error" ? "Erro nesta etapa" : "Executando…"}
+                >
+                  {st === "done" ? (
+                    <CheckIcon className="h-3 w-3" />
+                  ) : st === "error" ? (
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden>
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  ) : (
+                    <Spinner className="h-3 w-3" />
+                  )}
+                </span>
+              )}
+              <div className="flex items-center gap-2">
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
+                  style={{ background: meta.color }}
+                >
+                  <StageIcon type={s.type} className="h-4 w-4" />
+                </span>
+                <div className="leading-tight">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    {meta.label}
+                  </div>
+                  <div className="text-sm font-medium text-brand-900">{s.name}</div>
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed text-slate-500">{s.desc}</p>
+            </motion.div>
+          </div>
+        );
+      })}
+    </motion.div>
+  );
+}
+
+function FlowArrow({ label, active = false }: { label?: string; active?: boolean }) {
+  return (
+    <div className="flex shrink-0 items-center justify-center gap-1 py-1 lg:flex-col lg:px-3 lg:py-0">
+      {label && (
+        <span className={`whitespace-nowrap text-[10px] font-medium ${active ? "text-accent-600" : "text-slate-400"}`}>
+          {label}
+        </span>
+      )}
+      <svg
+        viewBox="0 0 24 24"
+        className={`h-4 w-6 rotate-90 lg:rotate-0 ${active ? "text-accent-500" : "text-slate-300"}`}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M3 12h15" strokeDasharray="2 3" />
+        <path d="M14 6l6 6-6 6" />
+      </svg>
+    </div>
+  );
+}
+
+function Word({ term, desc, className = "" }: { term: string; desc: string; className?: string }) {
+  return (
+    <div className={className}>
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{term}</dt>
+      <dd className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{desc}</dd>
+    </div>
+  );
+}
+
+/* ---------- descrição "o que esta automação faz" (sempre presente) ---------- */
+function AutomationDescription({ projectId, initial }: { projectId: number; initial: string }) {
+  const [text, setText] = useState(initial.trim());
+  const [draft, setDraft] = useState("");
+  const [mode, setMode] = useState<"view" | "edit" | "generating" | "ask">(
+    initial.trim() ? "view" : "generating"
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (initial.trim()) return; // já há descrição persistida
+    let active = true;
+    api
+      .post<{ description: string }>(`/api/projects/${projectId}/wizard/describe`)
+      .then((r) => {
+        if (!active) return;
+        if (r.description?.trim()) {
+          setText(r.description.trim());
+          setMode("view");
+        } else {
+          setMode("ask"); // sem dados para gerar: o usuário precisa descrever
+        }
+      })
+      .catch(() => active && setMode("ask"));
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save() {
+    const value = draft.trim();
+    if (!value) return;
+    setSaving(true);
+    try {
+      await api.put(`/api/projects/${projectId}/wizard/explanation`, { text: value });
+      setText(value);
+      setMode("view");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (mode === "generating") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        <Spinner className="h-4 w-4" /> Gerando a descrição da automação…
+      </div>
+    );
+  }
+
+  if (mode === "view") {
+    return (
+      <div>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{text}</p>
+        <button
+          onClick={() => {
+            setDraft(text);
+            setMode("edit");
+          }}
+          className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+        >
+          Editar descrição
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {mode === "ask" && (
+        <p className="mb-2 text-sm text-amber-700">
+          Não consegui descrever esta automação automaticamente. Descreva, em uma ou duas
+          frases, o que ela faz.
+        </p>
+      )}
+      <textarea
+        autoFocus
+        rows={3}
+        className="input resize-y text-sm"
+        placeholder="Ex: recebe uma planilha de vendas, soma os valores por produto e gera uma planilha com os totais."
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={save}
+          disabled={saving || !draft.trim()}
+          className="btn-primary py-1.5 text-sm disabled:opacity-40"
+        >
+          {saving ? "Salvando…" : "Salvar descrição"}
+        </button>
+        {mode === "edit" && (
+          <button onClick={() => setMode("view")} className="btn-ghost py-1.5 text-sm">
+            Cancelar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TestPanel({
-  projectId, scriptStageId, state,
+  projectId, scriptStageId, state, onFlow,
 }: {
   projectId: number;
   scriptStageId: number;
   state: WizardState;
+  onFlow?: (active: string | null, status: "idle" | "running" | "success" | "error") => void;
 }) {
   const [samplePath, setSamplePath] = useState(state.input?.sample_file ?? "");
   const [sampleName, setSampleName] = useState(state.input?.sample_file?.split("/").pop() ?? "");
@@ -720,10 +1233,15 @@ function TestPanel({
     if (inputKind === "fields") return { ...fieldValues };
     return {};
   }
-  async function runTest() {
+  async function runTest(): Promise<Execution> {
     setTesting(true);
     setExec(null);
+    setReviewed(false);
+    // anima a entrada do fluxo e depois o processamento (etapa que de fato executa)
+    onFlow?.("input", "running");
     try {
+      await new Promise((r) => setTimeout(r, 450));
+      onFlow?.("script", "running");
       const started = await api.post<Execution>(`/api/projects/${projectId}/stages/${scriptStageId}/run`, buildPayload());
       let last = started;
       for (let i = 0; i < 25; i++) {
@@ -732,8 +1250,13 @@ function TestPanel({
         if (last.status === "success" || last.status === "error") break;
       }
       setExec(last);
+      onFlow?.(last.status === "success" ? "result" : "script", last.status === "success" ? "success" : "error");
+      return last;
     } catch (e: any) {
-      setExec({ status: "error", stderr: e?.message || "Falha ao iniciar o teste." } as Execution);
+      const errExec = { status: "error", stderr: e?.message || "Falha ao iniciar o teste." } as Execution;
+      setExec(errExec);
+      onFlow?.("script", "error");
+      return errExec;
     } finally {
       setTesting(false);
     }
@@ -751,11 +1274,25 @@ function TestPanel({
   const needsSample = inputKind === "file" && !samplePath;
   const summary = exec?.output_data?.resumo;
   const resultFile = exec?.output_data?.arquivo_resultado as string | undefined;
+  const review = exec?.output_data?._ocr_review;
+  const [reviewed, setReviewed] = useState(false);
+  const blockedByReview = !!review?.needs_review && !reviewed;
 
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5">
-      <h3 className="font-semibold text-brand-900">Testar com dados de exemplo</h3>
-      <p className="mt-1 text-sm text-slate-500">
+    <div className="overflow-hidden rounded-2xl border-2 border-accent-200 bg-white shadow-md ring-1 ring-accent-100/60">
+      <div className="flex items-center gap-3 border-b border-accent-100 bg-accent-50/60 px-5 py-3.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-500 text-white shadow-sm">
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M6 4l14 8-14 8V4z" />
+          </svg>
+        </span>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-600">Próximo passo</div>
+          <h3 className="text-base font-bold text-brand-900">Testar com dados de exemplo</h3>
+        </div>
+      </div>
+      <div className="p-5">
+      <p className="text-sm text-slate-500">
         Rode a automação de verdade antes de publicar. Publicar só fica disponível após um teste bem-sucedido.
       </p>
 
@@ -786,9 +1323,20 @@ function TestPanel({
 
       <motion.button onClick={runTest} disabled={testing || needsSample}
         whileTap={{ scale: 0.97 }}
-        className="btn-accent mt-4 py-1.5 text-sm disabled:opacity-50"
+        className="btn-accent mt-4 w-full justify-center py-2.5 text-sm font-semibold shadow-sm disabled:opacity-50 sm:w-auto sm:px-6"
         title={needsSample ? "Suba um arquivo de exemplo primeiro" : ""}>
-        {testing ? "Testando…" : "Testar agora"}
+        {testing ? (
+          <>
+            <Spinner className="h-4 w-4" /> Testando…
+          </>
+        ) : (
+          <>
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M6 4l14 8-14 8V4z" />
+            </svg>
+            Testar agora
+          </>
+        )}
       </motion.button>
 
       <AnimatePresence>
@@ -811,22 +1359,34 @@ function TestPanel({
             ) : (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                 <div className="text-sm font-medium text-red-700">{translateError(exec.stderr || "")}</div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Ajuste a descrição na etapa Processamento e monte de novo, ou abra o modo avançado para ver os detalhes técnicos.
-                </p>
+                <RepairPanel
+                  projectId={projectId}
+                  scriptStageId={scriptStageId}
+                  executionId={exec.id}
+                  onRetest={runTest}
+                />
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
+      {passed && review && (
+        <div className="mt-4">
+          <OcrReview review={review} confirmed={reviewed} onConfirm={() => setReviewed(true)} />
+        </div>
+      )}
+
       <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
-        <motion.button onClick={publish} disabled={!passed || publishing || published}
+        <motion.button onClick={publish} disabled={!passed || publishing || published || blockedByReview}
           whileTap={{ scale: 0.97 }}
           className="btn-primary py-1.5 text-sm disabled:opacity-40"
-          title={passed ? "" : "Rode um teste com sucesso antes de publicar"}>
+          title={blockedByReview ? "Confirme a revisão do OCR antes de publicar" : passed ? "" : "Rode um teste com sucesso antes de publicar"}>
           {published ? "Publicado ✓" : publishing ? "Publicando…" : "Publicar"}
         </motion.button>
+        {blockedByReview && (
+          <span className="text-xs text-amber-600">Confirme a revisão do OCR para publicar.</span>
+        )}
         {!passed && !published && (
           <span className="text-xs text-slate-400">Publicar libera após um teste bem-sucedido.</span>
         )}
@@ -834,6 +1394,190 @@ function TestPanel({
           <span className="text-xs text-emerald-600">Automação no ar. Veja em Versões ou abra o app publicado.</span>
         )}
       </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- auto-reparo colaborativo (dentro da caixa de erro do teste) ---------- */
+interface RepairProposal {
+  diagnosis: string;
+  change_summary: string;
+  fixed_code: string;
+  has_changes: boolean;
+}
+
+function RepairPanel({
+  projectId,
+  scriptStageId,
+  executionId,
+  onRetest,
+}: {
+  projectId: number;
+  scriptStageId: number;
+  executionId: string;
+  onRetest: () => Promise<Execution>;
+}) {
+  const [phase, setPhase] = useState<"idle" | "proposing" | "proposed" | "applying" | "exhausted">("idle");
+  const [proposal, setProposal] = useState<RepairProposal | null>(null);
+  const [hint, setHint] = useState("");
+  const [showCode, setShowCode] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [error, setError] = useState("");
+  const MAX = 3;
+
+  async function propose() {
+    setError("");
+    setPhase("proposing");
+    try {
+      const p = await api.post<RepairProposal>(
+        `/api/projects/${projectId}/stages/${scriptStageId}/repair/propose`,
+        { execution_id: executionId, hint: hint.trim() || null }
+      );
+      setProposal(p);
+      setPhase("proposed");
+    } catch (e: any) {
+      setError(e?.message || "Falha ao consultar a IA.");
+      setPhase("idle");
+    }
+  }
+
+  async function apply() {
+    if (!proposal?.fixed_code) return;
+    setError("");
+    setPhase("applying");
+    try {
+      await api.post(`/api/projects/${projectId}/stages/${scriptStageId}/repair/apply`, {
+        code: proposal.fixed_code,
+      });
+      const last = await onRetest();
+      const n = attempts + 1;
+      setAttempts(n);
+      setProposal(null);
+      setHint("");
+      setShowCode(false);
+      if (last.status === "success") setPhase("idle");
+      else setPhase(n >= MAX ? "exhausted" : "idle");
+    } catch (e: any) {
+      setError(e?.message || "Falha ao aplicar a correção.");
+      setPhase("proposed");
+    }
+  }
+
+  if (phase === "exhausted") {
+    return (
+      <p className="mt-2 text-xs text-slate-500">
+        Tentei reparar algumas vezes sem sucesso. Ajuste a descrição na etapa Processamento e monte
+        de novo, ou abra o modo avançado para ver os detalhes técnicos.
+      </p>
+    );
+  }
+
+  if (phase === "proposing") {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+        <Spinner className="h-4 w-4" /> A IA está analisando o erro e preparando uma correção…
+      </div>
+    );
+  }
+
+  if (phase === "applying") {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+        <Spinner className="h-4 w-4" /> Aplicando a correção e testando de novo…
+      </div>
+    );
+  }
+
+  if (phase === "proposed" && proposal) {
+    if (!proposal.has_changes) {
+      return (
+        <div className="mt-3 space-y-2">
+          <p className="text-sm text-slate-700">
+            {proposal.diagnosis || "Não consegui identificar uma correção automática."}
+          </p>
+          <p className="text-xs text-slate-500">
+            Tente ajustar a descrição na etapa Processamento, ou abra o modo avançado.
+          </p>
+          <button onClick={() => setPhase("idle")} className="btn-ghost py-1 text-xs">
+            Fechar
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="mt-3 space-y-2.5 rounded-lg border border-slate-200 bg-white p-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">O que aconteceu</div>
+          <p className="text-sm text-slate-700">{proposal.diagnosis}</p>
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Como vou resolver</div>
+          <p className="text-sm text-slate-700">{proposal.change_summary}</p>
+        </div>
+        <button
+          onClick={() => setShowCode((v) => !v)}
+          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+        >
+          {showCode ? "Ocultar alteração no código" : "Ver alteração no código"}
+        </button>
+        {showCode && (
+          <pre className="max-h-56 overflow-auto rounded-lg bg-brand-900 p-3 text-xs leading-relaxed text-slate-100">
+            {proposal.fixed_code}
+          </pre>
+        )}
+        <div>
+          <label className="text-xs text-slate-500">Quer dar uma dica? (opcional)</label>
+          <input
+            className="input mt-1 text-sm"
+            placeholder="Ex: a coluna se chama 'Vlr Total'."
+            value={hint}
+            onChange={(e) => setHint(e.target.value)}
+          />
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex items-center gap-2 pt-0.5">
+          <button onClick={apply} className="btn-accent py-1.5 text-sm">
+            Aplicar e testar
+          </button>
+          <button
+            onClick={() => {
+              setPhase("idle");
+              setProposal(null);
+            }}
+            className="btn-ghost py-1.5 text-sm"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // idle
+  return (
+    <div className="mt-3 space-y-2">
+      <button onClick={propose} className="btn-primary py-1.5 text-sm">
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15l-1.8-4.2L5.5 9l4.7-1.3L12 3z" />
+        </svg>
+        Reparar com IA
+      </button>
+      {attempts > 0 && (
+        <div>
+          <label className="text-xs text-slate-500">Dica para a próxima tentativa (opcional)</label>
+          <input
+            className="input mt-1 text-sm"
+            placeholder="Ex: a coluna se chama 'Vlr Total'."
+            value={hint}
+            onChange={(e) => setHint(e.target.value)}
+          />
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <p className="text-xs text-slate-500">
+        Ou ajuste a descrição na etapa Processamento, ou abra o modo avançado.
+      </p>
     </div>
   );
 }
