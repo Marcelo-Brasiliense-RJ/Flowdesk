@@ -45,6 +45,23 @@ class ProjectUpdate(BaseModel):
     subdomain: Optional[str] = None
 
 
+class WizardStateUpdate(BaseModel):
+    """Salva o rascunho do assistente (wizard). `dirty` marca defasagem em relação
+    ao que foi editado no modo avançado."""
+
+    state: dict = {}
+    dirty: bool = False
+
+
+class WizardBuildOut(BaseModel):
+    """Resultado da montagem do fluxo pelo assistente."""
+
+    explanation: str
+    script_file: str
+    stage_ids: dict
+    ai_enabled: bool
+
+
 class ProjectOut(ORMModel):
     id: int
     name: str
@@ -55,6 +72,8 @@ class ProjectOut(ORMModel):
     output_folder_name: str
     access_mode: str
     allowed_domain: str
+    wizard_state: dict = {}
+    wizard_dirty: bool = False
     created_at: dt.datetime
     updated_at: dt.datetime
 

@@ -6,6 +6,7 @@ import Console from "./pages/Console";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
 import Editor from "./pages/Editor";
+import Wizard from "./pages/Wizard";
 import WorkflowMonitor from "./pages/WorkflowMonitor";
 import Builds from "./pages/Builds";
 import Logs from "./pages/Logs";
@@ -37,6 +38,7 @@ export default function App() {
       <Route path="/" element={<Protected><Console /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/chat" element={<Protected><Chat /></Protected>} />
+      <Route path="/projects/:id/assistente" element={<Protected><Wizard /></Protected>} />
       <Route path="/projects/:id/editor" element={<Protected><Editor /></Protected>} />
       <Route path="/projects/:id/workflow" element={<Protected><WorkflowMonitor /></Protected>} />
       <Route path="/projects/:id/builds" element={<Protected><Builds /></Protected>} />
