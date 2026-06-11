@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./lib/auth";
 import { Spinner } from "./components/ui";
 import Login from "./pages/Login";
@@ -14,6 +14,8 @@ import Files from "./pages/Files";
 import AccessControl from "./pages/AccessControl";
 import ProjectSettings from "./pages/ProjectSettings";
 import PublishedApp from "./pages/PublishedApp";
+import Manage from "./pages/Manage";
+import Admin from "./pages/Admin";
 import type { ReactNode } from "react";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -28,6 +30,30 @@ function Protected({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Modo avançado (editor/código): restrito a admin e dev. Usuário comum vai
+ * para o Assistente do mesmo projeto. */
+function ManagerOnly({ children, fallback }: { children: ReactNode; fallback: string }) {
+  const { user, loading } = useAuth();
+  if (loading)
+    return (
+      <div className="flex h-full items-center justify-center text-brand-700">
+        <Spinner className="h-8 w-8" />
+      </div>
+    );
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.is_admin && !user.is_dev) return <Navigate to={fallback} replace />;
+  return <>{children}</>;
+}
+
+function EditorGate() {
+  const { id } = useParams();
+  return (
+    <ManagerOnly fallback={`/projects/${id}/assistente`}>
+      <Editor />
+    </ManagerOnly>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
@@ -37,9 +63,11 @@ export default function App() {
 
       <Route path="/" element={<Protected><Console /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+      <Route path="/manage" element={<Protected><Manage /></Protected>} />
+      <Route path="/admin" element={<Protected><Admin /></Protected>} />
       <Route path="/chat" element={<Protected><Chat /></Protected>} />
       <Route path="/projects/:id/assistente" element={<Protected><Wizard /></Protected>} />
-      <Route path="/projects/:id/editor" element={<Protected><Editor /></Protected>} />
+      <Route path="/projects/:id/editor" element={<Protected><EditorGate /></Protected>} />
       <Route path="/projects/:id/workflow" element={<Protected><WorkflowMonitor /></Protected>} />
       <Route path="/projects/:id/builds" element={<Protected><Builds /></Protected>} />
       <Route path="/projects/:id/logs" element={<Protected><Logs /></Protected>} />

@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
+from . import metrics
 from .config import settings
 from .database import get_db
 from .models import User
@@ -35,6 +36,21 @@ def create_access_token(subject: str) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
+def is_admin(user: User) -> bool:
+    role = (getattr(user, "role", "") or "").lower()
+    return role == "admin" or user.email.lower() in settings.admin_email_set
+
+
+def is_dev(user: User) -> bool:
+    role = (getattr(user, "role", "") or "").lower()
+    return role == "dev" or user.email.lower() in settings.dev_email_set
+
+
+def can_manage(user: User) -> bool:
+    """Admin ou Dev: acesso à tela de gerenciamento das aplicações."""
+    return is_admin(user) or is_dev(user)
+
+
 def get_current_user(
     token: str | None = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ) -> User:
@@ -56,4 +72,17 @@ def get_current_user(
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.is_active:
         raise credentials_exc
+    metrics.touch_user(user.email)
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Ação restrita a administradores")
+    return user
+
+
+def require_manager(user: User = Depends(get_current_user)) -> User:
+    if not can_manage(user):
+        raise HTTPException(status_code=403, detail="Ação restrita a administradores e devs")
     return user

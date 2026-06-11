@@ -1,19 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
 import { api, getToken } from "../lib/api";
 import { useDialog } from "./Dialog";
-import type { ChatMessage, PendingAction } from "../lib/types";
-import { Spinner } from "./ui";
+import type { ChatMessage, PendingAction, Stage } from "../lib/types";
 
 export default function SmartChat({
   projectId,
   onApplied,
   autoStart,
+  centered = false,
 }: {
   projectId: number;
   onApplied: () => void;
   autoStart?: { content: string; files: File[] };
+  /** Quando true, centraliza mensagens e input numa coluna de leitura (tela cheia). */
+  centered?: boolean;
 }) {
   const dlg = useDialog();
+  const nav = useNavigate();
+  const [built, setBuilt] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [streaming, setStreaming] = useState("");
@@ -31,6 +38,13 @@ export default function SmartChat({
       await api.get<PendingAction[]>(`/api/projects/${projectId}/pending-actions`)
     );
     setCtx(await api.get(`/api/projects/${projectId}/chat/context`));
+    // a automação está "montada" quando já existe um nó de script no fluxo
+    try {
+      const stages = await api.get<Stage[]>(`/api/projects/${projectId}/stages`);
+      setBuilt(stages.some((s) => s.type === "script" || s.type === "agent"));
+    } catch {
+      /* ignore */
+    }
   }
   useEffect(() => {
     // reset state when switching projects so no stale conversation leaks in
@@ -177,6 +191,8 @@ export default function SmartChat({
       ? (last.meta.questions as any[])
       : null;
 
+  const colCls = centered ? "mx-auto w-full max-w-3xl" : "w-full";
+
   return (
     <div className="flex h-full flex-col bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
@@ -216,34 +232,35 @@ export default function SmartChat({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-        {messages.length === 0 && (
-          <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
-            Descreva a automação que você quer criar. A IA fará perguntas e
-            proporá ações que você aprova antes de aplicar.
-          </div>
-        )}
-        {messages.map((m) => (
-          <Bubble key={m.id} message={m} />
-        ))}
-        {streaming && (
-          <Bubble
-            message={{
-              id: -1,
-              role: "assistant",
-              content: streaming,
-              meta: {},
-              tokens: 0,
-              created_at: "",
-            }}
-          />
-        )}
-        {busy && !streaming && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Spinner className="h-4 w-4" /> pensando...
-          </div>
-        )}
-        <div ref={bottomRef} />
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className={`${colCls} space-y-3`}>
+          {messages.length === 0 && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
+              Descreva a automação que você quer criar. A IA fará perguntas e
+              proporá ações que você aprova antes de aplicar.
+            </div>
+          )}
+          <AnimatePresence initial={false}>
+            {messages.map((m) => (
+              <Bubble key={m.id} message={m} />
+            ))}
+          </AnimatePresence>
+          {streaming && (
+            <Bubble
+              streaming
+              message={{
+                id: -1,
+                role: "assistant",
+                content: streaming,
+                meta: {},
+                tokens: 0,
+                created_at: "",
+              }}
+            />
+          )}
+          {busy && !streaming && <TypingIndicator />}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {pending.length > 0 && (
@@ -331,11 +348,32 @@ export default function SmartChat({
           projectId={projectId}
           questions={activeQuestions}
           busy={busy}
+          centered={centered}
           onAnswer={(t, a) => send(t, a)}
         />
       )}
 
+      {built && !activeQuestions && (
+        <div className="border-t border-accent-100 bg-accent-50/60 px-4 py-2.5">
+          <div className={`${colCls} flex flex-wrap items-center justify-between gap-2`}>
+            <span className="text-sm text-brand-800">
+              Sua automação está pronta para testar.
+            </span>
+            <button
+              onClick={() => nav(`/projects/${projectId}/assistente`)}
+              className="btn-accent py-1.5 text-sm"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M6 4l14 8-14 8V4z" />
+              </svg>
+              Testar agora
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="border-t border-slate-200 p-3">
+        <div className={colCls}>
         {attached.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
             {attached.map((f, i) => (
@@ -376,37 +414,99 @@ export default function SmartChat({
             📎
             <input
               type="file"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setAttached((a) => [...a, f]);
+                const fs = Array.from(e.target.files ?? []);
+                if (fs.length) setAttached((a) => [...a, ...fs]);
                 e.target.value = "";
               }}
             />
           </label>
-          <button onClick={() => send()} disabled={busy} className="btn-primary px-4 py-2">
+          <motion.button
+            onClick={() => send()}
+            disabled={busy}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            className="btn-primary px-4 py-2"
+          >
             Enviar
-          </button>
+          </motion.button>
+        </div>
         </div>
       </div>
     </div>
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+function Bubble({
+  message,
+  streaming = false,
+}: {
+  message: ChatMessage;
+  streaming?: boolean;
+}) {
   const isUser = message.role === "user";
+  const reduce = useReducedMotion();
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+    <motion.div
+      layout="position"
+      initial={reduce ? false : { opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+      className={`flex items-end gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+    >
+      {!isUser && <Avatar />}
       <div
-        className={`max-w-[90%] rounded-2xl px-3.5 py-2 text-sm ${
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
           isUser
-            ? "bg-brand-700 text-white"
-            : "border border-slate-200 bg-white text-slate-700"
+            ? "rounded-br-md bg-brand-700 text-white"
+            : "rounded-bl-md border border-slate-200 bg-white text-slate-700"
         }`}
       >
-        <MessageContent text={message.content} />
+        <MessageContent text={message.content} markdown={!isUser} />
+        {streaming && (
+          <motion.span
+            aria-hidden
+            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-full bg-accent-500 align-middle"
+            animate={{ opacity: [1, 0.15, 1] }}
+            transition={{ duration: 0.9, repeat: Infinity }}
+          />
+        )}
       </div>
+    </motion.div>
+  );
+}
+
+/** Avatar do assistente — gradiente da marca, dá rosto à conversa. */
+function Avatar() {
+  return (
+    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-accent-500 text-[11px] font-bold text-white shadow-sm">
+      FD
     </div>
+  );
+}
+
+/** Indicador "digitando" com três pontos saltitantes. */
+function TypingIndicator() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-end gap-2"
+    >
+      <Avatar />
+      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-3 shadow-sm">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-slate-400"
+            animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+          />
+        ))}
+      </div>
+    </motion.div>
   );
 }
 
@@ -415,11 +515,13 @@ function InterviewPanel({
   projectId,
   questions,
   busy,
+  centered = false,
   onAnswer,
 }: {
   projectId: number;
   questions: any[];
   busy: boolean;
+  centered?: boolean;
   onAnswer: (text: string, attachments?: string[]) => void;
 }) {
   const [idx, setIdx] = useState(0);
@@ -505,14 +607,26 @@ function InterviewPanel({
 
   return (
     <div className="border-t border-slate-200 bg-brand-50/70 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-brand-700">
-          Entrevista
+      <div className={centered ? "mx-auto w-full max-w-3xl" : "w-full"}>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-xs font-semibold text-brand-700">
+          Só mais algumas perguntas para acertar a automação
         </span>
-        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-          {idx + 1}/{total}
+        <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+          {idx + 1} de {total}
         </span>
       </div>
+      <div className="mb-2.5 h-1 w-full overflow-hidden rounded-full bg-brand-100">
+        <div
+          className="h-full rounded-full bg-accent-400 transition-all duration-300"
+          style={{ width: `${((idx + 1) / total) * 100}%` }}
+        />
+      </div>
+      {idx === 0 && (
+        <p className="mb-2 text-xs leading-relaxed text-slate-500">
+          Pode responder clicando em uma opção ou escrevendo. Se não souber, é só pular.
+        </p>
+      )}
 
       <div className="text-sm font-medium text-brand-900">{q.label || q.question || q.text}</div>
 
@@ -604,11 +718,11 @@ function InterviewPanel({
           📎 Subir arquivo base
           <input
             type="file"
+            multiple
             className="hidden"
             disabled={disabled}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadBase(f);
+              Array.from(e.target.files ?? []).forEach((f) => uploadBase(f));
               e.target.value = "";
             }}
           />
@@ -646,6 +760,7 @@ function InterviewPanel({
           Pular
         </button>
       </div>
+      </div>
     </div>
   );
 }
@@ -670,13 +785,34 @@ function splitCode(text: string) {
   return parts;
 }
 
-function MessageContent({ text }: { text: string }) {
+/** Componentes de estilo para o markdown do assistente (sem plugin typography). */
+const MD_COMPONENTS = {
+  p: (props: any) => <p className="mb-2 leading-relaxed last:mb-0" {...props} />,
+  strong: (props: any) => <strong className="font-semibold text-brand-900" {...props} />,
+  em: (props: any) => <em className="italic" {...props} />,
+  ul: (props: any) => <ul className="my-2 list-disc space-y-1 pl-5" {...props} />,
+  ol: (props: any) => <ol className="my-2 list-decimal space-y-1 pl-5" {...props} />,
+  li: (props: any) => <li className="leading-relaxed" {...props} />,
+  a: (props: any) => <a className="font-medium text-brand-600 underline" {...props} />,
+  h1: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  h2: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  h3: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  code: (props: any) => (
+    <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px] text-brand-800" {...props} />
+  ),
+};
+
+function MessageContent({ text, markdown }: { text: string; markdown?: boolean }) {
   const parts = useMemo(() => splitCode(text), [text]);
   return (
     <>
       {parts.map((p, i) =>
         p.type === "code" ? (
           <CodeBlock key={i} lang={p.lang} body={p.body} />
+        ) : markdown ? (
+          <ReactMarkdown key={i} components={MD_COMPONENTS}>
+            {p.body}
+          </ReactMarkdown>
         ) : (
           <span key={i} className="whitespace-pre-wrap">
             {p.body}

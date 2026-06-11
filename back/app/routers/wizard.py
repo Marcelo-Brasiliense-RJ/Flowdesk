@@ -8,6 +8,8 @@ marcado em `config["_wizard_role"]`, então reconstruir atualiza em vez de dupli
 """
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -15,7 +17,7 @@ from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
 from ..models import Edge, SourceFile, Stage, User
-from ..schemas import WizardBuildOut
+from ..schemas import ExplanationUpdate, WizardAnalyzeIn, WizardBuildOut
 from .chat import (
     SYSTEM_PROMPT,
     _attachment_context,
@@ -156,7 +158,7 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
             messages.append({"role": "system", "content": ctx})
     messages.append({"role": "user", "content": intent})
 
-    explanation, actions = _generate_build(messages)
+    explanation, actions, _name = _generate_build(messages)
     code = ""
     for a in actions:
         if a.get("kind") in ("create_file", "edit_file") and a.get("content"):
@@ -165,6 +167,84 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
     if not code:
         code = _FALLBACK_SCRIPT
     return explanation or "Fluxo gerado.", code
+
+
+_ANALYZE_INSTR = (
+    "Você é o assistente do FlowDesk. Leia o PEDIDO do usuário (e, se houver, o cabeçalho "
+    "do arquivo anexado) e devolva SOMENTE um JSON com este formato exato: "
+    '{"summary": "explicação curta e amigável (1-2 frases, português simples, sem jargão) '
+    'do que a automação vai fazer", '
+    '"trigger": {"kind": "manual"|"schedule"|"webhook"|null, "confident": true|false, "question": "pergunta curta ou null"}, '
+    '"input": {"kind": "file"|"fields"|"none"|null, "confident": true|false, "question": "ou null", '
+    '"fields": [{"label": "", "type": "text"|"number"|"date"|"select"}]}, '
+    '"process": {"description": "o que fazer, extraído do pedido, ou null", "confident": true|false, "question": "ou null"}, '
+    '"output": {"kind": "download"|"summary"|null, "confident": true|false, "question": "ou null"}}. '
+    "REGRAS: deduza o MÁXIMO do PEDIDO; confident=true quando o pedido deixa claro e então "
+    "question=null. Só gere 'question' para o que estiver realmente faltando ou ambíguo. "
+    "Se o usuário não mencionou gatilho, assuma 'manual' com confident=true (NÃO pergunte). "
+    "Se o pedido menciona planilha/arquivo/Excel/CSV, input.kind='file' confident=true. "
+    "Se pede 'planilha de saída'/'gerar arquivo'/'Excel', output.kind='download' confident=true; "
+    "se pede só um resumo/números na tela, output.kind='summary'. "
+    "process.description deve capturar a regra de negócio exata do pedido."
+)
+
+
+def _analyze_prompt(db: Session, project_id: int, prompt: str, sample_file: str | None) -> dict:
+    """Lê o pedido em linguagem natural e devolve um plano segmentado (o que já dá
+    pra deduzir vs. o que falta perguntar)."""
+    if not settings.ai_enabled:
+        p = prompt.strip()
+        return {
+            "summary": "Vou montar uma automação a partir do seu pedido.",
+            "trigger": {"kind": "manual", "confident": True, "question": None},
+            "input": {"kind": "file", "confident": True, "question": None, "fields": []},
+            "process": {"description": p, "confident": bool(p),
+                        "question": None if p else "O que a automação deve fazer com os dados?"},
+            "output": {"kind": "download", "confident": True, "question": None},
+        }
+    messages = [{"role": "system", "content": _ANALYZE_INSTR}]
+    if sample_file:
+        ctx = _attachment_context(project_id, [sample_file])
+        if ctx:
+            messages.append({"role": "system", "content": ctx})
+    messages.append({"role": "user", "content": f"PEDIDO: {prompt}"})
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.chat.completions.create(
+            model=settings.openai_model, messages=messages,
+            response_format={"type": "json_object"}, temperature=0.1,
+        )
+        return json.loads(resp.choices[0].message.content or "{}")
+    except Exception as exc:
+        p = prompt.strip()
+        return {
+            "summary": f"(análise automática indisponível: {exc})",
+            "trigger": {"kind": "manual", "confident": True, "question": None},
+            "input": {"kind": "file", "confident": False,
+                      "question": "O que a automação recebe (um arquivo, alguns campos, ou nada)?", "fields": []},
+            "process": {"description": p, "confident": bool(p), "question": None},
+            "output": {"kind": "download", "confident": False,
+                       "question": "Como você quer o resultado (arquivo para baixar ou resumo na tela)?"},
+        }
+
+
+@router.post("/projects/{project_id}/wizard/analyze")
+def analyze_wizard(
+    project_id: int,
+    body: WizardAnalyzeIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Analisa o pedido em linguagem natural e devolve o plano segmentado para o
+    assistente preencher o que entendeu e perguntar só o que falta."""
+    get_project(db, project_id, user)
+    if not body.prompt.strip() and not body.sample_file:
+        raise HTTPException(status_code=400, detail="Descreva o que você quer automatizar.")
+    plan = _analyze_prompt(db, project_id, body.prompt, body.sample_file)
+    plan["ai_enabled"] = settings.ai_enabled
+    return plan
 
 
 @router.post("/projects/{project_id}/wizard/build", response_model=WizardBuildOut)
@@ -275,6 +355,7 @@ def build_from_wizard(
     # marca que o rascunho está em dia com o que foi montado
     ws["_built"] = True
     ws["_stage_ids"] = stage_ids
+    ws["_explanation"] = explanation  # persiste a descrição p/ reabrir sem perder
     project.wizard_state = ws
     project.wizard_dirty = False
     db.commit()
@@ -285,3 +366,81 @@ def build_from_wizard(
         stage_ids=stage_ids,
         ai_enabled=settings.ai_enabled,
     )
+
+
+def _describe_automation(code: str) -> str:
+    """Gera uma descrição legível (e levemente técnica) do que a automação faz,
+    a partir do código do Script. Vazio se a IA estiver desabilitada ou falhar."""
+    if not settings.ai_enabled or not code.strip():
+        return ""
+    instr = (
+        "Explique em português, de forma clara e levemente técnica (acessível a um "
+        "usuário de negócio, sem jargão de programação), O QUE esta automação faz: "
+        "que entrada recebe, as principais transformações ou cálculos, e o que entrega "
+        "no final. Responda em 2 a 4 frases, sem instruções de uso e sem mostrar código. "
+        "Responda apenas com o texto da descrição."
+    )
+    messages = [
+        {"role": "system", "content": instr},
+        {"role": "user", "content": f"Código da automação:\n\n{code[:6000]}"},
+    ]
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.chat.completions.create(
+            model=settings.openai_model, messages=messages, temperature=0.2,
+        )
+        return (resp.choices[0].message.content or "").strip()
+    except Exception:
+        return ""
+
+
+@router.post("/projects/{project_id}/wizard/describe")
+def describe_wizard(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Devolve a descrição do que a automação faz. Se já existir salva, retorna-a;
+    senão tenta gerar a partir do código e persiste. Vazio => o frontend pede ao
+    usuário para escrever."""
+    project = get_project(db, project_id, user)
+    ws = dict(project.wizard_state or {})
+    existing = (ws.get("_explanation") or "").strip()
+    if existing:
+        return {"description": existing, "ai_enabled": settings.ai_enabled}
+
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    script = next((s for s in stages if s.type in ("script", "agent")), None)
+    code = ""
+    if script and script.entry_file:
+        row = (
+            db.query(SourceFile)
+            .filter(SourceFile.project_id == project_id, SourceFile.path == script.entry_file)
+            .first()
+        )
+        code = row.content if row else ""
+
+    desc = _describe_automation(code)
+    if desc:
+        ws["_explanation"] = desc
+        project.wizard_state = ws
+        db.commit()
+    return {"description": desc, "ai_enabled": settings.ai_enabled}
+
+
+@router.put("/projects/{project_id}/wizard/explanation")
+def set_wizard_explanation(
+    project_id: int,
+    body: ExplanationUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Salva a descrição escrita/editada pelo usuário."""
+    project = get_project(db, project_id, user)
+    ws = dict(project.wizard_state or {})
+    ws["_explanation"] = body.text.strip()
+    project.wizard_state = ws
+    db.commit()
+    return {"ok": True}

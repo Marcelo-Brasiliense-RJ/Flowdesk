@@ -24,6 +24,21 @@ export default function Builds() {
     load();
   }
 
+  const [restoreMsg, setRestoreMsg] = useState("");
+  async function restore(b: Build) {
+    setMenu(null);
+    if (!confirm(`Restaurar o código para a versão ${b.hash}? Os arquivos atuais serão sobrescritos.`)) return;
+    try {
+      const r = await api.post<{ restaurados: number }>(
+        `/api/projects/${id}/builds/${b.id}/restore`
+      );
+      setRestoreMsg(`Código restaurado para a versão ${b.hash} (${r.restaurados} arquivo(s)).`);
+    } catch (e: any) {
+      setRestoreMsg(e?.message || "Não foi possível restaurar esta versão.");
+    }
+    setTimeout(() => setRestoreMsg(""), 6000);
+  }
+
   const paged = builds.slice((page - 1) * pageSize, page * pageSize);
   const totalPages = Math.max(1, Math.ceil(builds.length / pageSize));
 
@@ -34,6 +49,11 @@ export default function Builds() {
         <p className="mb-4 text-sm text-slate-500">
           Cada publicação gera uma versão imutável. Apenas uma fica "No ar".
         </p>
+        {restoreMsg && (
+          <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-800">
+            {restoreMsg}
+          </div>
+        )}
         <div className="card overflow-hidden">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-400">
@@ -65,9 +85,12 @@ export default function Builds() {
                     </button>
                     {menu === b.id && (
                       <div className="absolute right-4 z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 text-left shadow-lg">
-                        <MenuItem label="Inspecionar versão" />
-                        <MenuItem label="Ver logs da aplicação" />
-                        <MenuItem label="Baixar arquivos" />
+                        <button
+                          onClick={() => restore(b)}
+                          className="block w-full px-4 py-1.5 text-left text-sm text-brand-700 hover:bg-slate-50"
+                        >
+                          Restaurar código desta versão
+                        </button>
                         {b.status !== "live" && (
                           <button
                             onClick={() => activate(b.id)}
@@ -117,10 +140,3 @@ export default function Builds() {
   );
 }
 
-function MenuItem({ label }: { label: string }) {
-  return (
-    <button className="block w-full px-4 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50">
-      {label}
-    </button>
-  );
-}

@@ -28,6 +28,32 @@ class UserOut(ORMModel):
     email: str
     name: str
     org_id: int
+    role: str = "user"
+    is_admin: bool = False
+    is_dev: bool = False
+
+
+# ---- gestão de usuários (Admin) ----
+class AdminUserCreate(BaseModel):
+    email: EmailStr
+    name: str = ""
+    password: str
+    role: str = "user"  # admin | dev | user
+
+
+class AdminUserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None  # reset de senha
+
+
+class AdminUserOut(ORMModel):
+    id: int
+    email: str
+    name: str
+    role: str
+    is_active: bool
 
 
 # ---- projects ----
@@ -35,6 +61,14 @@ class ProjectCreate(BaseModel):
     name: str
     description: str = ""
     folder_id: Optional[int] = None
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+class AutoNameIn(BaseModel):
+    prompt: str = ""
 
 
 class ProjectUpdate(BaseModel):
@@ -60,6 +94,36 @@ class WizardBuildOut(BaseModel):
     script_file: str
     stage_ids: dict
     ai_enabled: bool
+
+
+class WizardAnalyzeIn(BaseModel):
+    """Pedido em linguagem natural para o assistente analisar e segmentar."""
+
+    prompt: str = ""
+    sample_file: Optional[str] = None
+
+
+class ExplanationUpdate(BaseModel):
+    """Descrição (do que a automação faz) escrita/editada pelo usuário."""
+
+    text: str = ""
+
+
+# ---- auto-reparo ----
+class RepairProposeIn(BaseModel):
+    execution_id: str
+    hint: Optional[str] = None
+
+
+class RepairProposeOut(BaseModel):
+    diagnosis: str = ""
+    change_summary: str = ""
+    fixed_code: str = ""
+    has_changes: bool = False
+
+
+class RepairApplyIn(BaseModel):
+    code: str
 
 
 class ProjectOut(ORMModel):

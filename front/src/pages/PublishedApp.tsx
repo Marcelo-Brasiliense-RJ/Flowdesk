@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Logo, Spinner } from "../components/ui";
+import OcrReview from "../components/OcrReview";
 
 interface Stage {
   id: number;
@@ -27,7 +28,11 @@ export default function PublishedApp() {
   useEffect(() => {
     fetch(`${base}/info`)
       .then((r) => r.json())
-      .then(setInfo)
+      .then((data) => {
+        setInfo(data);
+        // modo aberto (sem login): entra direto, sem pedir credenciais
+        if (data.open && !token) setToken("open");
+      })
       .catch(() => setInfo({ error: true }));
   }, [subdomain]);
 
@@ -274,16 +279,33 @@ function ResultRenderer({
   const summaryKey = stage?.config?.summary_key || "resumo";
   const filePath = result?.[fileKey];
   const summary = result?.[summaryKey];
+  const review = result?._ocr_review;
+  const [dlError, setDlError] = useState("");
+  const [reviewed, setReviewed] = useState(false);
+  const blockedByReview = !!review?.needs_review && !reviewed;
 
-  function download() {
-    fetch(`${base}/download?path=${encodeURIComponent(filePath)}&token=${token}`)
-      .then((r) => r.blob())
-      .then((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = filePath.split(/[\\/]/).pop();
-        a.click();
-      });
+  async function download() {
+    setDlError("");
+    try {
+      const res = await fetch(
+        `${base}/download?path=${encodeURIComponent(filePath)}&token=${token}`
+      );
+      if (!res.ok) {
+        // não salvar o corpo do erro como arquivo: viraria um .xlsx corrompido
+        const d = await res.json().catch(() => ({}));
+        setDlError(d.detail || "Não foi possível baixar o arquivo. Tente gerar novamente.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filePath.split(/[\\/]/).pop();
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDlError("Falha de conexão ao baixar o arquivo.");
+    }
   }
 
   return (
@@ -306,11 +328,24 @@ function ResultRenderer({
           </table>
         </div>
       )}
-      {filePath && (
+      {review && (
+        <OcrReview
+          review={review}
+          confirmed={reviewed}
+          onConfirm={() => setReviewed(true)}
+        />
+      )}
+      {filePath && !blockedByReview && (
         <button onClick={download} className="btn-accent w-full">
           Baixar resultado
         </button>
       )}
+      {filePath && blockedByReview && (
+        <p className="text-center text-xs text-amber-600">
+          Confirme a revisão acima para liberar o download.
+        </p>
+      )}
+      {dlError && <div className="text-sm text-red-600">{dlError}</div>}
       {result?.erro && <div className="text-sm text-red-600">{result.erro}</div>}
     </div>
   );

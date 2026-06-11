@@ -80,8 +80,14 @@ def main():
     check("projeto aparece na lista", any(x["id"] == p1["id"] for x in lst))
     check("get projeto inexistente -> 404",
           c.get(f"{BASE}/api/projects/999999", headers=H).status_code == 404)
-    fold = c.post(f"{BASE}/api/folders", headers=H, json={"name": "QA Folder"}).json()
+    import uuid as _uuid
+    fold_name = f"QA Folder {_uuid.uuid4().hex[:6]}"
+    fold = c.post(f"{BASE}/api/folders", headers=H, json={"name": fold_name}).json()
     check("criar pasta", "id" in fold)
+    dup = c.post(f"{BASE}/api/folders", headers=H, json={"name": fold_name.upper()})
+    check("pasta duplicada (case-insensitive) -> 400", dup.status_code == 400,
+          f"status={dup.status_code}")
+    c.delete(f"{BASE}/api/folders/{fold['id']}", headers=H)
 
     section("Stages e edges")
     pid = p1["id"]
@@ -210,8 +216,14 @@ def main():
           c.post(f"{BASE}/api/app/{pasub}/login", data={"email": "bruno@irko.com.br", "password": PWD}).status_code == 200)
     check("email nao autorizado bloqueado",
           c.post(f"{BASE}/api/app/{pasub}/login", data={"email": "x@gmail.com", "password": PWD}).status_code in (401, 403))
-    check("submit sem token -> 401",
-          c.post(f"{BASE}/api/app/{pasub}/stages/1/submit", data={}).status_code == 401)
+    # com PUBLIC_APPS_OPEN=true o app publicado dispensa login; o teste respeita o flag
+    app_open = bool(c.get(f"{BASE}/api/app/{pasub}/info").json().get("open"))
+    sub_status = c.post(f"{BASE}/api/app/{pasub}/stages/1/submit", data={}).status_code
+    if app_open:
+        check("submit sem token com apps abertos -> nao exige login", sub_status != 401,
+              f"status={sub_status}")
+    else:
+        check("submit sem token -> 401", sub_status == 401, f"status={sub_status}")
 
     section("Segurança (correções da revisão)")
     # #1 login publicado exige credencial
@@ -343,6 +355,32 @@ def main():
     pe = new_project(c, H, "QA Wizard Vazio")
     nodesc = c.post(f"{BASE}/api/projects/{pe['id']}/wizard/build", headers=H)
     check("build sem descricao -> 400", nodesc.status_code == 400, f"status={nodesc.status_code}")
+
+    section("Gestao de usuarios (admin)")
+    us = c.get(f"{BASE}/api/admin/users", headers=H).json()
+    check("listar usuarios", isinstance(us, list) and len(us) >= 3)
+    import uuid as _u2
+    mail = f"qa-{_u2.uuid4().hex[:6]}@irko.com.br"
+    novo = c.post(f"{BASE}/api/admin/users", headers=H,
+                  json={"email": mail, "name": "QA User", "password": "senha12345", "role": "dev"}).json()
+    check("criar usuario com papel dev", novo.get("role") == "dev", f"resp={novo}")
+    up = c.patch(f"{BASE}/api/admin/users/{novo['id']}", headers=H, json={"role": "user"}).json()
+    check("trocar papel para user", up.get("role") == "user")
+    off = c.patch(f"{BASE}/api/admin/users/{novo['id']}", headers=H, json={"is_active": False}).json()
+    check("desativar usuario", off.get("is_active") is False)
+    selfdemote = c.patch(f"{BASE}/api/admin/users/{[u for u in us if u['email']=='admin@irko.com.br'][0]['id']}",
+                         headers=H, json={"role": "user"})
+    check("admin nao remove o proprio papel -> 400", selfdemote.status_code == 400)
+
+    section("Galeria de modelos")
+    tps = c.get(f"{BASE}/api/templates", headers=H).json()
+    check("listar modelos (>=3)", isinstance(tps, list) and len(tps) >= 3, f"n={len(tps) if isinstance(tps,list) else tps}")
+    inst = c.post(f"{BASE}/api/templates/totais-planilha/instantiate", headers=H).json()
+    check("instanciar modelo cria projeto", "project_id" in inst, f"resp={inst}")
+    if "project_id" in inst:
+        CREATED_PROJECTS.append(inst["project_id"])
+        tst = c.get(f"{BASE}/api/projects/{inst['project_id']}/stages", headers=H).json()
+        check("modelo vem com fluxo completo (3 nos)", len(tst) == 3, f"stages={len(tst)}")
 
     section("Limpeza")
     for ppid in CREATED_PROJECTS:

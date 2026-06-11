@@ -5,9 +5,11 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_user, require_admin
+from ..config import settings
 from ..database import get_db
 from ..models import (
     ApiKey,
@@ -29,6 +31,8 @@ from ..models import (
     User,
 )
 from ..schemas import (
+    AutoNameIn,
+    BulkDeleteRequest,
     EdgeCreate,
     EdgeOut,
     FolderCreate,
@@ -94,7 +98,15 @@ def create_folder(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    folder = ProjectFolder(org_id=user.org_id, name=body.name)
+    nome = body.name.strip()
+    clash = (
+        db.query(ProjectFolder)
+        .filter(ProjectFolder.org_id == user.org_id, func.lower(ProjectFolder.name) == nome.lower())
+        .first()
+    )
+    if clash:
+        raise HTTPException(status_code=400, detail=f'Já existe uma pasta chamada "{clash.name}"')
+    folder = ProjectFolder(org_id=user.org_id, name=nome)
     db.add(folder)
     db.commit()
     db.refresh(folder)
@@ -116,7 +128,19 @@ def rename_folder(
     user: User = Depends(get_current_user),
 ):
     folder = _get_folder(db, folder_id, user)
-    folder.name = body.name
+    nome = body.name.strip()
+    clash = (
+        db.query(ProjectFolder)
+        .filter(
+            ProjectFolder.org_id == user.org_id,
+            func.lower(ProjectFolder.name) == nome.lower(),
+            ProjectFolder.id != folder_id,
+        )
+        .first()
+    )
+    if clash:
+        raise HTTPException(status_code=400, detail=f'Já existe uma pasta chamada "{clash.name}"')
+    folder.name = nome
     db.commit()
     db.refresh(folder)
     return folder
@@ -254,13 +278,9 @@ def update_project(
     return project
 
 
-@router.delete("/projects/{project_id}")
-def delete_project(
-    project_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    project = get_project(db, project_id, user)
+def _purge_project(db: Session, project: Project) -> None:
+    """Remove a project and all dependent rows + on-disk storage (no commit)."""
+    project_id = project.id
     # remove child rows that have no ORM cascade configured
     table_ids = [
         t.id for t in db.query(DataTable).filter(DataTable.project_id == project_id)
@@ -277,14 +297,84 @@ def delete_project(
             synchronize_session=False
         )
     db.delete(project)  # stages/edges/source_files cascade via relationship
-    db.commit()
     # best-effort removal of the project's on-disk storage
     import shutil
 
     root = storage.STORAGE_DIR / str(project_id)
     if root.exists():
         shutil.rmtree(root, ignore_errors=True)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    project = get_project(db, project_id, user)
+    _purge_project(db, project)
+    db.commit()
     return {"ok": True}
+
+
+@router.post("/projects/bulk-delete")
+def bulk_delete_projects(
+    body: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Exclusão em massa, restrita a administradores."""
+    deleted = 0
+    for project_id in set(body.ids):
+        project = db.get(Project, project_id)
+        if project is None or project.org_id != user.org_id:
+            continue
+        _purge_project(db, project)
+        deleted += 1
+    db.commit()
+    return {"ok": True, "deleted": deleted}
+
+
+@router.post("/projects/{project_id}/auto-name")
+def auto_name(
+    project_id: int,
+    body: AutoNameIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Gera um título curto e claro para a aplicação a partir do pedido do usuário.
+    Sem IA (ou em caso de falha), mantém o nome atual."""
+    project = get_project(db, project_id, user)
+    prompt = body.prompt.strip()
+    if not prompt or not settings.ai_enabled:
+        return {"name": project.name}
+    instr = (
+        "Gere um TÍTULO curto (2 a 5 palavras), claro e em português, para uma automação "
+        "descrita pelo usuário. Estilo título, sem aspas e sem ponto final "
+        "(ex.: 'Totais de vendas por produto', 'Conciliação de planilhas'). "
+        "Responda apenas com o título."
+    )
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": instr},
+                {"role": "user", "content": prompt[:1000]},
+            ],
+            temperature=0.3,
+            max_tokens=20,
+        )
+        name = (resp.choices[0].message.content or "").strip().strip('"').strip()[:60]
+        if name:
+            project.name = name
+            db.commit()
+            return {"name": name}
+    except Exception:
+        pass
+    return {"name": project.name}
 
 
 # ---- stages ----

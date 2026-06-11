@@ -147,4 +147,109 @@ def set_output(data) -> None:
 
 def log(*args) -> None:
     print(*args, flush=True)
+
+
+# ---- PDF / OCR (leitura de documentos, com confiança para validação) ----
+_OCR_ENGINE = None
+
+
+def _ocr_image(path):
+    """OCR local (RapidOCR) de uma imagem. Retorna [(texto, confianca), ...]."""
+    global _OCR_ENGINE
+    if _OCR_ENGINE is None:
+        from rapidocr_onnxruntime import RapidOCR
+        _OCR_ENGINE = RapidOCR()
+    res, _ = _OCR_ENGINE(str(path))
+    return [(t, float(s)) for _box, t, s in (res or [])]
+
+
+def extract_document(path=None, ocr_threshold=0.8):
+    """Lê PDF (editável OU escaneado) ou imagem e devolve texto + confiança.
+
+    Detecta sozinho: PDF com camada de texto -> extrai direto (sem OCR);
+    PDF sem texto ou imagem -> OCR local (RapidOCR). Imports são lazy: scripts
+    que não usam isto não carregam as libs pesadas.
+
+    Retorna dict:
+      text: str (texto completo)
+      lines: [{text, confidence(0..1 ou None), page}]
+      source: "pdf_text" | "ocr" | "raw_text" | "unsupported" | "none"
+      mean_confidence: float | None
+      low_confidence: linhas abaixo de ocr_threshold (etapa 1 da validação)
+      needs_review: True quando veio de OCR e há baixa confiança
+    """
+    import os
+    # revisão humana: se a pessoa corrigiu o texto na tela de revisão e pediu
+    # reprocesso, o texto corrigido substitui o OCR (fonte mais confiável).
+    corrigido = get_input().get("_texto_corrigido")
+    if isinstance(corrigido, str) and corrigido.strip():
+        linhas = [{"text": l, "confidence": None, "page": 1}
+                  for l in corrigido.splitlines() if l.strip()]
+        return {"text": corrigido, "lines": linhas, "source": "human_review",
+                "mean_confidence": None, "low_confidence": [], "needs_review": False}
+    if path is None:
+        path = get_file()
+    if not path:
+        return {"text": "", "lines": [], "source": "none",
+                "mean_confidence": None, "low_confidence": [], "needs_review": False}
+    ext = os.path.splitext(str(path))[1].lower()
+    lines = []
+    source = "ocr"
+
+    if ext == ".pdf":
+        import pdfplumber
+        pages_text = []
+        with pdfplumber.open(str(path)) as pdf:
+            for pg in pdf.pages:
+                pages_text.append(pg.extract_text() or "")
+        if len("".join(pages_text).strip()) >= 20:
+            source = "pdf_text"
+            for i, t in enumerate(pages_text):
+                for ln in t.splitlines():
+                    if ln.strip():
+                        lines.append({"text": ln, "confidence": None, "page": i + 1})
+        else:
+            import fitz
+            doc = fitz.open(str(path))
+            try:
+                for i, page in enumerate(doc):
+                    pix = page.get_pixmap(dpi=200)
+                    tmp = str(path) + ".p" + str(i) + ".png"
+                    pix.save(tmp)
+                    for t, s in _ocr_image(tmp):
+                        lines.append({"text": t, "confidence": s, "page": i + 1})
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+            finally:
+                doc.close()
+    elif ext in (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"):
+        for t, s in _ocr_image(path):
+            lines.append({"text": t, "confidence": s, "page": 1})
+    else:
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                txt = fh.read()
+            return {"text": txt,
+                    "lines": [{"text": l, "confidence": None, "page": 1}
+                              for l in txt.splitlines() if l.strip()],
+                    "source": "raw_text", "mean_confidence": None,
+                    "low_confidence": [], "needs_review": False}
+        except Exception:
+            return {"text": "", "lines": [], "source": "unsupported",
+                    "mean_confidence": None, "low_confidence": [], "needs_review": False}
+
+    confs = [l["confidence"] for l in lines if l["confidence"] is not None]
+    mean_conf = round(sum(confs) / len(confs), 4) if confs else None
+    low = [l for l in lines if l["confidence"] is not None and l["confidence"] < ocr_threshold]
+    needs_review = source == "ocr" and (bool(low) or (mean_conf is not None and mean_conf < 0.85))
+    return {"text": "\\n".join(l["text"] for l in lines), "lines": lines,
+            "source": source, "mean_confidence": mean_conf,
+            "low_confidence": low, "needs_review": needs_review}
+
+
+def extract_text(path=None):
+    """Atalho: retorna só o texto de um PDF/imagem (editável ou escaneado)."""
+    return extract_document(path).get("text", "")
 '''

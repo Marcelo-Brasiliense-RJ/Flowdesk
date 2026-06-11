@@ -3,6 +3,23 @@ export interface User {
   email: string;
   name: string;
   org_id: number;
+  role: "admin" | "dev" | "user";
+  is_admin: boolean;
+  is_dev: boolean;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  name: string;
+  role: "admin" | "dev" | "user";
+  is_active: boolean;
+}
+
+export interface TemplateInfo {
+  key: string;
+  name: string;
+  description: string;
 }
 
 export interface Project {

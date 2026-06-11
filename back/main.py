@@ -22,7 +22,9 @@ from app.config import settings
 from app.database import Base, engine
 from app.runtime.runner import runtime
 from app.runtime.scheduler import scheduler
+from app import metrics
 from app.routers import (
+    admin,
     auth,
     builds,
     chat,
@@ -30,10 +32,13 @@ from app.routers import (
     executions,
     filemanager,
     hooks,
+    manage,
     projects,
     published,
     realtime,
+    repair,
     settings as settings_router,
+    templates,
     wizard,
 )
 from app.seed import seed_if_empty
@@ -53,17 +58,38 @@ async def lifespan(app: FastAPI):
             "CREATE INDEX IF NOT EXISTS ix_chat_project ON chat_messages (project_id)",
         ):
             conn.execute(text(stmt))
-        # micro-migração: colunas novas em DB já existente
-        # (SQLite não suporta "ADD COLUMN IF NOT EXISTS").
-        proj_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)"))}
-        if "wizard_state" not in proj_cols:
+        # micro-migração SQLite: colunas novas em DB já existente
+        # (PRAGMA é específico do SQLite; no Postgres/Supabase o schema já vem
+        # com essas colunas, então não rodamos isto lá).
+        if engine.dialect.name == "sqlite":
+            proj_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)"))}
+            if "wizard_state" not in proj_cols:
+                conn.execute(
+                    text("ALTER TABLE projects ADD COLUMN wizard_state TEXT NOT NULL DEFAULT '{}'")
+                )
+            if "wizard_dirty" not in proj_cols:
+                conn.execute(
+                    text("ALTER TABLE projects ADD COLUMN wizard_dirty BOOLEAN NOT NULL DEFAULT 0")
+                )
+            user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+            if "role" not in user_cols:
+                conn.execute(
+                    text("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'user'")
+                )
+        else:
+            # Postgres aceita IF NOT EXISTS
             conn.execute(
-                text("ALTER TABLE projects ADD COLUMN wizard_state TEXT NOT NULL DEFAULT '{}'")
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user'")
             )
-        if "wizard_dirty" not in proj_cols:
-            conn.execute(
-                text("ALTER TABLE projects ADD COLUMN wizard_dirty BOOLEAN NOT NULL DEFAULT 0")
+        # ceifador de zumbis: execuções queued/running de processos anteriores
+        # nunca vão terminar; marca como erro para não poluir métricas e monitor.
+        conn.execute(
+            text(
+                "UPDATE executions SET status='error', "
+                "stderr = stderr || '\n[runtime] Execução encerrada: o servidor foi reiniciado.' "
+                "WHERE status IN ('queued','running')"
             )
+        )
     seed_if_empty()
     loop = asyncio.get_event_loop()
     runtime.start(loop)
@@ -81,8 +107,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def _count_requests(request, call_next):
+    metrics.record_request(request.method)
+    return await call_next(request)
+
+
 for module in (
     auth,
+    admin,
     projects,
     executions,
     builds,
@@ -94,6 +127,9 @@ for module in (
     dashboard,
     hooks,
     wizard,
+    repair,
+    manage,
+    templates,
 ):
     app.include_router(module.router)
 

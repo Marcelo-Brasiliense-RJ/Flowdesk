@@ -63,6 +63,26 @@ def main():
     so_a = a_keys - b_keys
     so_b = b_keys - a_keys
 
+    # divergencias: mesma chave nas duas planilhas, porem com VALOR (numerico) diferente
+    value_cols = [
+        c for c in df_a.columns
+        if c in df_b.columns and c != key and pd.api.types.is_numeric_dtype(df_a[c])
+    ]
+    a_by = {str(k): row for k, row in df_a.set_index(key).iterrows()}
+    b_by = {str(k): row for k, row in df_b.set_index(key).iterrows()}
+    div_rows = []
+    for k in sorted(conciliados):
+        ra, rb = a_by.get(k), b_by.get(k)
+        if ra is None or rb is None:
+            continue
+        diff = {c: (ra[c], rb[c]) for c in value_cols if ra[c] != rb[c]}
+        if diff:
+            row = {key: k}
+            for c, (va, vb) in diff.items():
+                row[c + "_A"], row[c + "_B"] = va, vb
+            div_rows.append(row)
+    df_div = pd.DataFrame(div_rows)
+
     out = output_path("conciliacao_resultado.xlsx")
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         df_a[df_a[key].astype(str).isin(conciliados)].to_excel(
@@ -71,12 +91,15 @@ def main():
             writer, sheet_name="Somente_A", index=False)
         df_b[df_b[key].astype(str).isin(so_b)].to_excel(
             writer, sheet_name="Somente_B", index=False)
+        if not df_div.empty:
+            df_div.to_excel(writer, sheet_name="Divergencias", index=False)
 
     resumo = {
         "chave": str(key),
         "conciliados": len(conciliados),
         "somente_a": len(so_a),
         "somente_b": len(so_b),
+        "divergencias": len(div_rows),
         "total_a": len(a_keys),
         "total_b": len(b_keys),
     }

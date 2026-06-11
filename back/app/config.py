@@ -22,6 +22,38 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     script_python: str = ""
     frontend_origin: str = "http://localhost:5173"
+    # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
+    supabase_db_url: str = ""
+    database_url: str = ""
+    # Quando true, o app PUBLICADO (/app/<sub>) fica aberto, SEM login.
+    # Temporário/dev: deixa qualquer pessoa com o link executar. Desligue para
+    # restaurar o controle de acesso (whitelist/domínio).
+    public_apps_open: bool = False
+    # E-mails com privilégio de admin (ex.: exclusão em massa de projetos).
+    # Lista separada por vírgula via env ADMIN_EMAILS.
+    admin_emails: str = "admin@irko.com.br"
+    # E-mails com papel de Dev (acesso à tela de gerenciamento, junto do admin).
+    dev_emails: str = ""
+    # SMTP opcional para notificar falhas de jobs agendados. Sem host, não envia.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "flowdesk@irko.com.br"
+    notify_emails: str = ""  # destinatários, separados por vírgula
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
+
+    @property
+    def dev_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.dev_emails.split(",") if e.strip()}
+
+    @property
+    def db_url(self) -> str:
+        """URL do banco a usar. Prefere Postgres (Supabase) se configurado."""
+        return (self.supabase_db_url or self.database_url).strip()
 
     @property
     def python_executable(self) -> str:

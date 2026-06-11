@@ -49,8 +49,10 @@ PROCESSO OBRIGATÓRIO — ENTREVISTA (DISCOVERY ANTES DE CONSTRUIR):
 1. Antes de criar qualquer coisa, levante as perguntas de esclarecimento NECESSÁRIAS \
 (de 1 a 5) e devolva TODAS no campo "questions" do bloco flowdesk-actions. A interface \
 mostra UMA pergunta por vez ao usuário (com indicador de progresso), então cada \
-pergunta deve ser independente e objetiva. NÃO escreva código nem inclua "actions" \
-enquanto estiver perguntando.
+pergunta deve ser independente e objetiva. Use um tom AMIGÁVEL e acolhedor, em \
+linguagem simples e sem jargão técnico, como se conversasse com a pessoa; quando \
+ajudar, explique em poucas palavras por que a pergunta importa. NÃO escreva código \
+nem inclua "actions" enquanto estiver perguntando.
 2. Cada pergunta deve ter "id" único e estável (ex: "fonte", "saida", "gatilho"), de \
 2 a 4 opções objetivas e, quando fizer sentido, "recommended" com o texto exato da \
 opção recomendada.
@@ -84,8 +86,21 @@ enviado no Form, sem depender do nome do campo). Ex.: `df = pd.read_excel(get_fi
 Para um 2º arquivo: `get_file(1)`. NUNCA peça ao usuário o caminho do arquivo de entrada \
 e NUNCA invente uma chave fixa em get_input().
 - Os arquivos de SAÍDA devem ser gravados com `output_path("nome.xlsx")` do SDK; o \
-download é feito AUTOMATICAMENTE pela plataforma. NÃO existe "caminho local" para salvar \
-— NUNCA peça PATH_OUTPUT, diretório, pasta ou caminho de arquivo.
+download é feito AUTOMATICAMENTE pela plataforma. NÃO existe "caminho local" para salvar, \
+NUNCA peça PATH_OUTPUT, diretório, pasta ou caminho de arquivo.
+
+PDF E IMAGEM (OCR com validação):
+- Para PDF (editável OU escaneado) ou imagem, use \
+`from flowdesk_sdk import extract_document` e `doc = extract_document(get_file())`. Ele \
+detecta sozinho: PDF com texto extrai direto; PDF escaneado/imagem usa OCR local. NÃO use \
+pd.read_excel num PDF nem tente OCR manual.
+- `doc` traz: `doc["text"]` (texto), `doc["mean_confidence"]` (0..1 ou None), \
+`doc["needs_review"]` (True quando o OCR teve baixa confiança) e `doc["low_confidence"]` \
+(linhas duvidosas). SEMPRE que a entrada passar por OCR, inclua no set_output a chave \
+`_ocr_review` = {"text": doc["text"], "mean_confidence": doc["mean_confidence"], \
+"needs_review": doc["needs_review"], "low_confidence": [l["text"] for l in doc["low_confidence"]]}. \
+A plataforma usa isso para mostrar a tela de revisão humana (a pessoa confere os trechos \
+destacados antes de confiar no resultado).
 
 DEPENDÊNCIAS DE CONFIGURAÇÃO E SEGREDOS:
 - Use `require_env` APENAS quando o usuário pedir EXPLICITAMENTE uma integração externa \
@@ -287,7 +302,7 @@ def chat_stream(
     def event_stream():
         if build_intent:
             # turno de construção: chamada estruturada (JSON) que SEMPRE traz ações
-            clean_text, actions = _generate_build(messages)
+            clean_text, actions, suggested_name = _generate_build(messages)
             questions = []
             full_text = clean_text
             for word in re.findall(r"\S+\s*", clean_text):
@@ -298,6 +313,7 @@ def chat_stream(
                 full_text += chunk
                 yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
             clean_text, questions, actions = _parse_actions(full_text)
+            suggested_name = ""
             for qq in questions:
                 if not qq.get("label"):
                     qq["label"] = qq.get("question") or qq.get("text") or ""
@@ -318,6 +334,14 @@ def chat_stream(
         # persist in a fresh session (generator runs outside request scope)
         s = SessionLocal()
         try:
+            # batiza projetos criados pelo Chat com o nome amigável sugerido pela IA
+            # (em vez do prompt cru virar nome)
+            if suggested_name and len(suggested_name.strip()) >= 3:
+                proj = s.get(Project, project_id)
+                if proj is not None and (proj.description or "").strip() == "Criado pelo Chat":
+                    proj.name = suggested_name.strip()[:80]
+                    proj.description = ""
+                    s.commit()
             assistant = ChatMessage(
                 project_id=project_id, role="assistant", content=clean_text,
                 meta={"questions": questions}, tokens=_estimate_tokens(full_text),
@@ -354,13 +378,26 @@ def _generate_build(messages: list[dict]):
         "role": "system",
         "content": (
             "Responda SOMENTE em JSON válido: "
-            '{"message": "frase curta de resumo", "actions": [...]}. '
+            '{"message": "explicação curta e amigável, em português simples e sem jargão '
+            'técnico, do que a automação vai fazer (1 a 2 frases, pensando num usuário não '
+            'técnico)", "project_name": "nome curto e claro para a automação (3 a 6 '
+            'palavras, ex: Total de Vendas por Produto)", "actions": [...]}. '
             "Tipos de action: create_file {kind,title,path,content}, "
             "create_stage {kind,title,stage_type,name}, "
             "require_env {kind,title,key,description,example}. "
             "Inclua SEMPRE pelo menos um create_file com o script Python completo, "
             "usando o SDK (get_file() para ler entrada, output_path() e set_output(DICT) "
             "para saída), pandas 2.x (NÃO use df.append; use pd.concat). "
+            "Se a entrada for PDF ou imagem, use `from flowdesk_sdk import extract_document` "
+            "e `doc = extract_document(get_file())` (NÃO use pd.read_excel num PDF); quando "
+            "doc vier de OCR, inclua no set_output a chave `_ocr_review` = {'text': doc['text'], "
+            "'mean_confidence': doc['mean_confidence'], 'needs_review': doc['needs_review'], "
+            "'low_confidence': [l['text'] for l in doc['low_confidence']]} para a tela de revisão. "
+            "Quando gerar arquivo, grave com output_path('nome.xlsx') e devolva "
+            "set_output({'arquivo_resultado': str(caminho), 'resumo': {...números...}}); "
+            "inclua SEMPRE a chave 'resumo' com os principais números. "
+            "Use chaves simples { } em dicionários Python; NUNCA escreva chaves "
+            "duplicadas {{ }} (isso quebra o código). "
             "Não peça caminhos de arquivo. Só use require_env se houver integração "
             "externa real (e-mail/API)."
         ),
@@ -370,7 +407,7 @@ def _generate_build(messages: list[dict]):
             {"kind": "create_file", "title": "Criar processar.py", "path": "processar.py",
              "content": "from flowdesk_sdk import get_file, set_output\nimport pandas as pd\n\n"
                         "df = pd.read_excel(get_file())\nset_output({'linhas': len(df)})\n"}
-        ])
+        ], "")
     try:
         from openai import OpenAI
 
@@ -382,9 +419,13 @@ def _generate_build(messages: list[dict]):
             temperature=0.2,
         )
         data = json.loads(resp.choices[0].message.content or "{}")
-        return data.get("message") or "Fluxo gerado.", data.get("actions") or []
+        return (
+            data.get("message") or "Fluxo gerado.",
+            data.get("actions") or [],
+            (data.get("project_name") or "").strip(),
+        )
     except Exception as exc:
-        return f"[IA indisponível: {exc}]", []
+        return f"[IA indisponível: {exc}]", [], ""
 
 
 def _generate(messages: list[dict], last_user: str):
@@ -543,9 +584,42 @@ def approve_action(
     if action.status != "pending":
         return {"ok": True, "status": action.status}
     _apply_action(db, project_id, action)
+    # auto-monta um fluxo executável quando o chat gera um script e o projeto
+    # ainda não tem workflow (senão o usuário recebe só um .py que não roda).
+    workflow_created = False
+    if action.kind in ("create_file", "edit_file"):
+        p = action.payload or {}
+        path = p.get("path", "")
+        if path.endswith(".py") and "set_output" in (p.get("content") or ""):
+            workflow_created = _ensure_runnable_workflow(db, project_id, path)
     action.status = "approved"
+    # mensagem de fechamento: sem isto a conversa "morre" após aprovar (parece
+    # travada). Confirma o que foi feito e aponta o próximo passo.
+    if action.kind in ("create_file", "edit_file"):
+        if workflow_created:
+            closing = (
+                "**Tudo pronto!** Sua automação foi criada e já está montada em três etapas:\n\n"
+                "1. **Entrada** — a pessoa envia o arquivo (a planilha).\n"
+                "2. **Processamento** — o sistema lê os dados e gera o resultado que você pediu.\n"
+                "3. **Resultado** — a planilha final fica disponível para baixar.\n\n"
+                "**Próximo passo:** clique em **Testar agora** (logo abaixo, aqui no chat) para "
+                "rodar com um arquivo de exemplo e conferir o resultado, ou em **Abrir no editor** "
+                "para ver e ajustar cada etapa. Se algo não ficar como você esperava, é só me dizer "
+                "o que mudar."
+            )
+        else:
+            closing = (
+                "**Pronto!** Apliquei as alterações no seu projeto. Clique em **Testar agora** "
+                "(aqui no chat) para conferir o resultado, ou me diga o que você quer ajustar."
+            )
+        db.add(
+            ChatMessage(
+                project_id=project_id, role="assistant", content=closing,
+                meta={}, tokens=0,
+            )
+        )
     db.commit()
-    return {"ok": True, "status": "approved"}
+    return {"ok": True, "status": "approved", "workflow_created": workflow_created}
 
 
 @router.post("/projects/{project_id}/pending-actions/{action_id}/reject")
@@ -559,6 +633,60 @@ def reject_action(
     action.status = "rejected"
     db.commit()
     return {"ok": True, "status": "rejected"}
+
+
+def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) -> None:
+    """Garante Form(entrada) -> Script -> Form(resultado) para um script gerado,
+    quando o projeto ainda não tem nenhum nó executável. Sem isso, o Chat entrega
+    só o código e nada roda pela interface."""
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    if any(s.type == "script" for s in stages):
+        return False  # já existe workflow; não duplica
+
+    used = {s.key for s in stages}
+
+    def uk(base: str) -> str:
+        k, n = base, 1
+        while k in used:
+            n += 1
+            k = f"{base}-{n}"
+        used.add(k)
+        return k
+
+    form_in = Stage(
+        project_id=project_id, type="form", name="Entrada", key=uk("entrada"),
+        config={
+            "title": "Enviar arquivo",
+            "mode": "input",
+            "submit_label": "Executar",
+            "fields": [{"name": "arquivo", "label": "Arquivo", "type": "file"}],
+        },
+        pos_x=40, pos_y=120,
+    )
+    script = Stage(
+        project_id=project_id, type="script", name="Processamento", key=uk("processamento"),
+        entry_file=script_path, config={}, pos_x=360, pos_y=120,
+    )
+    form_out = Stage(
+        project_id=project_id, type="form", name="Resultado", key=uk("resultado"),
+        config={
+            "title": "Resultado",
+            "mode": "result",
+            "summary_key": "resumo",
+            "result_file_key": "arquivo_resultado",
+        },
+        pos_x=680, pos_y=120,
+    )
+    db.add_all([form_in, script, form_out])
+    db.flush()
+    db.add_all([
+        Edge(project_id=project_id, source_stage_id=form_in.id,
+             target_stage_id=script.id, variable_label="entrada"),
+        Edge(project_id=project_id, source_stage_id=script.id,
+             target_stage_id=form_out.id, variable_label="resultado"),
+    ])
+    db.flush()
+    return True
 
 
 def _apply_action(db: Session, project_id: int, action: PendingAction) -> None:
