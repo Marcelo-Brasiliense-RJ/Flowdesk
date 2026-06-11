@@ -49,8 +49,10 @@ PROCESSO OBRIGATÓRIO — ENTREVISTA (DISCOVERY ANTES DE CONSTRUIR):
 1. Antes de criar qualquer coisa, levante as perguntas de esclarecimento NECESSÁRIAS \
 (de 1 a 5) e devolva TODAS no campo "questions" do bloco flowdesk-actions. A interface \
 mostra UMA pergunta por vez ao usuário (com indicador de progresso), então cada \
-pergunta deve ser independente e objetiva. NÃO escreva código nem inclua "actions" \
-enquanto estiver perguntando.
+pergunta deve ser independente e objetiva. Use um tom AMIGÁVEL e acolhedor, em \
+linguagem simples e sem jargão técnico, como se conversasse com a pessoa; quando \
+ajudar, explique em poucas palavras por que a pergunta importa. NÃO escreva código \
+nem inclua "actions" enquanto estiver perguntando.
 2. Cada pergunta deve ter "id" único e estável (ex: "fonte", "saida", "gatilho"), de \
 2 a 4 opções objetivas e, quando fizer sentido, "recommended" com o texto exato da \
 opção recomendada.
@@ -84,8 +86,19 @@ enviado no Form, sem depender do nome do campo). Ex.: `df = pd.read_excel(get_fi
 Para um 2º arquivo: `get_file(1)`. NUNCA peça ao usuário o caminho do arquivo de entrada \
 e NUNCA invente uma chave fixa em get_input().
 - Os arquivos de SAÍDA devem ser gravados com `output_path("nome.xlsx")` do SDK; o \
-download é feito AUTOMATICAMENTE pela plataforma. NÃO existe "caminho local" para salvar \
-— NUNCA peça PATH_OUTPUT, diretório, pasta ou caminho de arquivo.
+download é feito AUTOMATICAMENTE pela plataforma. NÃO existe "caminho local" para salvar, \
+NUNCA peça PATH_OUTPUT, diretório, pasta ou caminho de arquivo.
+
+PDF E IMAGEM (OCR com validação):
+- Para PDF (editável OU escaneado) ou imagem, use \
+`from flowdesk_sdk import extract_document` e `doc = extract_document(get_file())`. Ele \
+detecta sozinho: PDF com texto extrai direto; PDF escaneado/imagem usa OCR local. NÃO use \
+pd.read_excel num PDF nem tente OCR manual.
+- `doc` traz: `doc["text"]` (texto), `doc["mean_confidence"]` (0..1 ou None), \
+`doc["needs_review"]` (True quando o OCR teve baixa confiança) e `doc["low_confidence"]` \
+(linhas duvidosas). SEMPRE que usar OCR, faça a VALIDAÇÃO: inclua no set_output um resumo \
+com `mean_confidence` e, se `doc["needs_review"]`, `revisao_necessaria: True` e a lista de \
+trechos de baixa confiança, para a pessoa conferir antes de confiar no resultado.
 
 DEPENDÊNCIAS DE CONFIGURAÇÃO E SEGREDOS:
 - Use `require_env` APENAS quando o usuário pedir EXPLICITAMENTE uma integração externa \
@@ -363,6 +376,10 @@ def _generate_build(messages: list[dict]):
             "Inclua SEMPRE pelo menos um create_file com o script Python completo, "
             "usando o SDK (get_file() para ler entrada, output_path() e set_output(DICT) "
             "para saída), pandas 2.x (NÃO use df.append; use pd.concat). "
+            "Se a entrada for PDF ou imagem, use `from flowdesk_sdk import extract_document` "
+            "e `doc = extract_document(get_file())` (NÃO use pd.read_excel num PDF); quando "
+            "doc vier de OCR, inclua no resumo `mean_confidence` e, se doc['needs_review'], "
+            "`revisao_necessaria: True` e os trechos de baixa confiança, para validação. "
             "Quando gerar arquivo, grave com output_path('nome.xlsx') e devolva "
             "set_output({'arquivo_resultado': str(caminho), 'resumo': {...números...}}); "
             "inclua SEMPRE a chave 'resumo' com os principais números. "
@@ -568,14 +585,15 @@ def approve_action(
                 "1. **Entrada** — a pessoa envia o arquivo (a planilha).\n"
                 "2. **Processamento** — o sistema lê os dados e gera o resultado que você pediu.\n"
                 "3. **Resultado** — a planilha final fica disponível para baixar.\n\n"
-                "**Próximo passo:** clique em **Testar** (no topo) para rodar com um arquivo de "
-                "exemplo e conferir o resultado, ou em **Abrir no editor** para ver e ajustar "
-                "cada etapa. Se algo não ficar como você esperava, é só me dizer o que mudar."
+                "**Próximo passo:** clique em **Testar agora** (logo abaixo, aqui no chat) para "
+                "rodar com um arquivo de exemplo e conferir o resultado, ou em **Abrir no editor** "
+                "para ver e ajustar cada etapa. Se algo não ficar como você esperava, é só me dizer "
+                "o que mudar."
             )
         else:
             closing = (
-                "**Pronto!** Apliquei as alterações no seu projeto. Clique em **Testar** para "
-                "conferir o resultado, ou me diga o que você quer ajustar."
+                "**Pronto!** Apliquei as alterações no seu projeto. Clique em **Testar agora** "
+                "(aqui no chat) para conferir o resultado, ou me diga o que você quer ajustar."
             )
         db.add(
             ChatMessage(
