@@ -5,6 +5,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_admin
@@ -97,7 +98,15 @@ def create_folder(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    folder = ProjectFolder(org_id=user.org_id, name=body.name)
+    nome = body.name.strip()
+    clash = (
+        db.query(ProjectFolder)
+        .filter(ProjectFolder.org_id == user.org_id, func.lower(ProjectFolder.name) == nome.lower())
+        .first()
+    )
+    if clash:
+        raise HTTPException(status_code=400, detail=f'Já existe uma pasta chamada "{clash.name}"')
+    folder = ProjectFolder(org_id=user.org_id, name=nome)
     db.add(folder)
     db.commit()
     db.refresh(folder)
@@ -119,7 +128,19 @@ def rename_folder(
     user: User = Depends(get_current_user),
 ):
     folder = _get_folder(db, folder_id, user)
-    folder.name = body.name
+    nome = body.name.strip()
+    clash = (
+        db.query(ProjectFolder)
+        .filter(
+            ProjectFolder.org_id == user.org_id,
+            func.lower(ProjectFolder.name) == nome.lower(),
+            ProjectFolder.id != folder_id,
+        )
+        .first()
+    )
+    if clash:
+        raise HTTPException(status_code=400, detail=f'Já existe uma pasta chamada "{clash.name}"')
+    folder.name = nome
     db.commit()
     db.refresh(folder)
     return folder

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import type { AdminUser } from "../lib/types";
 import { Spinner, StatusBadge } from "../components/ui";
 import TopNav from "../components/TopNav";
 
@@ -32,6 +33,10 @@ interface AdminData {
   requests: {
     total: number; last_hour: number; last_minute: number;
     by_method: Record<string, number>; uptime_seconds: number;
+  };
+  ai_usage?: {
+    tokens_total: number;
+    top_projects: { project_id: number; project_name: string; tokens: number }[];
   };
 }
 
@@ -197,7 +202,18 @@ export default function Admin() {
             <MiniStat label="Última hora" value={adm.requests.last_hour.toLocaleString("pt-BR")} />
             <MiniStat label="Último minuto" value={adm.requests.last_minute.toLocaleString("pt-BR")} />
             <MiniStat label="Pedidos ao assistente (chat)" value={adm.chat.prompts.toLocaleString("pt-BR")} />
+            {adm.ai_usage && (
+              <MiniStat
+                label="Uso de IA (tokens estimados)"
+                value={adm.ai_usage.tokens_total.toLocaleString("pt-BR")}
+              />
+            )}
           </div>
+        </div>
+
+        {/* gestão de usuários */}
+        <div className="mb-6">
+          <UsersAdmin />
         </div>
 
         {/* listas */}
@@ -295,6 +311,165 @@ export default function Admin() {
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+/** Gestão de usuários: papéis administráveis pela interface (sem mexer em env). */
+function UsersAdmin() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [msg, setMsg] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [nEmail, setNEmail] = useState("");
+  const [nName, setNName] = useState("");
+  const [nPwd, setNPwd] = useState("");
+  const [nRole, setNRole] = useState<"admin" | "dev" | "user">("user");
+
+  async function load() {
+    try {
+      setUsers(await api.get<AdminUser[]>("/api/admin/users"));
+    } catch {
+      /* sem permissão ou backend antigo */
+    }
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  function flash(t: string) {
+    setMsg(t);
+    setTimeout(() => setMsg(""), 5000);
+  }
+
+  async function createUser(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await api.post("/api/admin/users", { email: nEmail, name: nName, password: nPwd, role: nRole });
+      setCreating(false);
+      setNEmail(""); setNName(""); setNPwd(""); setNRole("user");
+      flash("Usuário criado.");
+      load();
+    } catch (err: any) {
+      flash(err?.message || "Erro ao criar usuário.");
+    }
+  }
+
+  async function setRole(u: AdminUser, role: string) {
+    try {
+      await api.patch(`/api/admin/users/${u.id}`, { role });
+      flash(`Papel de ${u.email} atualizado para ${role}.`);
+      load();
+    } catch (err: any) {
+      flash(err?.message || "Erro ao atualizar papel.");
+    }
+  }
+
+  async function toggleActive(u: AdminUser) {
+    try {
+      await api.patch(`/api/admin/users/${u.id}`, { is_active: !u.is_active });
+      flash(`${u.email} ${u.is_active ? "desativado" : "reativado"}.`);
+      load();
+    } catch (err: any) {
+      flash(err?.message || "Erro ao atualizar usuário.");
+    }
+  }
+
+  async function resetPassword(u: AdminUser) {
+    const pwd = prompt(`Nova senha para ${u.email} (mínimo 8 caracteres):`);
+    if (!pwd) return;
+    try {
+      await api.patch(`/api/admin/users/${u.id}`, { password: pwd });
+      flash(`Senha de ${u.email} redefinida.`);
+    } catch (err: any) {
+      flash(err?.message || "Erro ao redefinir senha.");
+    }
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <h2 className="font-semibold text-brand-900">Usuários e papéis</h2>
+        <button onClick={() => setCreating((v) => !v)} className="btn-primary py-1.5 text-sm">
+          {creating ? "Cancelar" : "+ Novo usuário"}
+        </button>
+      </div>
+      {msg && (
+        <div className="border-b border-brand-100 bg-brand-50 px-5 py-2 text-sm text-brand-800">{msg}</div>
+      )}
+      {creating && (
+        <form onSubmit={createUser} className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
+          <div className="min-w-[220px] flex-1">
+            <label className="mb-1 block text-xs font-medium text-slate-500">E-mail</label>
+            <input className="input" type="email" required value={nEmail} onChange={(e) => setNEmail(e.target.value)} />
+          </div>
+          <div className="min-w-[160px] flex-1">
+            <label className="mb-1 block text-xs font-medium text-slate-500">Nome</label>
+            <input className="input" value={nName} onChange={(e) => setNName(e.target.value)} />
+          </div>
+          <div className="min-w-[160px]">
+            <label className="mb-1 block text-xs font-medium text-slate-500">Senha inicial</label>
+            <input className="input" type="password" required minLength={8} value={nPwd} onChange={(e) => setNPwd(e.target.value)} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Papel</label>
+            <select className="input" value={nRole} onChange={(e) => setNRole(e.target.value as any)}>
+              <option value="user">Usuário</option>
+              <option value="dev">Dev</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button className="btn-primary">Criar</button>
+        </form>
+      )}
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+          <tr>
+            <th className="px-4 py-2">Usuário</th>
+            <th className="px-4 py-2">Papel</th>
+            <th className="px-4 py-2">Status</th>
+            <th className="px-4 py-2 text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id} className="border-t border-slate-100">
+              <td className="px-4 py-2">
+                <div className="font-medium text-brand-900">{u.name || u.email}</div>
+                <div className="text-xs text-slate-400">{u.email}</div>
+              </td>
+              <td className="px-4 py-2">
+                <select
+                  className="input w-32 py-1 text-xs"
+                  value={u.role}
+                  onChange={(e) => setRole(u, e.target.value)}
+                >
+                  <option value="user">Usuário</option>
+                  <option value="dev">Dev</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </td>
+              <td className="px-4 py-2">
+                <span className={`badge ${u.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                  {u.is_active ? "Ativo" : "Inativo"}
+                </span>
+              </td>
+              <td className="px-4 py-2 text-right">
+                <button onClick={() => resetPassword(u)} className="mr-2 text-xs text-brand-600 hover:underline">
+                  Redefinir senha
+                </button>
+                <button onClick={() => toggleActive(u)} className="text-xs text-slate-500 hover:underline">
+                  {u.is_active ? "Desativar" : "Reativar"}
+                </button>
+              </td>
+            </tr>
+          ))}
+          {users.length === 0 && (
+            <tr>
+              <td colSpan={4} className="px-4 py-8 text-center text-slate-400">Carregando usuários…</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

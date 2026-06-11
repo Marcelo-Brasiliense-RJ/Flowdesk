@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import type {
   Execution,
   InputKind,
@@ -217,6 +218,8 @@ function deriveBuiltState(ws: WizardState, stages: Stage[]): WizardState {
 export default function Wizard() {
   const { id } = useParams();
   const projectId = Number(id);
+  const { user } = useAuth();
+  const canManage = !!(user?.is_admin || user?.is_dev);
   const [project, setProject] = useState<Project | null>(null);
   // step -1 = tela "Descreva"; 0..4 = trilha
   const [step, setStep] = useState(-1);
@@ -250,7 +253,22 @@ export default function Wizard() {
       // a tela inicial como se a automação não existisse.
       const alreadyBuilt = (ws as any)._built || !!scriptStage;
       if (!alreadyBuilt) return;
-      setState(deriveBuiltState(ws, stages));
+      const derived = deriveBuiltState(ws, stages);
+      setState(derived);
+      // fluxo criado pelo Chat: o "o que faz" vem do pedido original da conversa,
+      // não de um texto genérico tipo "Criado pelo Chat"
+      if (!derived.process?.description?.trim()) {
+        api
+          .get<{ role: string; content: string }[]>(`/api/projects/${projectId}/chat`)
+          .then((msgs) => {
+            const first = msgs.find((m) => m.role === "user")?.content || "";
+            const pedido = first.split("[Arquivos anexados:")[0].trim();
+            if (pedido) {
+              setState((s) => ({ ...s, process: { description: pedido.slice(0, 240) } }));
+            }
+          })
+          .catch(() => {});
+      }
       const ids = ((ws as any)._stage_ids || {}) as BuildResult["stage_ids"];
       const inputForm = stages.find((s) => s.type === "form" && s.config?.mode === "input");
       const resultForm = stages.find((s) => s.type === "form" && s.config?.mode === "result");
@@ -399,13 +417,15 @@ export default function Wizard() {
           <span className="font-semibold text-brand-900">{project.name}</span>
           <span className="badge bg-brand-50 text-brand-600">Assistente</span>
         </div>
-        <Link
-          to={`/projects/${projectId}/editor`}
-          className="text-xs text-slate-400 hover:text-brand-700"
-          title="Editar o código e o fluxo diretamente"
-        >
-          Modo avançado →
-        </Link>
+        {canManage && (
+          <Link
+            to={`/projects/${projectId}/editor`}
+            className="text-xs text-slate-400 hover:text-brand-700"
+            title="Editar o código e o fluxo diretamente"
+          >
+            Modo avançado →
+          </Link>
+        )}
       </header>
 
       {project.wizard_dirty && !dismissedDirty && (
@@ -417,12 +437,14 @@ export default function Wizard() {
           <button onClick={() => setDismissedDirty(true)} className="btn-outline py-1 text-xs">
             Continuar mesmo assim
           </button>
-          <Link
-            to={`/projects/${projectId}/editor`}
-            className="text-xs font-medium text-amber-700 hover:underline"
-          >
-            Abrir no modo avançado
-          </Link>
+          {canManage && (
+            <Link
+              to={`/projects/${projectId}/editor`}
+              className="text-xs font-medium text-amber-700 hover:underline"
+            >
+              Abrir no modo avançado
+            </Link>
+          )}
         </div>
       )}
 
@@ -793,7 +815,7 @@ function triggerText(kind?: TriggerKind) {
     : "você executa manualmente";
 }
 function inputText(kind?: InputKind, n = 0) {
-  return kind === "file" ? "ela recebe um arquivo (planilha)"
+  return kind === "file" ? "ela recebe um arquivo (planilha, PDF ou imagem)"
     : kind === "fields" ? `ela recebe ${n} campo(s) digitado(s)`
     : "ela não recebe entrada";
 }
@@ -835,9 +857,11 @@ function ReviewStep({
 
   // o "Faz" pode vir vazio em fluxos criados fora do assistente: usa a descrição
   // ou o próprio nome do projeto como melhor resumo disponível.
+  const descUtil =
+    projectDescription?.trim() === "Criado pelo Chat" ? "" : projectDescription?.trim();
   const faz =
     state.process?.description?.trim() ||
-    projectDescription?.trim() ||
+    descUtil ||
     projectName?.trim() ||
     "—";
   // etapas do fluxo com explicação amigável por nó
@@ -1215,10 +1239,32 @@ function TestPanel({
   const [exec, setExec] = useState<Execution | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  const [correctedText, setCorrectedText] = useState("");
 
   const inputKind = state.input?.kind ?? "none";
   const fields = state.input?.fields ?? [];
   const passed = exec?.status === "success";
+
+  // conveniência: se já existe um arquivo em uploads/, pré-seleciona o mais
+  // recente em vez de obrigar a pessoa a subir de novo o que acabou de enviar.
+  useEffect(() => {
+    if (inputKind !== "file" || samplePath) return;
+    api
+      .get<{ entries: { name: string; path: string; is_dir: boolean; modified_at: string }[] }>(
+        `/api/projects/${projectId}/fs?path=uploads`
+      )
+      .then((r) => {
+        const arquivos = (r.entries || []).filter((e) => !e.is_dir);
+        if (!arquivos.length) return;
+        const ultimo = [...arquivos].sort((a, b) =>
+          (b.modified_at || "").localeCompare(a.modified_at || "")
+        )[0];
+        setSamplePath(ultimo.path);
+        setSampleName(ultimo.name);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputKind, projectId]);
 
   async function uploadSample(file: File) {
     const fd = new FormData();
@@ -1228,12 +1274,15 @@ function TestPanel({
     setSamplePath(`uploads/${r.name}`);
     setSampleName(r.name);
   }
-  function buildPayload(): Record<string, unknown> {
-    if (inputKind === "file") return samplePath ? { arquivo: samplePath } : {};
-    if (inputKind === "fields") return { ...fieldValues };
-    return {};
+  function buildPayload(textoCorrigido?: string): Record<string, unknown> {
+    const texto = (textoCorrigido ?? correctedText).trim();
+    const extra = texto ? { _texto_corrigido: texto } : {};
+    if (inputKind === "file") return samplePath ? { arquivo: samplePath, ...extra } : { ...extra };
+    if (inputKind === "fields") return { ...fieldValues, ...extra };
+    return { ...extra };
   }
-  async function runTest(): Promise<Execution> {
+  async function runTest(textoCorrigido?: string): Promise<Execution> {
+    if (textoCorrigido) setCorrectedText(textoCorrigido);
     setTesting(true);
     setExec(null);
     setReviewed(false);
@@ -1242,7 +1291,7 @@ function TestPanel({
     try {
       await new Promise((r) => setTimeout(r, 450));
       onFlow?.("script", "running");
-      const started = await api.post<Execution>(`/api/projects/${projectId}/stages/${scriptStageId}/run`, buildPayload());
+      const started = await api.post<Execution>(`/api/projects/${projectId}/stages/${scriptStageId}/run`, buildPayload(textoCorrigido));
       let last = started;
       for (let i = 0; i < 25; i++) {
         await new Promise((r) => setTimeout(r, 1000));
@@ -1321,7 +1370,7 @@ function TestPanel({
         </div>
       )}
 
-      <motion.button onClick={runTest} disabled={testing || needsSample}
+      <motion.button onClick={() => runTest()} disabled={testing || needsSample}
         whileTap={{ scale: 0.97 }}
         className="btn-accent mt-4 w-full justify-center py-2.5 text-sm font-semibold shadow-sm disabled:opacity-50 sm:w-auto sm:px-6"
         title={needsSample ? "Suba um arquivo de exemplo primeiro" : ""}>
@@ -1373,7 +1422,12 @@ function TestPanel({
 
       {passed && review && (
         <div className="mt-4">
-          <OcrReview review={review} confirmed={reviewed} onConfirm={() => setReviewed(true)} />
+          <OcrReview
+            review={review}
+            confirmed={reviewed}
+            onConfirm={() => setReviewed(true)}
+            onReprocess={(t) => runTest(t)}
+          />
         </div>
       )}
 

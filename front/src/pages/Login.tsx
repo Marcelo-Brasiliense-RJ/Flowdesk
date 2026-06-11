@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { Logo, Spinner } from "../components/ui";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("admin@irko.com.br");
-  const [password, setPassword] = useState("REMOVED-SEED-PASSWORD");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // já autenticado: não mostra o formulário de novo
+  useEffect(() => {
+    if (user) nav("/", { replace: true });
+  }, [user, nav]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +50,8 @@ export default function Login() {
               <input
                 className="input"
                 type="email"
+                autoComplete="username"
+                placeholder="seu.email@irko.com.br"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -53,13 +61,24 @@ export default function Login() {
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Senha
               </label>
-              <input
-                className="input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <input
+                  className="input pr-16"
+                  type={showPwd ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd((v) => !v)}
+                  className="absolute inset-y-0 right-2 my-auto h-7 rounded px-2 text-xs font-medium text-slate-400 hover:text-brand-700"
+                  tabIndex={-1}
+                >
+                  {showPwd ? "ocultar" : "mostrar"}
+                </button>
+              </div>
             </div>
             {error && (
               <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -70,9 +89,6 @@ export default function Login() {
               {loading ? <Spinner /> : "Entrar"}
             </button>
           </form>
-          <p className="mt-4 text-center text-xs text-slate-400">
-            Seed: admin@irko.com.br · REMOVED-SEED-PASSWORD
-          </p>
         </div>
       </div>
     </div>

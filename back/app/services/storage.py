@@ -179,6 +179,14 @@ def extract_document(path=None, ocr_threshold=0.8):
       needs_review: True quando veio de OCR e há baixa confiança
     """
     import os
+    # revisão humana: se a pessoa corrigiu o texto na tela de revisão e pediu
+    # reprocesso, o texto corrigido substitui o OCR (fonte mais confiável).
+    corrigido = get_input().get("_texto_corrigido")
+    if isinstance(corrigido, str) and corrigido.strip():
+        linhas = [{"text": l, "confidence": None, "page": 1}
+                  for l in corrigido.splitlines() if l.strip()]
+        return {"text": corrigido, "lines": linhas, "source": "human_review",
+                "mean_confidence": None, "low_confidence": [], "needs_review": False}
     if path is None:
         path = get_file()
     if not path:

@@ -302,7 +302,7 @@ def chat_stream(
     def event_stream():
         if build_intent:
             # turno de construção: chamada estruturada (JSON) que SEMPRE traz ações
-            clean_text, actions = _generate_build(messages)
+            clean_text, actions, suggested_name = _generate_build(messages)
             questions = []
             full_text = clean_text
             for word in re.findall(r"\S+\s*", clean_text):
@@ -313,6 +313,7 @@ def chat_stream(
                 full_text += chunk
                 yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
             clean_text, questions, actions = _parse_actions(full_text)
+            suggested_name = ""
             for qq in questions:
                 if not qq.get("label"):
                     qq["label"] = qq.get("question") or qq.get("text") or ""
@@ -333,6 +334,14 @@ def chat_stream(
         # persist in a fresh session (generator runs outside request scope)
         s = SessionLocal()
         try:
+            # batiza projetos criados pelo Chat com o nome amigável sugerido pela IA
+            # (em vez do prompt cru virar nome)
+            if suggested_name and len(suggested_name.strip()) >= 3:
+                proj = s.get(Project, project_id)
+                if proj is not None and (proj.description or "").strip() == "Criado pelo Chat":
+                    proj.name = suggested_name.strip()[:80]
+                    proj.description = ""
+                    s.commit()
             assistant = ChatMessage(
                 project_id=project_id, role="assistant", content=clean_text,
                 meta={"questions": questions}, tokens=_estimate_tokens(full_text),
@@ -371,7 +380,8 @@ def _generate_build(messages: list[dict]):
             "Responda SOMENTE em JSON válido: "
             '{"message": "explicação curta e amigável, em português simples e sem jargão '
             'técnico, do que a automação vai fazer (1 a 2 frases, pensando num usuário não '
-            'técnico)", "actions": [...]}. '
+            'técnico)", "project_name": "nome curto e claro para a automação (3 a 6 '
+            'palavras, ex: Total de Vendas por Produto)", "actions": [...]}. '
             "Tipos de action: create_file {kind,title,path,content}, "
             "create_stage {kind,title,stage_type,name}, "
             "require_env {kind,title,key,description,example}. "
@@ -397,7 +407,7 @@ def _generate_build(messages: list[dict]):
             {"kind": "create_file", "title": "Criar processar.py", "path": "processar.py",
              "content": "from flowdesk_sdk import get_file, set_output\nimport pandas as pd\n\n"
                         "df = pd.read_excel(get_file())\nset_output({'linhas': len(df)})\n"}
-        ])
+        ], "")
     try:
         from openai import OpenAI
 
@@ -409,9 +419,13 @@ def _generate_build(messages: list[dict]):
             temperature=0.2,
         )
         data = json.loads(resp.choices[0].message.content or "{}")
-        return data.get("message") or "Fluxo gerado.", data.get("actions") or []
+        return (
+            data.get("message") or "Fluxo gerado.",
+            data.get("actions") or [],
+            (data.get("project_name") or "").strip(),
+        )
     except Exception as exc:
-        return f"[IA indisponível: {exc}]", []
+        return f"[IA indisponível: {exc}]", [], ""
 
 
 def _generate(messages: list[dict], last_user: str):

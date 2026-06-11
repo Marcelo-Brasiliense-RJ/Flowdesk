@@ -147,7 +147,7 @@ export default function Manage() {
       <main className="mx-auto max-w-7xl px-6 py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-brand-900">Gerenciamento de aplicações</h1>
+            <h1 className="text-2xl font-bold text-brand-900">Gerenciamento de automações</h1>
             <p className="text-sm text-slate-500">
               Manutenção e saúde de todas as automações da organização.
             </p>
@@ -162,12 +162,23 @@ export default function Manage() {
           )}
         </div>
 
-        {/* indicadores de saúde */}
+        {/* indicadores de saúde (skeleton enquanto carrega, sem "0" falso) */}
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Aplicações" value={stats.total} tone="brand" />
-          <StatCard label="No ar" value={stats.live} tone="accent" />
-          <StatCard label="Rascunho" value={stats.draft} tone="slate" />
-          <StatCard label="Com erros" value={stats.withErrors} tone="red" />
+          {loading ? (
+            [0, 1, 2, 3].map((i) => (
+              <div key={i} className="card animate-pulse p-4">
+                <div className="h-3 w-20 rounded bg-slate-200" />
+                <div className="mt-2 h-7 w-12 rounded bg-slate-200" />
+              </div>
+            ))
+          ) : (
+            <>
+              <StatCard label="Automações" value={stats.total} tone="brand" />
+              <StatCard label="No ar" value={stats.live} tone="accent" />
+              <StatCard label="Rascunho" value={stats.draft} tone="slate" />
+              <StatCard label="Com erros" value={stats.withErrors} tone="red" />
+            </>
+          )}
         </div>
 
         <div className="mb-3 flex items-center justify-between gap-3">
