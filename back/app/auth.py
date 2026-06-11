@@ -37,11 +37,13 @@ def create_access_token(subject: str) -> str:
 
 
 def is_admin(user: User) -> bool:
-    return user.email.lower() in settings.admin_email_set
+    role = (getattr(user, "role", "") or "").lower()
+    return role == "admin" or user.email.lower() in settings.admin_email_set
 
 
 def is_dev(user: User) -> bool:
-    return user.email.lower() in settings.dev_email_set
+    role = (getattr(user, "role", "") or "").lower()
+    return role == "dev" or user.email.lower() in settings.dev_email_set
 
 
 def can_manage(user: User) -> bool:

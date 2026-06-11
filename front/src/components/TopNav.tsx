@@ -4,7 +4,7 @@ import { Logo } from "./ui";
 
 const LINKS = [
   ["/chat", "Chat"],
-  ["/", "Projetos"],
+  ["/", "Automações"],
   ["/dashboard", "Dashboard"],
 ];
 

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDialog } from "../components/Dialog";
-import type { Folder, Project } from "../lib/types";
+import type { Folder, Project, TemplateInfo } from "../lib/types";
 import { Spinner, StatusBadge } from "../components/ui";
 import TopNav from "../components/TopNav";
 
@@ -19,16 +19,32 @@ export default function Console() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
+  const [instantiating, setInstantiating] = useState("");
+
+  async function useTemplate(key: string) {
+    if (instantiating) return;
+    setInstantiating(key);
+    try {
+      const r = await api.post<{ project_id: number }>(`/api/templates/${key}/instantiate`);
+      nav(`/projects/${r.project_id}/assistente`);
+    } catch (e: any) {
+      await dlg.confirm({ title: "Não foi possível criar", message: e?.message || "Erro ao usar o modelo.", confirmLabel: "Entendi" });
+      setInstantiating("");
+    }
+  }
 
   async function load() {
     // carrega projetos e pastas em paralelo e renderiza juntos (evita o flash em
     // que projetos de pastas somem até as pastas chegarem)
-    const [ps, fs] = await Promise.all([
+    const [ps, fs, ts] = await Promise.all([
       api.get<Project[]>("/api/projects"),
       api.get<Folder[]>("/api/folders"),
+      api.get<TemplateInfo[]>("/api/templates").catch(() => [] as TemplateInfo[]),
     ]);
     setProjects(ps);
     setFolders(fs);
+    setTemplates(ts);
     setLoading(false);
   }
   useEffect(() => {
@@ -97,14 +113,22 @@ export default function Console() {
   async function createFolder() {
     const name = await dlg.prompt({ title: "Nova pasta", label: "Nome da pasta", placeholder: "Ex: Fiscal" });
     if (!name?.trim()) return;
-    await api.post("/api/folders", { name: name.trim() });
+    try {
+      await api.post("/api/folders", { name: name.trim() });
+    } catch (e: any) {
+      await dlg.confirm({ title: "Não foi possível criar", message: e?.message || "Erro ao criar a pasta.", confirmLabel: "Entendi" });
+    }
     load();
   }
 
   async function renameFolder(id: number, current: string) {
     const name = await dlg.prompt({ title: "Renomear pasta", label: "Novo nome", defaultValue: current });
     if (!name?.trim()) return;
-    await api.patch(`/api/folders/${id}`, { name: name.trim() });
+    try {
+      await api.patch(`/api/folders/${id}`, { name: name.trim() });
+    } catch (e: any) {
+      await dlg.confirm({ title: "Não foi possível renomear", message: e?.message || "Erro ao renomear a pasta.", confirmLabel: "Entendi" });
+    }
     load();
   }
 
@@ -152,9 +176,9 @@ export default function Console() {
         <>
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-brand-900">Projetos</h1>
+                <h1 className="text-2xl font-bold text-brand-900">Automações</h1>
                 <p className="text-sm text-slate-500">
-                  {projects.length} projeto(s) de automação · arraste um card para movê-lo entre pastas
+                  {projects.length} automação(ões) · arraste um card para movê-lo entre pastas
                 </p>
               </div>
               <div className="flex gap-2">
@@ -181,7 +205,7 @@ export default function Console() {
                   + Nova pasta
                 </button>
                 <button onClick={() => setCreating(true)} className="btn-primary">
-                  + Novo projeto
+                  + Nova automação
                 </button>
               </div>
             </div>
@@ -207,6 +231,29 @@ export default function Console() {
                   Cancelar
                 </button>
               </form>
+            )}
+
+            {!loading && templates.length > 0 && (
+              <section className="mb-8">
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Comece com um modelo
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {templates.map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => useTemplate(t.key)}
+                      disabled={!!instantiating}
+                      className="rounded-xl border border-dashed border-brand-200 bg-brand-50/40 p-4 text-left transition hover:border-accent-400 hover:bg-accent-400/5 disabled:opacity-60"
+                    >
+                      <div className="font-medium text-brand-900">
+                        {instantiating === t.key ? "Criando…" : t.name}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">{t.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </section>
             )}
 
             {loading ? (

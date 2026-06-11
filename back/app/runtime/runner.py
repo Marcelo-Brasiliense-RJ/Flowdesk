@@ -157,6 +157,12 @@ class RuntimeManager:
             execu.finished_at = _utcnow()
             db.commit()
 
+            # job agendado que falhou: avisa por e-mail (best-effort, opcional)
+            if execu.status == "error" and stage.type == "job":
+                from ..services.notify import notify_job_failure
+
+                notify_job_failure(project.name, stage.name, execu.id, err)
+
             duration = (execu.finished_at - execu.started_at).total_seconds()
             self._durations = (self._durations + [duration])[-50:]
 

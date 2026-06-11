@@ -38,6 +38,7 @@ from app.routers import (
     realtime,
     repair,
     settings as settings_router,
+    templates,
     wizard,
 )
 from app.seed import seed_if_empty
@@ -70,6 +71,25 @@ async def lifespan(app: FastAPI):
                 conn.execute(
                     text("ALTER TABLE projects ADD COLUMN wizard_dirty BOOLEAN NOT NULL DEFAULT 0")
                 )
+            user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+            if "role" not in user_cols:
+                conn.execute(
+                    text("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'user'")
+                )
+        else:
+            # Postgres aceita IF NOT EXISTS
+            conn.execute(
+                text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user'")
+            )
+        # ceifador de zumbis: execuções queued/running de processos anteriores
+        # nunca vão terminar; marca como erro para não poluir métricas e monitor.
+        conn.execute(
+            text(
+                "UPDATE executions SET status='error', "
+                "stderr = stderr || '\n[runtime] Execução encerrada: o servidor foi reiniciado.' "
+                "WHERE status IN ('queued','running')"
+            )
+        )
     seed_if_empty()
     loop = asyncio.get_event_loop()
     runtime.start(loop)
@@ -109,6 +129,7 @@ for module in (
     wizard,
     repair,
     manage,
+    templates,
 ):
     app.include_router(module.router)
 

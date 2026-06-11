@@ -50,6 +50,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(160), default="")
     hashed_password: Mapped[str] = mapped_column(String(255))
+    # papel de console: admin | dev | user (env ADMIN_EMAILS/DEV_EMAILS complementa)
+    role: Mapped[str] = mapped_column(String(20), default="user")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 

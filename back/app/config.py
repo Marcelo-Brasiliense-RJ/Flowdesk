@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     admin_emails: str = "admin@irko.com.br"
     # E-mails com papel de Dev (acesso à tela de gerenciamento, junto do admin).
     dev_emails: str = ""
+    # SMTP opcional para notificar falhas de jobs agendados. Sem host, não envia.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "flowdesk@irko.com.br"
+    notify_emails: str = ""  # destinatários, separados por vírgula
 
     @property
     def admin_email_set(self) -> set[str]:

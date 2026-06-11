@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 /**
  * Tela de revisão humana do OCR (etapa 3 da validação).
  *
@@ -17,14 +19,19 @@ export default function OcrReview({
   review,
   confirmed,
   onConfirm,
+  onReprocess,
 }: {
   review: OcrReviewData;
   confirmed: boolean;
   onConfirm: () => void;
+  /** Quando presente, permite corrigir o texto e reprocessar a automação com ele. */
+  onReprocess?: (textoCorrigido: string) => void;
 }) {
   const conf = review.mean_confidence;
   const low = review.low_confidence ?? [];
   const needs = !!review.needs_review;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(review.text || "");
 
   return (
     <div
@@ -66,20 +73,60 @@ export default function OcrReview({
         </div>
       )}
 
-      <details className="mt-3 text-sm">
-        <summary className="cursor-pointer text-slate-500">Ver todo o texto extraído</summary>
-        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs text-slate-700">
-          {review.text || "(vazio)"}
-        </pre>
-      </details>
-
-      {needs && !confirmed && (
-        <button onClick={onConfirm} className="btn-primary mt-3 py-1.5 text-sm">
-          Confirmei a revisão
-        </button>
+      {editing ? (
+        <div className="mt-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Corrija o texto abaixo e reprocesse
+          </div>
+          <textarea
+            className="input mt-1 min-h-[180px] font-mono text-xs"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={() => onReprocess?.(draft)}
+              disabled={!draft.trim()}
+              className="btn-primary py-1.5 text-sm disabled:opacity-40"
+            >
+              Reprocessar com o texto corrigido
+            </button>
+            <button onClick={() => setEditing(false)} className="btn-ghost py-1.5 text-sm">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer text-slate-500">Ver todo o texto extraído</summary>
+          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs text-slate-700">
+            {review.text || "(vazio)"}
+          </pre>
+        </details>
       )}
-      {confirmed && (
-        <div className="mt-3 text-sm font-medium text-emerald-600">Revisão confirmada.</div>
+
+      {!editing && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {needs && !confirmed && (
+            <button onClick={onConfirm} className="btn-primary py-1.5 text-sm">
+              Confirmei a revisão
+            </button>
+          )}
+          {onReprocess && (
+            <button
+              onClick={() => {
+                setDraft(review.text || "");
+                setEditing(true);
+              }}
+              className="btn-outline py-1.5 text-sm"
+            >
+              Corrigir texto
+            </button>
+          )}
+          {confirmed && (
+            <span className="text-sm font-medium text-emerald-600">Revisão confirmada.</span>
+          )}
+        </div>
       )}
     </div>
   );

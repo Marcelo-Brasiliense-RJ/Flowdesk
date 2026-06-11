@@ -73,6 +73,48 @@ def publish(
     return build
 
 
+@router.post("/projects/{project_id}/builds/{build_id}/restore")
+def restore_build(
+    project_id: int,
+    build_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Restaura os arquivos de código do projeto para o estado desta versão.
+
+    Os nós/conexões atuais são mantidos (restauração de código). O rascunho é
+    sobrescrito pelos arquivos do snapshot; arquivos criados depois são removidos.
+    """
+    get_project(db, project_id, user)
+    build = db.get(Build, build_id)
+    if build is None or build.project_id != project_id:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Versão não encontrada")
+    files: dict = (build.snapshot or {}).get("files") or {}
+    if not files:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="Esta versão não tem arquivos para restaurar")
+
+    atuais = db.query(SourceFile).filter(SourceFile.project_id == project_id).all()
+    por_path = {f.path: f for f in atuais}
+    restaurados, removidos = 0, 0
+    for path, content in files.items():
+        row = por_path.get(path)
+        if row:
+            row.content = content
+        else:
+            db.add(SourceFile(project_id=project_id, path=path, content=content))
+        restaurados += 1
+    for f in atuais:
+        if f.path not in files and not f.is_dir:
+            db.delete(f)
+            removidos += 1
+    db.commit()
+    return {"ok": True, "restaurados": restaurados, "removidos": removidos, "hash": build.hash}
+
+
 @router.post("/projects/{project_id}/builds/{build_id}/activate", response_model=BuildOut)
 def activate_build(
     project_id: int,

@@ -158,7 +158,7 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
             messages.append({"role": "system", "content": ctx})
     messages.append({"role": "user", "content": intent})
 
-    explanation, actions = _generate_build(messages)
+    explanation, actions, _name = _generate_build(messages)
     code = ""
     for a in actions:
         if a.get("kind") in ("create_file", "edit_file") and a.get("content"):
