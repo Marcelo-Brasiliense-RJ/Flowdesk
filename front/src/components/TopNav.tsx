@@ -10,6 +10,12 @@ const LINKS = [
 
 export default function TopNav() {
   const { user, logout } = useAuth();
+  const canManage = !!(user?.is_admin || user?.is_dev);
+  const links = [
+    ...LINKS,
+    ...(canManage ? [["/manage", "Gerenciar"]] : []),
+    ...(user?.is_admin ? [["/admin", "Admin"]] : []),
+  ];
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
@@ -18,7 +24,7 @@ export default function TopNav() {
             <Logo />
           </NavLink>
           <nav className="flex gap-1 text-sm">
-            {LINKS.map(([to, label]) => (
+            {links.map(([to, label]) => (
               <NavLink
                 key={to}
                 to={to}

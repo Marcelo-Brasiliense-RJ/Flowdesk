@@ -3,6 +3,8 @@ export interface User {
   email: string;
   name: string;
   org_id: number;
+  is_admin: boolean;
+  is_dev: boolean;
 }
 
 export interface Project {

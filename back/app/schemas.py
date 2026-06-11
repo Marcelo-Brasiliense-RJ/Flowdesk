@@ -28,6 +28,8 @@ class UserOut(ORMModel):
     email: str
     name: str
     org_id: int
+    is_admin: bool = False
+    is_dev: bool = False
 
 
 # ---- projects ----
@@ -35,6 +37,14 @@ class ProjectCreate(BaseModel):
     name: str
     description: str = ""
     folder_id: Optional[int] = None
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+class AutoNameIn(BaseModel):
+    prompt: str = ""
 
 
 class ProjectUpdate(BaseModel):
@@ -67,6 +77,29 @@ class WizardAnalyzeIn(BaseModel):
 
     prompt: str = ""
     sample_file: Optional[str] = None
+
+
+class ExplanationUpdate(BaseModel):
+    """Descrição (do que a automação faz) escrita/editada pelo usuário."""
+
+    text: str = ""
+
+
+# ---- auto-reparo ----
+class RepairProposeIn(BaseModel):
+    execution_id: str
+    hint: Optional[str] = None
+
+
+class RepairProposeOut(BaseModel):
+    diagnosis: str = ""
+    change_summary: str = ""
+    fixed_code: str = ""
+    has_changes: bool = False
+
+
+class RepairApplyIn(BaseModel):
+    code: str
 
 
 class ProjectOut(ORMModel):

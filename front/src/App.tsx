@@ -14,6 +14,8 @@ import Files from "./pages/Files";
 import AccessControl from "./pages/AccessControl";
 import ProjectSettings from "./pages/ProjectSettings";
 import PublishedApp from "./pages/PublishedApp";
+import Manage from "./pages/Manage";
+import Admin from "./pages/Admin";
 import type { ReactNode } from "react";
 
 function Protected({ children }: { children: ReactNode }) {
@@ -37,6 +39,8 @@ export default function App() {
 
       <Route path="/" element={<Protected><Console /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+      <Route path="/manage" element={<Protected><Manage /></Protected>} />
+      <Route path="/admin" element={<Protected><Admin /></Protected>} />
       <Route path="/chat" element={<Protected><Chat /></Protected>} />
       <Route path="/projects/:id/assistente" element={<Protected><Wizard /></Protected>} />
       <Route path="/projects/:id/editor" element={<Protected><Editor /></Protected>} />
