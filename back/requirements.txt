@@ -16,3 +16,10 @@ psycopg[binary]==3.3.4
 # Used by the seeded "Conciliador de Planilhas" example script (runs in subprocess)
 pandas==2.2.3
 openpyxl==3.1.5
+# Métricas de máquina (CPU/RAM/disco) no painel de admin
+psutil==7.2.2
+# Leitura de PDF/Imagem + OCR local (on-premise, pip-only) usado pelo SDK extract_document
+pdfplumber==0.11.9
+pymupdf==1.27.2.3
+rapidocr-onnxruntime==1.4.4
+pillow==12.2.0
