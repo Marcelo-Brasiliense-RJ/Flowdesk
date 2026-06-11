@@ -29,8 +29,15 @@ _REPAIR_INSTR = (
     "change_summary: explique de forma amigável e positiva o que você vai fazer para "
     "resolver, transmitindo segurança, 1 a 2 frases simples. "
     "fixed_code: o script Python COMPLETO corrigido, mantendo a mesma finalidade e o uso "
-    "do SDK flowdesk_sdk (get_file/get_input/output_path/set_output). Não escreva nada "
-    "fora do JSON."
+    "do SDK flowdesk_sdk (get_file/get_input/output_path/set_output). "
+    "AMBIENTE: as bibliotecas disponíveis são pandas, openpyxl e o SDK; NÃO importe "
+    "bibliotecas não instaladas (PyPDF2, tabula, camelot, pdfminer etc.). "
+    "Para ler PDF (editável OU escaneado) ou imagem use SEMPRE "
+    "`from flowdesk_sdk import extract_document` e `doc = extract_document(get_file())` "
+    "(detecta sozinho e faz OCR local; doc['text'] tem o texto). Quando usar OCR, inclua "
+    "no set_output a chave `_ocr_review` = {'text': doc['text'], 'mean_confidence': "
+    "doc['mean_confidence'], 'needs_review': doc['needs_review'], 'low_confidence': "
+    "[l['text'] for l in doc['low_confidence']]}. Não escreva nada fora do JSON."
 )
 
 
