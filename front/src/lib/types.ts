@@ -88,6 +88,12 @@ export interface SourceFile {
   is_dir: boolean;
 }
 
+export interface ProgressEvent {
+  etapa: string;
+  detalhe: string;
+  ts: string;
+}
+
 export interface Execution {
   id: string;
   project_id: number;
@@ -100,8 +106,34 @@ export interface Execution {
   stderr: string;
   input_data: any;
   output_data: any;
+  progress?: ProgressEvent[];
   started_at: string;
   finished_at: string | null;
+}
+
+export interface GrupoClassificacao {
+  padrao: string;
+  exemplo: string;
+  qtd: number;
+  total: number;
+  tipo: "credito" | "debito" | "";
+  conta: string | null;
+  conta_nome: string;
+  origem: "regra" | "ia" | null;
+}
+
+export interface ContaPlano {
+  codigo: string;
+  nome: string;
+  classificacao: string;
+}
+
+export interface ClassificacaoReviewData {
+  periodo_detectado: { inicio: string; fim: string };
+  conta_banco: string | null;
+  grupos: GrupoClassificacao[];
+  contas: ContaPlano[];
+  total_lancamentos: number;
 }
 
 export interface Build {
