@@ -95,7 +95,7 @@ _SDK_SOURCE = '''"""FlowDesk runtime SDK injected into every project (do not edi
 
 Use inside Script stages to read the upstream input and write results:
 
-    from flowdesk_sdk import get_input, set_output, output_path, log
+    from flowdesk_sdk import get_input, set_output, output_path, log, progress
 
     data = get_input()                 # dict with upstream form values
     src = data["arquivo"]              # path to an uploaded file
@@ -147,6 +147,61 @@ def set_output(data) -> None:
 
 def log(*args) -> None:
     print(*args, flush=True)
+
+
+_RUN_DIR = os.environ.get("FLOWDESK_RUN_DIR", ".")
+
+
+def progress(etapa, detalhe="") -> None:
+    """Etapa visível ao usuário na linha do tempo da execução.
+    Use linguagem simples: progress("Lendo extrato", "564 lançamentos")."""
+    import datetime as _dt
+    rec = {"etapa": str(etapa), "detalhe": str(detalhe),
+           "ts": _dt.datetime.now().strftime("%H:%M:%S")}
+    p = Path(_RUN_DIR) / "progress.jsonl"
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\\n")
+    print(f"[etapa] {etapa} {detalhe}", flush=True)
+
+
+def get_table(nome) -> list:
+    """Linhas (list[dict]) de uma tabela interna do projeto (ex: regras De/Para).
+    O runtime materializa as tabelas em tables.json antes da execução."""
+    p = Path(_RUN_DIR) / "tables.json"
+    if not p.exists():
+        return []
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return data.get(nome, [])
+
+
+def read_table(path, **kw):
+    """Lê planilha (xlsx/xls/csv) com tolerância a xls fora do padrão (Domínio).
+    Cadeia: pandas normal -> conversão via Excel instalado -> erro claro."""
+    import pandas as pd
+    spath = str(path)
+    ext = os.path.splitext(spath)[1].lower()
+    if ext == ".csv":
+        return pd.read_csv(spath, **kw)
+    try:
+        return pd.read_excel(spath, **kw)
+    except Exception:
+        if ext != ".xls":
+            raise
+    # xls do Domínio: converte com o Excel da máquina (on-premise Windows)
+    import subprocess, tempfile
+    dst = os.path.join(tempfile.gettempdir(), "fd_conv_" + os.path.basename(spath) + ".xlsx")
+    ps = (
+        "$x=New-Object -ComObject Excel.Application;$x.Visible=$false;"
+        "$x.DisplayAlerts=$false;$wb=$x.Workbooks.Open('{src}');"
+        "$wb.SaveAs('{dst}',51);$wb.Close($false);$x.Quit()"
+    ).format(src=spath.replace("'", "''"), dst=dst.replace("'", "''"))
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                       capture_output=True, timeout=120)
+    if r.returncode != 0 or not os.path.exists(dst):
+        raise RuntimeError(
+            "Não consegui ler este .xls (formato fora do padrão e a conversão "
+            "via Excel falhou). Exporte como .xlsx ou .csv e envie de novo.")
+    return pd.read_excel(dst, **kw)
 
 
 # ---- PDF / OCR (leitura de documentos, com confiança para validação) ----

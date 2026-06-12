@@ -117,6 +117,17 @@ class RuntimeManager:
                 json.dumps(execu.input_data or {}, ensure_ascii=False),
                 encoding="utf-8",
             )
+            execu.run_dir = str(run_dir)
+            # tabelas internas do projeto disponíveis ao script (ex: regras De/Para)
+            from ..models import DataRow, DataTable
+
+            tables: dict[str, list] = {}
+            for t in db.query(DataTable).filter(DataTable.project_id == project.id):
+                rows = db.query(DataRow).filter(DataRow.table_id == t.id).all()
+                tables[t.name] = [r.values for r in rows]
+            (run_dir / "tables.json").write_text(
+                json.dumps(tables, ensure_ascii=False), encoding="utf-8"
+            )
 
             env_vars = {
                 ev.key: ev.value
