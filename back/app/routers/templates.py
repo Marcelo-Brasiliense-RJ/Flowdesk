@@ -86,6 +86,263 @@ set_output({
 })
 '''
 
+_EXTRATO_DOMINIO = '''"""Extrato bancário (PDF Bradesco) -> planilha de lançamentos do Domínio.
+
+Fluxo em 2 passes:
+  pass 1 (sem _classificacao_confirmada): lê extrato + plano de contas, aplica
+    regras De/Para do projeto e devolve _classificacao_review para a tela de revisão.
+  pass 2 (com _classificacao_confirmada): aplica o mapa confirmado, filtra o
+    período e gera o xlsx no contrato do Domínio.
+"""
+import datetime as dt
+import re
+from flowdesk_sdk import (get_input, get_file, set_output, output_path, log,
+                          progress, get_table, read_table)
+
+NUM = re.compile(r"^-?\\d{1,3}(\\.\\d{3})*,\\d{2}$")
+DATE = re.compile(r"^\\d{2}/\\d{2}/\\d{4}$")
+COLUNAS = ["Data", "Cód. Conta Debito", "Cód. Conta Credito", "Valor",
+           "Cód. Histórico", "Complemento Histórico", "Inicia Lote",
+           "Código Matriz/Filial", "Centro de Custo Débito", "Centro de Custo Crédito"]
+
+
+def brl(s):
+    return float(s.replace(".", "").replace(",", "."))
+
+
+def padrao_de(historico):
+    """Padrão de agrupamento: histórico sem números/datas (estável entre meses)."""
+    toks = [t for t in str(historico).split()
+            if not t.replace("/", "").replace("-", "").replace(".", "").isdigit()]
+    return " ".join(toks).strip().upper()
+
+
+def parse_extrato(pdf_path):
+    """Parser posicional do extrato Bradesco. Crédito x1<400, débito 400<=x1<490,
+    saldo x1>=490 (valores alinhados à direita). Valida pela aritmética do saldo."""
+    import pdfplumber
+    lanc, saldo_ant, saldo_fim = [], None, None
+    data_atual, desc_acum = None, []
+    periodo = None
+    with pdfplumber.open(str(pdf_path)) as pdf:
+        for page in pdf.pages:
+            words = page.extract_words(use_text_flow=False, keep_blank_chars=False)
+            linhas = {}
+            for w in words:
+                linhas.setdefault(round(w["top"]), []).append(w)
+            for top in sorted(linhas):
+                ws = sorted(linhas[top], key=lambda x: x["x0"])
+                texto_linha = " ".join(w["text"] for w in ws)
+                m = re.search(r"Entre (\\d{2}/\\d{2}/\\d{4}) e (\\d{2}/\\d{2}/\\d{4})", texto_linha)
+                if m and periodo is None:
+                    periodo = (m.group(1), m.group(2))
+                nums = [w for w in ws if NUM.match(w["text"])]
+                saldo_tok = [w for w in nums if w["x1"] >= 490]
+                textos = [w["text"] for w in ws
+                          if not NUM.match(w["text"]) and not DATE.match(w["text"])]
+                dtok = next((w["text"] for w in ws if DATE.match(w["text"])), None)
+                if dtok:
+                    data_atual = dt.datetime.strptime(dtok, "%d/%m/%Y").date()
+                if saldo_tok:
+                    saldo = brl(saldo_tok[-1]["text"])
+                    inline = [t for t in textos if t.upper() not in ("SALDO", "ANTERIOR", "TOTAL")]
+                    desc = " ".join(desc_acum + inline).strip()
+                    desc_acum = []
+                    cred = next((brl(w["text"]) for w in nums if w["x1"] < 400), None)
+                    deb = next((brl(w["text"]) for w in nums if 400 <= w["x1"] < 490), None)
+                    eh_rodape = "TOTAL" in " ".join(textos).upper()
+                    if cred is None and deb is None:
+                        if saldo_ant is None:
+                            saldo_ant = saldo
+                        saldo_fim = saldo
+                        continue
+                    if eh_rodape:
+                        continue
+                    lanc.append({"data": data_atual, "historico": desc,
+                                 "credito": round(cred, 2) if cred is not None else None,
+                                 "debito": round(abs(deb), 2) if deb is not None else None,
+                                 "saldo": saldo})
+                    saldo_fim = saldo
+                elif textos:
+                    desc_acum.append(" ".join(textos))
+    # validação aritmética linha a linha (saldo anterior + delta = saldo da linha)
+    prev, erros = saldo_ant or 0, 0
+    for l in lanc:
+        impresso = (l["credito"] or 0) - (l["debito"] or 0)
+        if abs(impresso - round(l["saldo"] - prev, 2)) > 0.01:
+            erros += 1
+        prev = l["saldo"]
+    return {"lancamentos": lanc, "saldo_anterior": saldo_ant, "saldo_final": saldo_fim,
+            "periodo": periodo, "linhas_inconsistentes": erros}
+
+
+def carregar_plano(caminho):
+    """Plano de contas Domínio: devolve contas analíticas [{codigo, nome, classificacao}].
+    Sintéticas têm 'S' na coluna T; o nome fica na coluna do grau correspondente."""
+    df = read_table(caminho, header=None)
+    contas = []
+    for _, row in df.iterrows():
+        vals = ["" if v != v else str(v).strip() for v in row.tolist()]  # NaN -> ""
+        codigo = vals[0]
+        if not codigo or not codigo.replace(".", "").isdigit():
+            continue
+        if "S" in (vals[3] if len(vals) > 3 else ""):
+            continue  # sintética não recebe lançamento
+        classif = next((v for v in vals if re.match(r"^\\d+(\\.\\d+)+$", v)), "")
+        nome = next((v for v in vals[10:] if v and not v.isdigit()), "")
+        if nome:
+            contas.append({"codigo": codigo.split(".")[0], "nome": nome,
+                           "classificacao": classif})
+    return contas
+
+
+def agrupar(lancamentos, regras):
+    """Agrupa por padrão de histórico e aplica regras De/Para (match exato)."""
+    grupos = {}
+    for i, l in enumerate(lancamentos):
+        p = padrao_de(l["historico"])
+        g = grupos.setdefault(p, {"padrao": p, "exemplo": l["historico"], "qtd": 0,
+                                  "total": 0.0, "tipo": "", "linhas": [],
+                                  "conta": None, "conta_nome": "", "origem": None})
+        g["qtd"] += 1
+        g["total"] = round(g["total"] + (l["credito"] or l["debito"] or 0), 2)
+        g["tipo"] = "credito" if l["credito"] else "debito"
+        g["linhas"].append(i)
+    for g in grupos.values():
+        if g["padrao"] in regras:
+            g["conta"] = regras[g["padrao"]]
+            g["origem"] = "regra"
+    return sorted(grupos.values(), key=lambda g: -g["total"])
+
+
+def gerar_xlsx(lancamentos, mapa, conta_banco, caminho):
+    """Contrato Domínio: lançamento simples; Inicia Lote = 1 na primeira linha de
+    cada dia; Cód. Histórico vazio; Complemento = histórico do extrato."""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Planilha1"
+    ws.append(COLUNAS)
+    dia_anterior = None
+    for l in sorted(lancamentos, key=lambda x: x["data"]):
+        conta = mapa.get(padrao_de(l["historico"]))
+        if conta in (None, "", "IGNORAR"):
+            continue
+        inicia = 1 if l["data"] != dia_anterior else None
+        dia_anterior = l["data"]
+        if l["credito"]:  # entrada: débito banco / crédito contrapartida
+            deb, cred, valor = conta_banco, conta, l["credito"]
+        else:             # saída: débito contrapartida / crédito banco
+            deb, cred, valor = conta, conta_banco, l["debito"]
+        ws.append([l["data"], deb, cred, valor, None, l["historico"], inicia,
+                   None, None, None])
+    for cell in ws["A"]:
+        if cell.row > 1:
+            cell.number_format = "DD/MM/YYYY"
+    wb.save(str(caminho))
+
+
+def localizar_plano():
+    """Plano de contas é ativo do projeto: uploads/plano_contas.* ou similar."""
+    import glob
+    for pat in ("uploads/plano*conta*.*", "uploads/*contas*.*", "uploads/*.xls"):
+        hits = sorted(glob.glob(pat))
+        if hits:
+            return hits[0]
+    return None
+
+
+def main():
+    entrada = get_input()
+    progress("Lendo o extrato", "")
+    pdf = get_file("arquivo") or get_file()
+    if not pdf:
+        set_output({"erro": "Envie o PDF do extrato bancário."})
+        return
+    ext = parse_extrato(pdf)
+    lanc = ext["lancamentos"]
+    progress("Extrato lido", f"{len(lanc)} lançamentos, período "
+             f"{ext['periodo'][0] if ext['periodo'] else '?'} a "
+             f"{ext['periodo'][1] if ext['periodo'] else '?'}")
+    if ext["linhas_inconsistentes"]:
+        log(f"Atenção: {ext['linhas_inconsistentes']} linhas não batem com o saldo.")
+
+    plano_path = localizar_plano()
+    if not plano_path:
+        set_output({"erro": "Plano de contas não encontrado. Anexe o arquivo do "
+                            "plano (xls/xlsx/csv) em uploads/ com 'contas' no nome."})
+        return
+    progress("Lendo o plano de contas", "")
+    contas = carregar_plano(plano_path)
+    progress("Plano de contas lido", f"{len(contas)} contas analíticas")
+
+    regras_rows = get_table("regras_classificacao")
+    regras = {r["padrao"]: r["conta_codigo"] for r in regras_rows}
+    conta_banco = regras.get("_CONTA_BANCO")
+
+    confirmado = entrada.get("_classificacao_confirmada")
+    if not confirmado:
+        # PASS 1: montar a revisão
+        progress("Aplicando suas regras", f"{len(regras)} regras conhecidas")
+        grupos = agrupar(lanc, regras)
+        com_regra = sum(1 for g in grupos if g["origem"] == "regra")
+        progress("Aguardando sua revisão",
+                 f"{com_regra} de {len(grupos)} grupos classificados por regra")
+        datas = [l["data"] for l in lanc if l["data"]]
+        set_output({
+            "_classificacao_review": {
+                "periodo_detectado": {"inicio": ext["periodo"][0], "fim": ext["periodo"][1]}
+                                     if ext["periodo"] else
+                                     {"inicio": min(datas).strftime("%d/%m/%Y"),
+                                      "fim": max(datas).strftime("%d/%m/%Y")},
+                "conta_banco": conta_banco,
+                "grupos": [{k: g[k] for k in
+                            ("padrao", "exemplo", "qtd", "total", "tipo",
+                             "conta", "conta_nome", "origem")} for g in grupos],
+                "contas": contas,
+                "total_lancamentos": len(lanc),
+            },
+            "resumo": {"lancamentos_no_extrato": len(lanc),
+                       "grupos": len(grupos), "classificados_por_regra": com_regra},
+        })
+        return
+
+    # PASS 2: gerar a planilha com o mapa confirmado
+    mapa = {str(k).upper(): str(v) for k, v in confirmado.items()}
+    conta_banco = entrada.get("_conta_banco") or conta_banco
+    if not conta_banco:
+        set_output({"erro": "Conta do banco não informada na revisão."})
+        return
+    periodo = entrada.get("_periodo") or {}
+    ini = dt.datetime.strptime(periodo["inicio"], "%d/%m/%Y").date() if periodo.get("inicio") else None
+    fim = dt.datetime.strptime(periodo["fim"], "%d/%m/%Y").date() if periodo.get("fim") else None
+    progress("Filtrando pela competência",
+             f"{periodo.get('inicio', '')} a {periodo.get('fim', '')}")
+    no_periodo = [l for l in lanc if l["data"] and
+                  (ini is None or l["data"] >= ini) and (fim is None or l["data"] <= fim)]
+    fora = len(lanc) - len(no_periodo)
+    ignorados = sum(1 for l in no_periodo
+                    if mapa.get(padrao_de(l["historico"])) in (None, "", "IGNORAR"))
+    progress("Gerando a planilha do Domínio", f"{len(no_periodo) - ignorados} lançamentos")
+    out = output_path("lancamentos_dominio.xlsx")
+    gerar_xlsx(no_periodo, mapa, conta_banco, out)
+    tot_cred = round(sum(l["credito"] or 0 for l in no_periodo
+                         if mapa.get(padrao_de(l["historico"])) not in (None, "", "IGNORAR")), 2)
+    tot_deb = round(sum(l["debito"] or 0 for l in no_periodo
+                        if mapa.get(padrao_de(l["historico"])) not in (None, "", "IGNORAR")), 2)
+    progress("Pronto", f"créditos R$ {tot_cred:,.2f} | débitos R$ {tot_deb:,.2f}")
+    set_output({
+        "arquivo_resultado": str(out),
+        "resumo": {"lancamentos_importados": len(no_periodo) - ignorados,
+                   "fora_da_competencia": fora, "ignorados_na_revisao": ignorados,
+                   "total_creditos": tot_cred, "total_debitos": tot_deb},
+    })
+
+
+if not get_input().get("_somente_definicoes"):
+    main()
+'''
+
 TEMPLATES: dict[str, dict] = {
     "totais-planilha": {
         "name": "Totais de uma planilha",
@@ -107,6 +364,14 @@ TEMPLATES: dict[str, dict] = {
         "description": "Lê um PDF (mesmo escaneado) com OCR local e entrega o texto estruturado em Excel, com revisão de confiança.",
         "input_fields": [{"name": "arquivo", "label": "PDF ou imagem", "type": "file"}],
         "code": _PDF_PARA_PLANILHA,
+    },
+    "extrato-dominio": {
+        "name": "Extrato bancário para lançamentos (Domínio)",
+        "description": "Lê o extrato em PDF, classifica cada lançamento com suas "
+                       "regras e revisão assistida por IA, e gera a planilha de "
+                       "importação de lançamentos contábeis do Domínio.",
+        "input_fields": [{"name": "arquivo", "label": "Extrato bancário (PDF)", "type": "file"}],
+        "code": _EXTRATO_DOMINIO,
     },
 }
 
