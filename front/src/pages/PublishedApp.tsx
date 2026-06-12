@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Logo, Spinner } from "../components/ui";
 import OcrReview from "../components/OcrReview";
+import ProgressTimeline from "../components/ProgressTimeline";
+import ClassificacaoReview from "../components/ClassificacaoReview";
+import type { ClassificacaoReviewData, ProgressEvent } from "../lib/types";
 
 interface Stage {
   id: number;
@@ -21,9 +24,15 @@ export default function PublishedApp() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [stage, setStage] = useState<Stage | null>(null);
-  const [phase, setPhase] = useState<"form" | "processing" | "result" | "done">("form");
+  const [phase, setPhase] = useState<
+    "form" | "processing" | "review_classif" | "result" | "done"
+  >("form");
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<ProgressEvent[]>([]);
+  const [review, setReview] = useState<ClassificacaoReviewData | null>(null);
+  const [lastInput, setLastInput] = useState<any>(null);
+  const [resultStageRef, setResultStageRef] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`${base}/info`)
@@ -95,11 +104,20 @@ export default function PublishedApp() {
   }
 
   async function pollExecution(execId: string, resultStageId: number | null) {
+    setResultStageRef(resultStageId);
     const tick = async () => {
       const ex = await fetch(`${base}/executions/${execId}?token=${token}`).then((r) =>
         r.json()
       );
+      setProgress(ex.progress || []);
       if (ex.status === "success") {
+        // pass 1 da classificação contábil: abre a revisão em vez do resultado
+        if (ex.output?._classificacao_review) {
+          setReview(ex.output._classificacao_review);
+          setLastInput(ex.input || {});
+          setPhase("review_classif");
+          return;
+        }
         setResult(ex.output);
         if (resultStageId) await loadStage(resultStageId);
         setPhase("result");
@@ -111,6 +129,51 @@ export default function PublishedApp() {
       }
     };
     tick();
+  }
+
+  async function confirmarClassificacao({
+    mapa,
+    contaBanco,
+    periodo,
+    novasRegras,
+  }: {
+    mapa: Record<string, string>;
+    contaBanco: string;
+    periodo: { inicio: string; fim: string };
+    novasRegras: { padrao: string; conta_codigo: string; conta_nome: string }[];
+  }) {
+    if (!stage) return;
+    setBusy(true);
+    if (novasRegras.length) {
+      await fetch(`${base}/regras-classificacao?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regras: novasRegras }),
+      }).catch(() => {});
+    }
+    const fd = new FormData();
+    fd.append("token", token!);
+    fd.append(
+      "payload",
+      JSON.stringify({
+        ...(lastInput || {}),
+        _classificacao_confirmada: mapa,
+        _conta_banco: contaBanco,
+        _periodo: periodo,
+      })
+    );
+    fd.append("file_fields", JSON.stringify([]));
+    const res = await fetch(`${base}/stages/${stage.id}/submit`, {
+      method: "POST",
+      body: fd,
+    }).then((r) => r.json());
+    setBusy(false);
+    setReview(null);
+    setProgress([]);
+    if (res.status === "processing") {
+      setPhase("processing");
+      pollExecution(res.execution_id, res.result_stage_id ?? resultStageRef);
+    }
   }
 
   if (!info)
@@ -165,10 +228,21 @@ export default function PublishedApp() {
         <FormRenderer stage={stage} busy={busy} error={error} onSubmit={submitForm} />
       )}
       {phase === "processing" && (
-        <div className="flex flex-col items-center gap-3 py-8">
-          <Spinner className="h-8 w-8 text-brand-600" />
-          <p className="text-sm text-slate-500">Processando sua solicitação...</p>
+        <div className="py-4">
+          <div className="flex flex-col items-center gap-3 py-4">
+            <Spinner className="h-8 w-8 text-brand-600" />
+            <p className="text-sm text-slate-500">Processando sua solicitação...</p>
+          </div>
+          <ProgressTimeline events={progress} running />
         </div>
+      )}
+      {phase === "review_classif" && review && (
+        <ClassificacaoReview
+          data={review}
+          sugestoesIa={{}}
+          busy={busy}
+          onConfirm={confirmarClassificacao}
+        />
       )}
       {phase === "result" && (
         <ResultRenderer stage={stage} result={result} base={base} token={token} />

@@ -226,6 +226,18 @@ def app_execution(subdomain: str, execution_id: str, token: str | None = None, d
     }
 
 
+@router.post("/{subdomain}/regras-classificacao")
+def app_salvar_regras(subdomain: str, body: dict, token: str | None = None,
+                      db: Session = Depends(get_db)):
+    """Correções feitas na revisão do app publicado viram regras De/Para."""
+    project = _get_live_project(db, subdomain)
+    _require_app_user(db, subdomain, token)
+    from .classify import RegraIn, salvar_regras_interno
+
+    regras = [RegraIn(**r) for r in body.get("regras", [])]
+    return salvar_regras_interno(db, project.id, regras)
+
+
 @router.get("/{subdomain}/download")
 def app_download(subdomain: str, path: str, token: str | None = None, db: Session = Depends(get_db)):
     project = _get_live_project(db, subdomain)
