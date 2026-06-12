@@ -68,6 +68,12 @@ pronto, create_stage se necessário). NUNCA responda apenas dizendo que "vai cri
 código agora" sem incluir o bloco de actions — isso deixa o fluxo sem terminar.
 
 REGRAS DE CÓDIGO:
+- O código deve ser COMPLETO E FUNCIONAL na primeira entrega. É PROIBIDO devolver \
+esqueleto, placeholder ou TODO (nada de `dados = []  # adicione sua lógica`, `pass`, \
+funções vazias ou comentários do tipo "aqui você implementa"). Implemente de verdade a \
+leitura, a transformação e a escrita do resultado, com base na estrutura real do arquivo.
+- NUNCA comente nem omita a linha que grava a saída (`df.to_excel(...)` / `ExcelWriter`); \
+se a automação gera um arquivo, o código TEM que gravá-lo de fato e só então chamar set_output.
 - Scripts Python usam o SDK: `from flowdesk_sdk import get_file, set_output, \
 output_path, log` (get_file() para ler o arquivo de entrada).
 - `set_output` SEMPRE recebe um DICT, nunca uma string. Ex.: \
@@ -94,6 +100,12 @@ PDF E IMAGEM (OCR com validação):
 `from flowdesk_sdk import extract_document` e `doc = extract_document(get_file())`. Ele \
 detecta sozinho: PDF com texto extrai direto; PDF escaneado/imagem usa OCR local. NÃO use \
 pd.read_excel num PDF nem tente OCR manual.
+- IMPORTANTE para TABELAS/EXTRATOS em PDF (colunas de data, histórico, crédito, débito, \
+saldo): o texto puro de `doc["text"]` PERDE o alinhamento das colunas e mistura os valores. \
+Nesse caso, em vez de fatiar o texto linear, use `pdfplumber` direto \
+(`import pdfplumber; pdf = pdfplumber.open(get_file())`) e separe as colunas pelas POSIÇÕES \
+X das palavras (`page.extract_words()` e o campo `x0`/`x1` de cada palavra). É a forma \
+confiável de saber qual número é crédito, débito ou saldo.
 - `doc` traz: `doc["text"]` (texto), `doc["mean_confidence"]` (0..1 ou None), \
 `doc["needs_review"]` (True quando o OCR teve baixa confiança) e `doc["low_confidence"]` \
 (linhas duvidosas). SEMPRE que a entrada passar por OCR, inclua no set_output a chave \
@@ -388,6 +400,12 @@ def _generate_build(messages: list[dict]):
             "Inclua SEMPRE pelo menos um create_file com o script Python completo, "
             "usando o SDK (get_file() para ler entrada, output_path() e set_output(DICT) "
             "para saída), pandas 2.x (NÃO use df.append; use pd.concat). "
+            "O código deve ser COMPLETO E FUNCIONAL: PROIBIDO placeholder, esqueleto ou TODO "
+            "(nada de 'dados = []  # adicione sua lógica', pass ou funções vazias), e NUNCA "
+            "comente a linha que grava o arquivo (df.to_excel deve rodar de fato). "
+            "Para TABELAS/EXTRATOS em PDF (colunas crédito/débito/saldo), o texto puro perde o "
+            "alinhamento: use pdfplumber direto (pdfplumber.open(get_file()), page.extract_words()) "
+            "e separe as colunas pelas posições x das palavras. "
             "Se a entrada for PDF ou imagem, use `from flowdesk_sdk import extract_document` "
             "e `doc = extract_document(get_file())` (NÃO use pd.read_excel num PDF); quando "
             "doc vier de OCR, inclua no set_output a chave `_ocr_review` = {'text': doc['text'], "

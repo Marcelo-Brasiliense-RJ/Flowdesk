@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
-import { api } from "../lib/api";
+import { api, getToken } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type {
   Execution,
@@ -1325,7 +1325,40 @@ function TestPanel({
   const resultFile = exec?.output_data?.arquivo_resultado as string | undefined;
   const review = exec?.output_data?._ocr_review;
   const [reviewed, setReviewed] = useState(false);
+  const [dlError, setDlError] = useState("");
   const blockedByReview = !!review?.needs_review && !reviewed;
+  // sucesso "vazio": rodou sem erro mas não extraiu nada (ex: 0 lançamentos).
+  // não é um teste de verdade bem-sucedido, então avisamos em vez de comemorar.
+  const looksEmpty =
+    !!summary &&
+    typeof summary === "object" &&
+    Object.values(summary).length > 0 &&
+    Object.values(summary).every(
+      (v) => v === 0 || v === "" || v == null || (Array.isArray(v) && v.length === 0)
+    );
+
+  async function downloadResult(path: string) {
+    setDlError("");
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/fs/download?path=${encodeURIComponent(path)}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } }
+      );
+      if (!res.ok) {
+        setDlError("Não foi possível baixar o arquivo. Rode o teste novamente.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = path.split(/[\\/]/).pop() || "resultado";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDlError("Falha de conexão ao baixar o arquivo.");
+    }
+  }
 
   return (
     <div className="overflow-hidden rounded-2xl border-2 border-accent-200 bg-white shadow-md ring-1 ring-accent-100/60">
@@ -1392,16 +1425,36 @@ function TestPanel({
         {exec && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
             {passed ? (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                <div className="text-sm font-medium text-emerald-700">Teste concluído com sucesso</div>
+              <div className={`rounded-lg border p-3 ${looksEmpty ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+                <div className={`text-sm font-medium ${looksEmpty ? "text-amber-800" : "text-emerald-700"}`}>
+                  {looksEmpty ? "O teste rodou, mas o resultado veio vazio" : "Teste concluído com sucesso"}
+                </div>
+                {looksEmpty && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    A automação executou sem erro, porém não extraiu nenhum dado do arquivo. Baixe o
+                    resultado para conferir e, se estiver vazio mesmo, ajuste a etapa de Processamento
+                    (ou abra o modo avançado para ver os detalhes).
+                  </p>
+                )}
                 {summary && (
                   <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs text-slate-600">
                     {JSON.stringify(summary, null, 2)}
                   </pre>
                 )}
                 {resultFile && (
-                  <div className="mt-2 text-xs text-slate-500">
-                    Arquivo gerado: {String(resultFile).split(/[\\/]/).pop()} (disponível no app publicado e no modo avançado).
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => downloadResult(resultFile)}
+                      className="btn-accent inline-flex items-center gap-1.5 py-1.5 text-xs"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      Baixar resultado ({String(resultFile).split(/[\\/]/).pop()})
+                    </button>
+                    {dlError && <span className="text-xs text-red-600">{dlError}</span>}
                   </div>
                 )}
               </div>
@@ -1432,14 +1485,17 @@ function TestPanel({
       )}
 
       <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
-        <motion.button onClick={publish} disabled={!passed || publishing || published || blockedByReview}
+        <motion.button onClick={publish} disabled={!passed || looksEmpty || publishing || published || blockedByReview}
           whileTap={{ scale: 0.97 }}
           className="btn-primary py-1.5 text-sm disabled:opacity-40"
-          title={blockedByReview ? "Confirme a revisão do OCR antes de publicar" : passed ? "" : "Rode um teste com sucesso antes de publicar"}>
+          title={blockedByReview ? "Confirme a revisão do OCR antes de publicar" : looksEmpty ? "O teste não extraiu dados; ajuste antes de publicar" : passed ? "" : "Rode um teste com sucesso antes de publicar"}>
           {published ? "Publicado ✓" : publishing ? "Publicando…" : "Publicar"}
         </motion.button>
         {blockedByReview && (
           <span className="text-xs text-amber-600">Confirme a revisão do OCR para publicar.</span>
+        )}
+        {passed && looksEmpty && !published && (
+          <span className="text-xs text-amber-600">O teste não extraiu dados. Ajuste o Processamento antes de publicar.</span>
         )}
         {!passed && !published && (
           <span className="text-xs text-slate-400">Publicar libera após um teste bem-sucedido.</span>

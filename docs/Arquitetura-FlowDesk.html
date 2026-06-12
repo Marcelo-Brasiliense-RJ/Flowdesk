@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Arquitetura FlowDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root{
+    --ink:#14181f;          /* texto principal, quase preto */
+    --ink-soft:#3a4150;      /* texto secundário */
+    --muted:#6b7280;         /* texto auxiliar */
+    --faint:#9aa1ad;         /* captions */
+    --accent:#a16207;        /* dourado, WCAG safe */
+    --accent-deep:#7c4a06;
+    --gold-bg:#fbf6ec;       /* fundo de nota */
+    --paper:#ffffff;
+    --surface:#fafafa;
+    --surface-2:#f5f6f8;
+    --border:#e5e5e5;
+    --hairline:#ededed;
+    --red:#b3261e;
+    --red-bg:#fbecea;
+    --amber:#8a6d10;
+    --amber-bg:#fbf4e2;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--paper); }
+  body{
+    font-family:"Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+    color:var(--ink); font-size:10.5pt; line-height:1.62; font-weight:400;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    letter-spacing:.005em;
+  }
+  @page{ size:A4; margin:20mm 18mm 18mm 18mm; }
+  @page :first{ margin:0; }
+
+  /* ---------- tipografia ---------- */
+  .serif{ font-family:"Playfair Display", Georgia, serif; }
+  .mono{ font-family:"JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+
+  h2{
+    font-family:"Playfair Display", Georgia, serif;
+    font-size:21pt; font-weight:700; color:var(--ink); line-height:1.15;
+    margin:0; letter-spacing:-0.01em;
+  }
+  h3{
+    font-size:11pt; font-weight:600; color:var(--ink); margin:20px 0 5px;
+    letter-spacing:.01em;
+  }
+  p{ margin:7px 0; color:var(--ink-soft); }
+  strong,b{ color:var(--ink); font-weight:600; }
+  ul,ol{ margin:7px 0 7px 18px; padding:0; color:var(--ink-soft); }
+  li{ margin:4px 0; }
+  code{
+    font-family:"JetBrains Mono", Consolas, monospace; font-size:8.6pt;
+    background:var(--surface-2); padding:1.5px 5px; border-radius:4px;
+    color:var(--accent-deep); border:1px solid var(--hairline);
+  }
+  .muted{ color:var(--muted); }
+  .faint{ color:var(--faint); }
+  .small{ font-size:9pt; }
+  .lead{ font-size:11.5pt; line-height:1.6; color:var(--ink-soft); font-weight:300; }
+
+  /* ---------- capa ---------- */
+  .cover{
+    position:relative; height:297mm; background:var(--ink); color:#fff;
+    padding:34mm 26mm 30mm; display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  .cover::before{
+    content:""; position:absolute; top:14mm; left:26mm; right:26mm; height:2px;
+    background:var(--accent);
+  }
+  .cover .brand{ display:flex; align-items:center; gap:11px; }
+  .cover .mark{
+    width:34px; height:34px; border:1.5px solid var(--accent); border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:"Playfair Display",serif; font-weight:800; font-size:17px; color:var(--accent);
+  }
+  .cover .brand-name{ font-size:15pt; font-weight:600; letter-spacing:.04em; }
+  .cover .brand-name span{ color:var(--accent); }
+  .cover .eyebrow{
+    margin-top:auto; font-size:9pt; letter-spacing:.42em; text-transform:uppercase;
+    color:var(--accent); font-weight:500;
+  }
+  .cover .title{
+    font-family:"Playfair Display", serif; font-weight:700;
+    font-size:46pt; line-height:1.04; margin:14px 0 0; letter-spacing:-0.02em;
+  }
+  .cover .title em{ font-style:italic; color:#e9d9bb; font-weight:500; }
+  .cover .tagline{
+    margin-top:20px; font-size:12pt; line-height:1.55; color:#c4cad6;
+    max-width:128mm; font-weight:300;
+  }
+  .cover .meta{
+    margin-top:30px; padding-top:16px; border-top:1px solid rgba(255,255,255,.16);
+    font-size:8.6pt; letter-spacing:.06em; color:#8c93a1; text-transform:uppercase;
+    display:grid; grid-template-columns:1fr 1fr; gap:7px 24px; max-width:130mm;
+  }
+  .cover .meta b{ color:#e6e9ee; font-weight:600; }
+
+  /* ---------- páginas internas ---------- */
+  .page{ page-break-before:always; }
+  .eyebrow-bar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:7.6pt; letter-spacing:.28em; text-transform:uppercase;
+    color:var(--faint); padding-bottom:10px; margin-bottom:18px;
+    border-bottom:1px solid var(--hairline);
+  }
+  .eyebrow-bar .b span{ color:var(--accent); }
+
+  .sec-head{ display:flex; align-items:baseline; gap:16px; margin-bottom:14px; }
+  .sec-num{
+    font-family:"Playfair Display", serif; font-size:34pt; font-weight:400;
+    color:var(--accent); line-height:1; flex:none; font-style:italic;
+  }
+  .sec-head .rule{ flex:none; }
+  section{ margin-bottom:16px; }
+
+  /* ---------- cards ---------- */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+  .card{
+    border:1px solid var(--border); border-radius:10px; padding:13px 15px;
+    background:var(--paper); break-inside:avoid;
+  }
+  .card.soft{ background:var(--surface); }
+  .card h4{
+    margin:0 0 5px; font-size:10pt; color:var(--ink); font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .card p{ margin:3px 0; font-size:9pt; color:var(--ink-soft); line-height:1.5; }
+
+  .pill{
+    display:inline-block; font-size:7.3pt; font-weight:600; letter-spacing:.08em;
+    padding:2.5px 8px; border-radius:999px; text-transform:uppercase; vertical-align:middle;
+    border:1px solid transparent;
+  }
+  .pill.ink{ background:var(--ink); color:#fff; }
+  .pill.gold{ background:var(--gold-bg); color:var(--accent-deep); border-color:#ecdcc0; }
+  .pill.line{ background:#fff; color:var(--muted); border-color:var(--border); }
+  .pill.warn{ background:var(--amber-bg); color:var(--amber); border-color:#ecdcae; }
+  .pill.danger{ background:var(--red-bg); color:var(--red); border-color:#f0cfca; }
+
+  /* ---------- tabelas ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:9pt; margin:10px 0; break-inside:avoid; }
+  th,td{ text-align:left; padding:8px 11px; vertical-align:top; }
+  th{
+    font-size:7.8pt; text-transform:uppercase; letter-spacing:.09em;
+    color:var(--muted); font-weight:600; border-bottom:1.5px solid var(--ink);
+  }
+  td{ border-bottom:1px solid var(--hairline); color:var(--ink-soft); }
+  tbody tr:last-child td{ border-bottom:1px solid var(--hairline); }
+  td code{ background:var(--paper); }
+  td .pill{ margin:0; }
+
+  /* ---------- figuras ---------- */
+  .figure{ text-align:center; margin:16px 0; break-inside:avoid; }
+  .figure svg{ max-width:100%; height:auto; }
+  .caption{
+    font-size:8pt; color:var(--faint); margin-top:8px; letter-spacing:.04em;
+    text-transform:uppercase;
+  }
+  .caption b{ color:var(--muted); font-weight:600; }
+
+  /* ---------- callouts ---------- */
+  .note,.warnbox,.dangerbox{
+    padding:11px 15px 11px 16px; border-radius:0 9px 9px 0; margin:12px 0;
+    font-size:9.3pt; line-height:1.55; break-inside:avoid; position:relative;
+  }
+  .note{ background:var(--gold-bg); border-left:3px solid var(--accent); color:var(--ink-soft); }
+  .warnbox{ background:var(--amber-bg); border-left:3px solid var(--amber); color:var(--ink-soft); }
+  .note .lbl,.warnbox .lbl{
+    display:block; font-size:7.4pt; letter-spacing:.14em; text-transform:uppercase;
+    font-weight:700; margin-bottom:3px;
+  }
+  .note .lbl{ color:var(--accent-deep); }
+  .warnbox .lbl{ color:var(--amber); }
+
+  /* ---------- sumário ---------- */
+  .toc{ list-style:none; margin:18px 0 0; padding:0; }
+  .toc li{
+    display:flex; align-items:baseline; gap:14px; padding:10px 0;
+    border-bottom:1px solid var(--hairline); font-size:11.5pt; color:var(--ink);
+  }
+  .toc .n{
+    font-family:"Playfair Display",serif; font-style:italic; font-size:13pt;
+    color:var(--accent); width:30px; flex:none; text-align:right; font-weight:500;
+  }
+  .toc .t{ flex:1; font-weight:500; }
+  .toc .dot{ flex:1; border-bottom:1px dotted var(--border); transform:translateY(-3px); }
+
+  .kicker{
+    font-size:8pt; letter-spacing:.2em; text-transform:uppercase; color:var(--accent);
+    font-weight:600; margin-bottom:8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ CAPA ============ -->
+<div class="cover">
+  <div class="brand">
+    <div class="mark">F</div>
+    <div class="brand-name">Flow<span>Desk</span></div>
+  </div>
+
+  <div class="eyebrow">Plataforma de automação com IA · IRKO</div>
+  <div class="title">Documento de<br/><em>Arquitetura</em></div>
+  <div class="tagline">
+    Plataforma low-code que transforma uma descrição em linguagem natural em
+    automações executáveis e publicáveis, com assistente de IA, runtime isolado
+    e aplicações internas para usuários não técnicos.
+  </div>
+
+  <div class="meta">
+    <div><b>Versão da API</b><br/>1.0.0</div>
+    <div><b>Escopo</b><br/>Backend FastAPI · Frontend React · Runtime</div>
+    <div><b>Data de referência</b><br/>Junho de 2026</div>
+    <div><b>Origem</b><br/>Código-fonte, branch main</div>
+  </div>
+</div>
+
+<!-- ============ SUMÁRIO ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Sumário</div></div>
+  <h2>Sumário</h2>
+  <ol class="toc">
+    <li><span class="n">01</span><span class="t">Visão geral e stack tecnológico</span><span class="dot"></span></li>
+    <li><span class="n">02</span><span class="t">Arquitetura de alto nível</span><span class="dot"></span></li>
+    <li><span class="n">03</span><span class="t">Frontend: os dois modos de uso</span><span class="dot"></span></li>
+    <li><span class="n">04</span><span class="t">Backend: API e routers</span><span class="dot"></span></li>
+    <li><span class="n">05</span><span class="t">Persistência e modelo de dados</span><span class="dot"></span></li>
+    <li><span class="n">06</span><span class="t">Runtime de execução de automações</span><span class="dot"></span></li>
+    <li><span class="n">07</span><span class="t">Camada de inteligência artificial</span><span class="dot"></span></li>
+    <li><span class="n">08</span><span class="t">Apps publicados e controle de acesso</span><span class="dot"></span></li>
+    <li><span class="n">09</span><span class="t">Fluxos principais (ponta a ponta)</span><span class="dot"></span></li>
+    <li><span class="n">10</span><span class="t">Decisões de arquitetura e trade-offs</span><span class="dot"></span></li>
+    <li><span class="n">11</span><span class="t">Riscos e pontos de atenção</span><span class="dot"></span></li>
+  </ol>
+
+  <div class="note">
+    <span class="lbl">Sobre este documento</span>
+    Descreve a arquitetura tal como implementada no código, não a intenção de
+    projeto. Onde código e expectativa divergem, o texto registra a realidade do
+    código e sinaliza o ponto.
+  </div>
+</div>
+
+<!-- ============ 1 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 01</div></div>
+  <div class="sec-head"><div class="sec-num">01</div><h2>Visão geral e<br/>stack tecnológico</h2></div>
+  <section>
+    <p class="lead">
+      O FlowDesk é uma plataforma de automação low-code para a IRKO. O usuário
+      descreve um processo, conciliar duas planilhas ou extrair dados de um PDF,
+      por exemplo, e um assistente de IA conduz uma entrevista, monta o fluxo e
+      escreve o código Python. O resultado é uma automação que pode ser testada,
+      versionada e publicada como uma aplicação interna com formulário próprio.
+    </p>
+
+    <div class="grid2" style="margin-top:14px;">
+      <div class="card soft">
+        <h4>Frontend</h4>
+        <p>React 18 + TypeScript + Vite</p>
+        <p>Tailwind CSS, React Router, Framer Motion</p>
+        <p>React Flow (canvas), Monaco (editor de código)</p>
+        <p>react-markdown (chat)</p>
+      </div>
+      <div class="card soft">
+        <h4>Backend</h4>
+        <p>FastAPI (Python), Uvicorn</p>
+        <p>SQLAlchemy 2.x, Pydantic Settings</p>
+        <p>Streaming SSE no chat, WebSocket no monitor</p>
+      </div>
+      <div class="card soft">
+        <h4>Persistência</h4>
+        <p>Postgres (Supabase) via psycopg v3</p>
+        <p>Fallback automático para SQLite local</p>
+        <p>Arquivos de runtime em disco, por projeto</p>
+      </div>
+      <div class="card soft">
+        <h4>Integrações</h4>
+        <p>OpenAI (gpt-4o-mini) para o assistente</p>
+        <p>OCR local (pdfplumber, PyMuPDF, RapidOCR)</p>
+        <p>SMTP opcional para notificação de falhas</p>
+      </div>
+    </div>
+
+    <h3>Os dez módulos de produto</h3>
+    <p class="small muted">
+      Assistente de criação · Smart Chat · Editor de fluxo (canvas) · Código-fonte
+      (Monaco) · Gerenciador de arquivos · Histórico de versões · Monitor de
+      workflow · Controle de acesso · Configurações do projeto · App publicado.
+    </p>
+  </section>
+</div>
+
+<!-- ============ 2 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 02</div></div>
+  <div class="sec-head"><div class="sec-num">02</div><h2>Arquitetura de<br/>alto nível</h2></div>
+  <section>
+    <p>
+      A aplicação segue um modelo cliente-servidor clássico: uma SPA React conversa
+      com uma API FastAPI por HTTP/JSON. A API concentra três responsabilidades,
+      servir o console interno, executar automações em um runtime próprio e expor
+      os apps publicados ao público autorizado.
+    </p>
+
+    <div class="figure">
+      <svg viewBox="0 0 760 400" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+        <defs>
+          <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#9aa1ad"/>
+          </marker>
+        </defs>
+
+        <!-- clientes -->
+        <rect x="20" y="30" width="200" height="66" rx="10" fill="#fafafa" stroke="#e5e5e5"/>
+        <text x="120" y="57" text-anchor="middle" font-size="12.5" font-weight="600" fill="#14181f">Console interno</text>
+        <text x="120" y="76" text-anchor="middle" font-size="9.5" fill="#6b7280">SPA React (admin/dev/user)</text>
+
+        <rect x="20" y="118" width="200" height="66" rx="10" fill="#fbf6ec" stroke="#e0cba0"/>
+        <text x="120" y="145" text-anchor="middle" font-size="12.5" font-weight="600" fill="#7c4a06">App publicado</text>
+        <text x="120" y="164" text-anchor="middle" font-size="9.5" fill="#6b7280">/app/&lt;subdomínio&gt;</text>
+
+        <!-- API -->
+        <rect x="300" y="36" width="200" height="200" rx="12" fill="#14181f"/>
+        <text x="400" y="64" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff" font-family="Playfair Display, serif">FastAPI</text>
+        <text x="400" y="82" text-anchor="middle" font-size="8.5" fill="#9aa1ad">17 routers REST + SSE + WS</text>
+        <rect x="318" y="96" width="164" height="25" rx="6" fill="#232934"/>
+        <text x="400" y="112.5" text-anchor="middle" font-size="9" fill="#d7dbe2">Auth · Projetos · Chat</text>
+        <rect x="318" y="127" width="164" height="25" rx="6" fill="#232934"/>
+        <text x="400" y="143.5" text-anchor="middle" font-size="9" fill="#d7dbe2">Wizard · Repair · Builds</text>
+        <rect x="318" y="158" width="164" height="25" rx="6" fill="#232934"/>
+        <text x="400" y="174.5" text-anchor="middle" font-size="9" fill="#d7dbe2">Published · Admin · Manage</text>
+        <rect x="318" y="189" width="164" height="29" rx="6" fill="#a16207"/>
+        <text x="400" y="208" text-anchor="middle" font-size="9" font-weight="600" fill="#fff">Runtime + Scheduler (in-process)</text>
+
+        <!-- dependências -->
+        <rect x="575" y="22" width="165" height="50" rx="10" fill="#fff" stroke="#e5e5e5"/>
+        <text x="657" y="42" text-anchor="middle" font-size="10.5" font-weight="600" fill="#14181f">Banco de dados</text>
+        <text x="657" y="59" text-anchor="middle" font-size="8.3" fill="#6b7280">Supabase Postgres / SQLite</text>
+
+        <rect x="575" y="84" width="165" height="50" rx="10" fill="#fff" stroke="#e0cba0"/>
+        <text x="657" y="104" text-anchor="middle" font-size="10.5" font-weight="600" fill="#7c4a06">OpenAI</text>
+        <text x="657" y="121" text-anchor="middle" font-size="8.3" fill="#6b7280">gpt-4o-mini (streaming)</text>
+
+        <rect x="575" y="146" width="165" height="50" rx="10" fill="#fff" stroke="#e5e5e5"/>
+        <text x="657" y="166" text-anchor="middle" font-size="10.5" font-weight="600" fill="#14181f">Subprocessos Python</text>
+        <text x="657" y="183" text-anchor="middle" font-size="8.3" fill="#6b7280">1 processo por execução</text>
+
+        <rect x="575" y="208" width="165" height="46" rx="10" fill="#fafafa" stroke="#ededed"/>
+        <text x="657" y="227" text-anchor="middle" font-size="10.5" font-weight="600" fill="#14181f">SMTP (opcional)</text>
+        <text x="657" y="243" text-anchor="middle" font-size="8.3" fill="#6b7280">alerta de falha de job</text>
+
+        <!-- disco -->
+        <rect x="300" y="270" width="200" height="48" rx="10" fill="#f5f6f8" stroke="#ededed"/>
+        <text x="400" y="290" text-anchor="middle" font-size="10.5" font-weight="600" fill="#14181f">Disco por projeto</text>
+        <text x="400" y="307" text-anchor="middle" font-size="8.3" fill="#6b7280">src · uploads · output · runs</text>
+
+        <!-- setas -->
+        <line x1="220" y1="63" x2="300" y2="86" stroke="#9aa1ad" marker-end="url(#arr)"/>
+        <line x1="220" y1="151" x2="300" y2="150" stroke="#9aa1ad" marker-end="url(#arr)"/>
+        <line x1="500" y1="86" x2="575" y2="52" stroke="#9aa1ad" marker-end="url(#arr)"/>
+        <line x1="500" y1="115" x2="575" y2="109" stroke="#9aa1ad" marker-end="url(#arr)"/>
+        <line x1="500" y1="172" x2="575" y2="171" stroke="#9aa1ad" marker-end="url(#arr)"/>
+        <line x1="500" y1="203" x2="575" y2="230" stroke="#9aa1ad" marker-end="url(#arr)"/>
+        <line x1="400" y1="236" x2="400" y2="270" stroke="#9aa1ad" marker-end="url(#arr)"/>
+
+        <text x="248" y="350" font-size="8.4" fill="#9aa1ad" letter-spacing="0.5">HTTP/JSON · SSE (chat) · WebSocket (monitor)</text>
+      </svg>
+      <div class="caption"><b>Figura 1.</b> Componentes principais e suas dependências</div>
+    </div>
+
+    <div class="note">
+      <span class="lbl">Ponto-chave</span>
+      O backend é um único processo FastAPI. O runtime de execução e o scheduler
+      de jobs rodam dentro desse processo, como tarefas asyncio. Não há serviço de
+      fila externo nem orquestrador de containers.
+    </div>
+  </section>
+</div>
+
+<!-- ============ 3 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 03</div></div>
+  <div class="sec-head"><div class="sec-num">03</div><h2>Frontend: os dois<br/>modos de uso</h2></div>
+  <section>
+    <p>
+      O console foi desenhado para duas audiências distintas, com gate por papel
+      definido em <code>App.tsx</code>.
+    </p>
+
+    <div class="grid2" style="margin-top:12px;">
+      <div class="card">
+        <h4>Modo assistente <span class="pill gold">todos</span></h4>
+        <p>Caminho do usuário não técnico. Conversa em linguagem natural, responde
+        à entrevista guiada e testa o resultado. Sem contato com código.</p>
+        <p class="faint" style="margin-top:6px;">Páginas: Console, Chat, Wizard, App publicado.</p>
+      </div>
+      <div class="card">
+        <h4>Modo avançado <span class="pill ink">admin / dev</span></h4>
+        <p>Editor de fluxo (React Flow), editor de código (Monaco), gerenciador de
+        arquivos, versões, logs e monitor de workflow.</p>
+        <p class="faint" style="margin-top:6px;">Protegido por <code>EditorGate</code>: usuário comum é redirecionado ao assistente.</p>
+      </div>
+    </div>
+
+    <h3>Páginas (front/src/pages)</h3>
+    <table>
+      <thead><tr><th>Página</th><th>Função</th><th>Acesso</th></tr></thead>
+      <tbody>
+        <tr><td><code>Login</code></td><td>Autenticação por e-mail e senha</td><td><span class="pill line">público</span></td></tr>
+        <tr><td><code>Console</code></td><td>Lista de automações, pastas, galeria de modelos</td><td><span class="pill line">autenticado</span></td></tr>
+        <tr><td><code>Chat</code> · <code>Wizard</code></td><td>Criação e refino guiados por IA</td><td><span class="pill line">autenticado</span></td></tr>
+        <tr><td><code>Editor</code></td><td>Canvas de fluxo + Monaco</td><td><span class="pill ink">admin/dev</span></td></tr>
+        <tr><td><code>WorkflowMonitor</code></td><td>Execuções em tempo real (WebSocket)</td><td><span class="pill line">autenticado</span></td></tr>
+        <tr><td><code>Builds</code> · <code>Logs</code> · <code>Files</code></td><td>Versões, logs e arquivos do projeto</td><td><span class="pill line">autenticado</span></td></tr>
+        <tr><td><code>Manage</code> · <code>Admin</code></td><td>Saúde das automações, usuários, uso de IA</td><td><span class="pill ink">admin/dev</span></td></tr>
+        <tr><td><code>PublishedApp</code></td><td>App publicado com formulário próprio</td><td><span class="pill gold">whitelist</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<!-- ============ 4 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 04</div></div>
+  <div class="sec-head"><div class="sec-num">04</div><h2>Backend:<br/>API e routers</h2></div>
+  <section>
+    <p>
+      A API expõe rotas sob o prefixo <code>/api</code>. Cada router cobre um
+      domínio. O bootstrap em <code>main.py</code> registra os 17 routers, cria os
+      índices, aplica micro-migrações e sobe runtime e scheduler.
+    </p>
+
+    <table>
+      <thead><tr><th>Router</th><th>Responsabilidade</th></tr></thead>
+      <tbody>
+        <tr><td><code>auth</code></td><td>Login, emissão de token JWT, usuário atual</td></tr>
+        <tr><td><code>projects</code></td><td>CRUD de projetos, pastas, stages, edges, arquivos-fonte</td></tr>
+        <tr><td><code>chat</code></td><td>Smart Chat: streaming OpenAI e ações pendentes (aprovar/rejeitar)</td></tr>
+        <tr><td><code>wizard</code></td><td>Assistente de criação guiado por IA (análise da intenção)</td></tr>
+        <tr><td><code>repair</code></td><td>Auto-reparo de código com IA ciente do ambiente</td></tr>
+        <tr><td><code>executions</code></td><td>Disparo e consulta de execuções</td></tr>
+        <tr><td><code>builds</code></td><td>Versões imutáveis (snapshot) e restauração (rollback)</td></tr>
+        <tr><td><code>published</code></td><td>App público: info, login, formulário, submit, download</td></tr>
+        <tr><td><code>realtime</code></td><td>WebSocket do monitor de workflow</td></tr>
+        <tr><td><code>dashboard</code> · <code>manage</code></td><td>Métricas e gestão de saúde das automações</td></tr>
+        <tr><td><code>admin</code></td><td>Gestão de usuários e papéis, uso de IA</td></tr>
+        <tr><td><code>filemanager</code> · <code>settings</code> · <code>hooks</code> · <code>templates</code></td><td>Arquivos, configurações, webhooks, galeria de modelos</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <span class="lbl">Autenticação</span>
+      O console usa token JWT (expiração de 7 dias). O papel efetivo combina a
+      coluna <code>users.role</code> com listas de e-mail em variáveis de ambiente
+      (<code>ADMIN_EMAILS</code> / <code>DEV_EMAILS</code>).
+    </div>
+  </section>
+</div>
+
+<!-- ============ 5 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 05</div></div>
+  <div class="sec-head"><div class="sec-num">05</div><h2>Persistência e<br/>modelo de dados</h2></div>
+  <section>
+    <p>
+      A seleção do banco é automática em <code>database.py</code>: se
+      <code>SUPABASE_DB_URL</code> (ou <code>DATABASE_URL</code>) estiver definida,
+      usa Postgres com o driver <code>psycopg</code> v3 e <code>pool_pre_ping</code>;
+      caso contrário, cai para SQLite local. O mesmo conjunto de modelos
+      SQLAlchemy serve aos dois bancos.
+    </p>
+
+    <div class="note">
+      <span class="lbl">Separação importante</span>
+      O código-fonte das automações vive em linhas <code>SourceFile</code> no banco,
+      por isso persiste e versiona. Já os arquivos de execução, uploads, saídas e o
+      input/output de cada run, vivem em disco sob
+      <code>back/storage/&lt;projeto&gt;/</code>, materializados para a pasta
+      <code>src</code> a cada execução, junto do <code>flowdesk_sdk.py</code>.
+    </div>
+
+    <div class="figure">
+      <svg viewBox="0 0 760 348" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+        <defs>
+          <marker id="ln" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#c2b189"/>
+          </marker>
+        </defs>
+        <g font-size="9.2">
+          <rect x="300" y="12" width="160" height="36" rx="8" fill="#14181f"/>
+          <text x="380" y="35" text-anchor="middle" fill="#fff" font-weight="600">Organization</text>
+
+          <rect x="118" y="82" width="152" height="36" rx="8" fill="#fbf6ec" stroke="#e0cba0"/>
+          <text x="194" y="105" text-anchor="middle" fill="#7c4a06" font-weight="600">User (role)</text>
+
+          <rect x="300" y="82" width="160" height="36" rx="8" fill="#a16207"/>
+          <text x="380" y="105" text-anchor="middle" fill="#fff" font-weight="600">Project</text>
+
+          <rect x="500" y="82" width="150" height="36" rx="8" fill="#fafafa" stroke="#e5e5e5"/>
+          <text x="575" y="105" text-anchor="middle" fill="#14181f" font-weight="600">ProjectFolder</text>
+
+          <rect x="118" y="154" width="152" height="34" rx="8" fill="#232934"/>
+          <text x="194" y="176" text-anchor="middle" fill="#fff" font-weight="600">Stage (form/script/job)</text>
+
+          <rect x="300" y="154" width="160" height="34" rx="8" fill="#232934"/>
+          <text x="380" y="176" text-anchor="middle" fill="#fff" font-weight="600">Edge</text>
+
+          <rect x="500" y="154" width="150" height="34" rx="8" fill="#fafafa" stroke="#e5e5e5"/>
+          <text x="575" y="176" text-anchor="middle" fill="#14181f" font-weight="600">SourceFile</text>
+
+          <rect x="118" y="222" width="152" height="34" rx="8" fill="#fafafa" stroke="#e5e5e5"/>
+          <text x="194" y="244" text-anchor="middle" fill="#14181f" font-weight="600">Execution</text>
+
+          <rect x="300" y="222" width="160" height="34" rx="8" fill="#fafafa" stroke="#e5e5e5"/>
+          <text x="380" y="244" text-anchor="middle" fill="#14181f" font-weight="600">Build (snapshot)</text>
+
+          <rect x="500" y="222" width="150" height="34" rx="8" fill="#fafafa" stroke="#e5e5e5"/>
+          <text x="575" y="244" text-anchor="middle" fill="#14181f" font-weight="600">ChatMessage</text>
+
+          <rect x="118" y="288" width="152" height="34" rx="8" fill="#fff" stroke="#ededed"/>
+          <text x="194" y="310" text-anchor="middle" fill="#3a4150" font-weight="600">EnvVar · ApiKey</text>
+
+          <rect x="300" y="288" width="160" height="34" rx="8" fill="#fff" stroke="#ededed"/>
+          <text x="380" y="310" text-anchor="middle" fill="#3a4150" font-weight="600">PendingAction</text>
+
+          <rect x="500" y="288" width="150" height="34" rx="8" fill="#fff" stroke="#ededed"/>
+          <text x="575" y="310" text-anchor="middle" fill="#3a4150" font-weight="600">ProjectMember</text>
+        </g>
+        <g stroke="#c2b189" fill="none" stroke-width="1.1">
+          <line x1="360" y1="48" x2="240" y2="82" marker-end="url(#ln)"/>
+          <line x1="380" y1="48" x2="380" y2="82" marker-end="url(#ln)"/>
+          <line x1="460" y1="100" x2="500" y2="100" marker-end="url(#ln)"/>
+          <line x1="340" y1="118" x2="240" y2="154" marker-end="url(#ln)"/>
+          <line x1="380" y1="118" x2="380" y2="154" marker-end="url(#ln)"/>
+          <line x1="420" y1="118" x2="540" y2="154" marker-end="url(#ln)"/>
+          <line x1="300" y1="171" x2="270" y2="171" marker-end="url(#ln)"/>
+          <line x1="335" y1="118" x2="200" y2="222" marker-end="url(#ln)"/>
+          <line x1="380" y1="118" x2="380" y2="222" marker-end="url(#ln)"/>
+        </g>
+        <text x="22" y="118" font-size="8" fill="#9aa1ad" transform="rotate(-90 22 118)" letter-spacing="1">MULTI-TENANT POR ORGANIZAÇÃO</text>
+      </svg>
+      <div class="caption"><b>Figura 2.</b> Modelo de dados, principais entidades e relações</div>
+    </div>
+
+    <p class="small faint">
+      Demais tabelas: Role, Connector, DataTable/DataRow (tabelas internas do
+      projeto), todas vinculadas a um projeto.
+    </p>
+  </section>
+</div>
+
+<!-- ============ 6 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 06</div></div>
+  <div class="sec-head"><div class="sec-num">06</div><h2>Runtime de execução<br/>de automações</h2></div>
+  <section>
+    <p>
+      O coração da execução é o <code>RuntimeManager</code>
+      (<code>runtime/runner.py</code>): uma fila FIFO asyncio com um worker. Cada
+      stage do tipo script ou job vira uma execução enfileirada; o worker a executa
+      em um <b>subprocesso Python isolado</b>, com as variáveis de ambiente do
+      projeto injetadas e o código materializado em disco.
+    </p>
+
+    <div class="figure">
+      <svg viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif">
+        <defs>
+          <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#a16207"/>
+          </marker>
+        </defs>
+        <rect x="14" y="58" width="120" height="58" rx="9" fill="#fafafa" stroke="#e5e5e5"/>
+        <text x="74" y="82" text-anchor="middle" font-size="10" font-weight="600" fill="#14181f">Gatilho</text>
+        <text x="74" y="99" text-anchor="middle" font-size="8" fill="#6b7280">manual·agendado·webhook</text>
+
+        <rect x="170" y="58" width="120" height="58" rx="9" fill="#fff" stroke="#e5e5e5"/>
+        <text x="230" y="82" text-anchor="middle" font-size="10" font-weight="600" fill="#14181f">Execution</text>
+        <text x="230" y="99" text-anchor="middle" font-size="8" fill="#6b7280">status: queued</text>
+
+        <rect x="326" y="58" width="120" height="58" rx="9" fill="#14181f"/>
+        <text x="386" y="82" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">Fila + worker</text>
+        <text x="386" y="99" text-anchor="middle" font-size="8" fill="#9aa1ad">asyncio, 1 por vez</text>
+
+        <rect x="482" y="48" width="130" height="78" rx="9" fill="#fbf6ec" stroke="#e0cba0"/>
+        <text x="547" y="73" text-anchor="middle" font-size="10" font-weight="600" fill="#7c4a06">Subprocesso</text>
+        <text x="547" y="90" text-anchor="middle" font-size="8" fill="#7c4a06">Python + flowdesk_sdk</text>
+        <text x="547" y="106" text-anchor="middle" font-size="8" fill="#6b7280">timeout · env do projeto</text>
+
+        <rect x="648" y="58" width="100" height="58" rx="9" fill="#fff" stroke="#e5e5e5"/>
+        <text x="698" y="80" text-anchor="middle" font-size="9.5" font-weight="600" fill="#14181f">output.json</text>
+        <text x="698" y="98" text-anchor="middle" font-size="8" fill="#6b7280">+ arquivos</text>
+
+        <line x1="134" y1="87" x2="170" y2="87" stroke="#a16207" marker-end="url(#a2)"/>
+        <line x1="290" y1="87" x2="326" y2="87" stroke="#a16207" marker-end="url(#a2)"/>
+        <line x1="446" y1="87" x2="482" y2="87" stroke="#a16207" marker-end="url(#a2)"/>
+        <line x1="612" y1="87" x2="648" y2="87" stroke="#a16207" marker-end="url(#a2)"/>
+
+        <path d="M698 116 C698 165, 230 170, 230 118" fill="none" stroke="#c2b189" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+        <text x="430" y="162" text-anchor="middle" font-size="8" fill="#9aa1ad">status final (success/error) + encadeia próximo stage via Edge</text>
+        <text x="14" y="28" font-size="9" font-weight="600" fill="#14181f">Ciclo de uma execução</text>
+      </svg>
+      <div class="caption"><b>Figura 3.</b> Ciclo de vida de uma execução</div>
+    </div>
+
+    <h3>Características relevantes</h3>
+    <ul>
+      <li><b>Isolamento por subprocesso:</b> código de terceiros roda fora do processo da API; crash ou timeout não derruba o backend.</li>
+      <li><b>SDK injetado:</b> <code>flowdesk_sdk.py</code> oferece <code>get_input</code>, <code>set_output</code>, <code>get_file</code>, <code>output_path</code>, <code>log</code> e <code>extract_document</code> (OCR).</li>
+      <li><b>Encadeamento:</b> ao concluir com sucesso, o runtime dispara os stages script/job seguintes ligados por <code>Edge</code>. Formulários são portões do usuário e não encadeiam sozinhos.</li>
+      <li><b>Resiliência de cold start:</b> falha intermitente de import de numpy/pandas no Windows dispara uma única nova tentativa.</li>
+      <li><b>Notificação:</b> job agendado que falha aciona e-mail SMTP, se configurado.</li>
+    </ul>
+
+    <h3>Scheduler de jobs</h3>
+    <p class="small muted">
+      O <code>Scheduler</code> roda no mesmo processo, com tick a cada 30 segundos.
+      Varre stages do tipo job habilitados, compara a última execução com o
+      agendamento (intervalo ou diário) e enfileira quando vencido. Usar a última
+      execução como marca permite sobreviver a reinícios.
+    </p>
+  </section>
+</div>
+
+<!-- ============ 7 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 07</div></div>
+  <div class="sec-head"><div class="sec-num">07</div><h2>Camada de<br/>inteligência artificial</h2></div>
+  <section>
+    <p>
+      A IA usa a OpenAI (modelo <code>gpt-4o-mini</code>). Sem chave configurada, a
+      plataforma opera em modo simulado, com respostas determinísticas de
+      demonstração. A IA aparece em três pontos.
+    </p>
+
+    <div class="grid2" style="margin-top:12px;">
+      <div class="card soft">
+        <h4>Smart Chat</h4>
+        <p>Streaming token a token. O modelo emite texto e, ao final, um bloco
+        cercado <code>flowdesk-actions</code> com <code>questions</code> (perguntas)
+        e <code>actions</code> (ações propostas).</p>
+      </div>
+      <div class="card soft">
+        <h4>Assistente de criação</h4>
+        <p>Conduz uma entrevista de descoberta, uma pergunta por vez, antes de
+        construir. Só pergunta o que muda a solução.</p>
+      </div>
+      <div class="card soft">
+        <h4>Auto-reparo</h4>
+        <p>Diante de erro de execução, propõe correção de código ciente do ambiente
+        real, bibliotecas instaladas e contrato do SDK.</p>
+      </div>
+      <div class="card soft">
+        <h4>Aprovação humana</h4>
+        <p>Toda ação proposta vira uma <code>PendingAction</code> que o usuário
+        aprova ou rejeita antes de aplicar. A IA não altera o projeto sozinha.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="lbl">Segurança da IA</span>
+      O protocolo de ações estruturadas, bloco <code>flowdesk-actions</code> com
+      aprovação humana, é o mecanismo central de segurança: o modelo sugere, a
+      pessoa decide, o sistema aplica.
+    </div>
+
+    <p class="small faint">
+      OCR roda localmente (pdfplumber para PDF com texto, PyMuPDF para rasterizar
+      escaneados, RapidOCR para reconhecimento), com validação em três etapas,
+      confiança, automação e revisão humana. A revisão humana editada realimenta o
+      reprocessamento via campo <code>_texto_corrigido</code>.
+    </p>
+  </section>
+</div>
+
+<!-- ============ 8 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 08</div></div>
+  <div class="sec-head"><div class="sec-num">08</div><h2>Apps publicados e<br/>controle de acesso</h2></div>
+  <section>
+    <p>
+      Uma automação publicada vira um app independente em
+      <code>/app/&lt;subdomínio&gt;</code>, com formulário próprio gerado a partir dos
+      stages do tipo form. O usuário final preenche, envia, acompanha o
+      processamento e baixa o resultado, sem ver o console.
+    </p>
+
+    <h3>Dois níveis de acesso</h3>
+    <table>
+      <thead><tr><th>Camada</th><th>Mecanismo</th></tr></thead>
+      <tbody>
+        <tr><td>Console interno</td><td>JWT, papel admin/dev/user, gate de modo avançado</td></tr>
+        <tr><td>App publicado</td><td>Por projeto: whitelist de e-mails ou domínio permitido; token próprio do app</td></tr>
+      </tbody>
+    </table>
+
+    <div class="warnbox">
+      <span class="lbl">Flag temporária</span>
+      <code>PUBLIC_APPS_OPEN</code> habilita apps publicados sem login (qualquer
+      pessoa com o link executa). É um ajuste de desenvolvimento. Desligar para
+      restaurar o controle por whitelist ou domínio.
+    </div>
+
+    <h3>Versões e rollback</h3>
+    <p class="small muted">
+      Cada publicação gera um <code>Build</code> imutável com snapshot do código
+      (hash curto). É possível restaurar o código de uma versão anterior, o que faz
+      o upsert dos arquivos do snapshot e remove os que não existiam nele.
+    </p>
+  </section>
+</div>
+
+<!-- ============ 9 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 09</div></div>
+  <div class="sec-head"><div class="sec-num">09</div><h2>Fluxos principais<br/>(ponta a ponta)</h2></div>
+  <section>
+    <div class="grid2">
+      <div class="card">
+        <h4>A · Criação pelo assistente</h4>
+        <ol class="small" style="margin-left:14px;">
+          <li>Usuário descreve o processo no Chat e anexa um arquivo de exemplo.</li>
+          <li>Cria-se um projeto; a IA conduz a entrevista.</li>
+          <li>A IA propõe ações como pendências.</li>
+          <li>Usuário aprova; o sistema cria stages, edges e arquivos-fonte.</li>
+          <li>A IA dá nome amigável ao projeto a partir do pedido real.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h4>B · Execução de uma automação</h4>
+        <ol class="small" style="margin-left:14px;">
+          <li>Gatilho cria uma Execution (teste, app, job ou webhook).</li>
+          <li>O runtime materializa o código e roda o subprocesso isolado.</li>
+          <li>Saída e status são persistidos e enviados ao monitor por WebSocket.</li>
+          <li>Em sucesso, os stages seguintes ligados por Edge são encadeados.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h4>C · Uso de um app publicado</h4>
+        <ol class="small" style="margin-left:14px;">
+          <li>Usuário autorizado abre o app e preenche o formulário.</li>
+          <li>O submit cria uma execução; a tela faz polling até concluir.</li>
+          <li>Resultado é exibido; revisão de OCR bloqueia o download até confirmação.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h4>D · Job agendado</h4>
+        <ol class="small" style="margin-left:14px;">
+          <li>O scheduler detecta um job vencido e enfileira a execução.</li>
+          <li>Em falha, dispara e-mail de alerta, se SMTP configurado.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ 10 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 10</div></div>
+  <div class="sec-head"><div class="sec-num">10</div><h2>Decisões de arquitetura<br/>e trade-offs</h2></div>
+  <section>
+    <table>
+      <thead><tr><th style="width:26%">Decisão</th><th>Motivação</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Subprocesso por execução</b><br/><span class="faint small">não VM, não container</span></td>
+          <td>Isolar código de terceiros; crash não derruba a API; simplicidade operacional</td>
+          <td>Cold start de bibliotecas a cada run; custo de inicialização por execução</td>
+        </tr>
+        <tr>
+          <td><b>Runtime e scheduler in-process</b></td>
+          <td>Zero infraestrutura extra; fácil de operar em uma máquina</td>
+          <td>Worker único (concorrência 1): execuções enfileiram sob carga; não escala horizontalmente</td>
+        </tr>
+        <tr>
+          <td><b>Código-fonte no banco</b><br/><span class="faint small">SourceFile</span></td>
+          <td>Persistência, versionamento e snapshot de builds</td>
+          <td>Materialização em disco a cada execução</td>
+        </tr>
+        <tr>
+          <td><b>Postgres com fallback SQLite</b></td>
+          <td>Produção no Supabase, desenvolvimento sem dependência</td>
+          <td>Micro-migrações precisam cobrir os dois dialetos</td>
+        </tr>
+        <tr>
+          <td><b>IA com aprovação humana</b></td>
+          <td>Segurança: o modelo nunca aplica mudança sozinho</td>
+          <td>Passo extra de aprovação no fluxo</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <span class="lbl">Esclarecimento</span>
+      Sobre a percepção de que a aplicação cria várias máquinas virtuais: não cria.
+      Cada automação roda como um subprocesso efêmero do mesmo interpretador Python.
+      O custo real percebido como peso é o cold start das bibliotecas por execução
+      somado à serialização do worker único, não virtualização.
+    </div>
+  </section>
+</div>
+
+<!-- ============ 11 ============ -->
+<div class="page">
+  <div class="eyebrow-bar"><div class="b">Flow<span>Desk</span> · Arquitetura</div><div>Seção 11</div></div>
+  <div class="sec-head"><div class="sec-num">11</div><h2>Riscos e<br/>pontos de atenção</h2></div>
+  <section>
+    <table>
+      <thead><tr><th>Ponto</th><th style="width:22%">Severidade</th><th>Encaminhamento sugerido</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Worker único limita throughput de execuções</td>
+          <td><span class="pill warn">médio</span></td>
+          <td>Pool de workers persistentes (processos reutilizados que já carregaram as libs), mantendo o isolamento</td>
+        </tr>
+        <tr>
+          <td>Cold start de pandas/numpy por execução</td>
+          <td><span class="pill warn">médio</span></td>
+          <td>Medir startup x trabalho útil antes de reengenharia; o pool de workers resolve junto</td>
+        </tr>
+        <tr>
+          <td><code>PUBLIC_APPS_OPEN</code> deixa apps sem login</td>
+          <td><span class="pill danger">alto em produção</span></td>
+          <td>Desligar e restaurar whitelist/domínio antes de exposição externa</td>
+        </tr>
+        <tr>
+          <td>Visibilidade por organização, sem dono por projeto</td>
+          <td><span class="pill line">evolução</span></td>
+          <td>Introduzir propriedade e compartilhamento por projeto</td>
+        </tr>
+        <tr>
+          <td>Segredos de banco e chave de IA</td>
+          <td><span class="pill warn">operacional</span></td>
+          <td>Manter em <code>.env</code> fora do versionamento; rotacionar credenciais expostas</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Resumo executivo</h3>
+    <p>
+      A arquitetura é coerente e enxuta para a escala atual: um backend único,
+      execução isolada por subprocesso, IA com aprovação humana e apps publicados
+      com controle de acesso. Os limites conhecidos, concorrência de execução e
+      cold start, são de desempenho, não de correção, e têm caminho de evolução
+      claro sem reescrever o núcleo. As prioridades antes de exposição externa são
+      desligar a abertura pública dos apps e introduzir propriedade por projeto.
+    </p>
+
+    <div style="margin-top:40px; padding-top:14px; border-top:2px solid var(--ink); display:flex; justify-content:space-between; align-items:center;">
+      <div class="serif" style="font-size:13pt; font-weight:600; color:var(--ink);">Flow<span style="color:var(--accent);">Desk</span></div>
+      <div class="faint" style="font-size:7.6pt; letter-spacing:.1em; text-transform:uppercase; text-align:right;">
+        Documento de arquitetura · gerado do código-fonte<br/>
+        Nenhuma saída substitui revisão técnica do responsável
+      </div>
+    </div>
+  </section>
+</div>
+
+</body>
+</html>
