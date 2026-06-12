@@ -18,6 +18,8 @@ pandas==2.2.3
 openpyxl==3.1.5
 # Métricas de máquina (CPU/RAM/disco) no painel de admin
 psutil==7.2.2
+# Leitura de xls legado (exports do sistema Domínio) no SDK read_table
+xlrd==2.0.2
 # Leitura de PDF/Imagem + OCR local (on-premise, pip-only) usado pelo SDK extract_document
 pdfplumber==0.11.9
 pymupdf==1.27.2.3
