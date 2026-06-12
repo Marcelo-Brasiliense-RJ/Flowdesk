@@ -13,6 +13,7 @@ from ..database import get_db
 from ..models import Execution, Stage, User
 from ..runtime.runner import runtime
 from ..schemas import ExecutionOut
+from ..services import storage
 from .projects import get_project
 
 router = APIRouter(prefix="/api", tags=["executions"])
@@ -63,7 +64,7 @@ def list_executions(
     }
 
 
-@router.get("/projects/{project_id}/executions/{execution_id}", response_model=ExecutionOut)
+@router.get("/projects/{project_id}/executions/{execution_id}")
 def get_execution(
     project_id: int,
     execution_id: str,
@@ -74,7 +75,9 @@ def get_execution(
     execu = db.get(Execution, execution_id)
     if execu is None or execu.project_id != project_id:
         raise HTTPException(status_code=404, detail="Execução não encontrada")
-    return execu
+    data = ExecutionOut.model_validate(execu).model_dump()
+    data["progress"] = storage.read_progress(project_id, execution_id)
+    return data
 
 
 @router.get("/projects/{project_id}/executions/by-stage/recent")

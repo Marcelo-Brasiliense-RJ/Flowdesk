@@ -220,6 +220,8 @@ def app_execution(subdomain: str, execution_id: str, token: str | None = None, d
         "id": execu.id,
         "status": execu.status,
         "output": execu.output_data,
+        "input": execu.input_data,
+        "progress": storage.read_progress(project.id, execution_id),
         "stderr": execu.stderr if execu.status == "error" else "",
     }
 

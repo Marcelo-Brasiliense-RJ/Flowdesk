@@ -91,6 +91,22 @@ def delete_path(root: Path, rel: str) -> None:
         target.unlink()
 
 
+def read_progress(project_id: int, execution_id: str) -> list[dict]:
+    """Eventos progress() de uma execução (vazio se não houver)."""
+    import json as _json
+
+    p = STORAGE_DIR / str(project_id) / "runs" / execution_id / "progress.jsonl"
+    if not p.exists():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(_json.loads(line))
+        except Exception:
+            continue
+    return out
+
+
 _SDK_SOURCE = '''"""FlowDesk runtime SDK injected into every project (do not edit).
 
 Use inside Script stages to read the upstream input and write results:
