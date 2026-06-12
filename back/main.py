@@ -28,6 +28,7 @@ from app.routers import (
     auth,
     builds,
     chat,
+    classify,
     dashboard,
     executions,
     filemanager,
@@ -116,6 +117,7 @@ async def _count_requests(request, call_next):
 for module in (
     auth,
     admin,
+    classify,
     projects,
     executions,
     builds,
