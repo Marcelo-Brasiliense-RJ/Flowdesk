@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer
 import { api, getToken } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type {
+  ClassificacaoReviewData,
   Execution,
   InputKind,
   OutputKind,
@@ -16,6 +17,8 @@ import type {
 } from "../lib/types";
 import { Logo, Spinner, StageIcon, STAGE_META } from "../components/ui";
 import OcrReview from "../components/OcrReview";
+import ProgressTimeline from "../components/ProgressTimeline";
+import ClassificacaoReview from "../components/ClassificacaoReview";
 
 const STEPS = ["Gatilho", "Entrada", "Processamento", "Resultado", "Revisão"];
 
@@ -1274,15 +1277,18 @@ function TestPanel({
     setSamplePath(`uploads/${r.name}`);
     setSampleName(r.name);
   }
-  function buildPayload(textoCorrigido?: string): Record<string, unknown> {
-    const texto = (textoCorrigido ?? correctedText).trim();
+  function buildPayload(): Record<string, unknown> {
+    const texto = correctedText.trim();
     const extra = texto ? { _texto_corrigido: texto } : {};
     if (inputKind === "file") return samplePath ? { arquivo: samplePath, ...extra } : { ...extra };
     if (inputKind === "fields") return { ...fieldValues, ...extra };
     return { ...extra };
   }
-  async function runTest(textoCorrigido?: string): Promise<Execution> {
-    if (textoCorrigido) setCorrectedText(textoCorrigido);
+  async function runTest(extra?: Record<string, unknown> | string): Promise<Execution> {
+    // compatibilidade: string = texto corrigido do OCR; objeto = payload extra
+    const extraPayload: Record<string, unknown> =
+      typeof extra === "string" ? { _texto_corrigido: extra } : (extra ?? {});
+    if (typeof extra === "string") setCorrectedText(extra);
     setTesting(true);
     setExec(null);
     setReviewed(false);
@@ -1291,11 +1297,12 @@ function TestPanel({
     try {
       await new Promise((r) => setTimeout(r, 450));
       onFlow?.("script", "running");
-      const started = await api.post<Execution>(`/api/projects/${projectId}/stages/${scriptStageId}/run`, buildPayload(textoCorrigido));
+      const started = await api.post<Execution>(`/api/projects/${projectId}/stages/${scriptStageId}/run`, { ...buildPayload(), ...extraPayload });
       let last = started;
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 60; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         last = await api.get<Execution>(`/api/projects/${projectId}/executions/${started.id}`);
+        setExec(last); // atualiza a linha do tempo ao vivo
         if (last.status === "success" || last.status === "error") break;
       }
       setExec(last);
@@ -1321,21 +1328,57 @@ function TestPanel({
   }
 
   const needsSample = inputKind === "file" && !samplePath;
+  const finished = exec?.status === "success" || exec?.status === "error";
   const summary = exec?.output_data?.resumo;
   const resultFile = exec?.output_data?.arquivo_resultado as string | undefined;
   const review = exec?.output_data?._ocr_review;
+  const classifReview = exec?.output_data?._classificacao_review as
+    | ClassificacaoReviewData
+    | undefined;
   const [reviewed, setReviewed] = useState(false);
   const [dlError, setDlError] = useState("");
+  const [sugestoesIa, setSugestoesIa] = useState<
+    Record<string, { conta_codigo: string; confianca: number }>
+  >({});
   const blockedByReview = !!review?.needs_review && !reviewed;
   // sucesso "vazio": rodou sem erro mas não extraiu nada (ex: 0 lançamentos).
   // não é um teste de verdade bem-sucedido, então avisamos em vez de comemorar.
+  // (pass 1 de revisão de classificação não gera arquivo e não conta como vazio)
   const looksEmpty =
+    !classifReview &&
     !!summary &&
     typeof summary === "object" &&
     Object.values(summary).length > 0 &&
     Object.values(summary).every(
       (v) => v === 0 || v === "" || v == null || (Array.isArray(v) && v.length === 0)
     );
+
+  // grupos sem regra ganham sugestão da IA (payload mínimo: padrão + contas)
+  useEffect(() => {
+    if (!classifReview || exec?.status !== "success") return;
+    const semRegra = classifReview.grupos.filter((g) => !g.conta);
+    if (semRegra.length === 0) {
+      setSugestoesIa({});
+      return;
+    }
+    api
+      .post<{ sugestoes: { padrao: string; conta_codigo: string; confianca: number }[] }>(
+        `/api/projects/${projectId}/classificar-grupos`,
+        {
+          grupos: semRegra.map((g) => ({ padrao: g.padrao, tipo: g.tipo })),
+          contas: classifReview.contas.map((c) => ({ codigo: c.codigo, nome: c.nome })),
+        }
+      )
+      .then((r) => {
+        setSugestoesIa(
+          Object.fromEntries(
+            r.sugestoes.filter((s) => s.conta_codigo).map((s) => [s.padrao, s])
+          )
+        );
+      })
+      .catch(() => setSugestoesIa({}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classifReview ? exec?.id : null, exec?.status]);
 
   async function downloadResult(path: string) {
     setDlError("");
@@ -1421,13 +1464,19 @@ function TestPanel({
         )}
       </motion.button>
 
+      <ProgressTimeline events={exec?.progress ?? []} running={testing} />
+
       <AnimatePresence>
-        {exec && (
+        {exec && finished && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
             {passed ? (
               <div className={`rounded-lg border p-3 ${looksEmpty ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
                 <div className={`text-sm font-medium ${looksEmpty ? "text-amber-800" : "text-emerald-700"}`}>
-                  {looksEmpty ? "O teste rodou, mas o resultado veio vazio" : "Teste concluído com sucesso"}
+                  {classifReview
+                    ? "Extrato lido. Agora revise a classificação abaixo."
+                    : looksEmpty
+                      ? "O teste rodou, mas o resultado veio vazio"
+                      : "Teste concluído com sucesso"}
                 </div>
                 {looksEmpty && (
                   <p className="mt-1 text-xs text-amber-700">
@@ -1484,15 +1533,41 @@ function TestPanel({
         </div>
       )}
 
+      {passed && classifReview && (
+        <div className="mt-4">
+          <ClassificacaoReview
+            key={`${exec?.id}-${Object.keys(sugestoesIa).length}`}
+            data={classifReview}
+            sugestoesIa={sugestoesIa}
+            busy={testing}
+            onConfirm={async ({ mapa, contaBanco, periodo, novasRegras }) => {
+              if (novasRegras.length) {
+                await api
+                  .post(`/api/projects/${projectId}/regras-classificacao`, novasRegras)
+                  .catch(() => {});
+              }
+              await runTest({
+                _classificacao_confirmada: mapa,
+                _conta_banco: contaBanco,
+                _periodo: periodo,
+              });
+            }}
+          />
+        </div>
+      )}
+
       <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
-        <motion.button onClick={publish} disabled={!passed || looksEmpty || publishing || published || blockedByReview}
+        <motion.button onClick={publish} disabled={!passed || looksEmpty || !!classifReview || publishing || published || blockedByReview}
           whileTap={{ scale: 0.97 }}
           className="btn-primary py-1.5 text-sm disabled:opacity-40"
-          title={blockedByReview ? "Confirme a revisão do OCR antes de publicar" : looksEmpty ? "O teste não extraiu dados; ajuste antes de publicar" : passed ? "" : "Rode um teste com sucesso antes de publicar"}>
+          title={blockedByReview ? "Confirme a revisão do OCR antes de publicar" : classifReview ? "Confirme a classificação e gere a planilha antes de publicar" : looksEmpty ? "O teste não extraiu dados; ajuste antes de publicar" : passed ? "" : "Rode um teste com sucesso antes de publicar"}>
           {published ? "Publicado ✓" : publishing ? "Publicando…" : "Publicar"}
         </motion.button>
         {blockedByReview && (
           <span className="text-xs text-amber-600">Confirme a revisão do OCR para publicar.</span>
+        )}
+        {passed && !!classifReview && !published && (
+          <span className="text-xs text-amber-600">Confirme a classificação acima para concluir o teste.</span>
         )}
         {passed && looksEmpty && !published && (
           <span className="text-xs text-amber-600">O teste não extraiu dados. Ajuste o Processamento antes de publicar.</span>
