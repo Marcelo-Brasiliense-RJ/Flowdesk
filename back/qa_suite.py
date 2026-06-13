@@ -375,12 +375,43 @@ def main():
     section("Galeria de modelos")
     tps = c.get(f"{BASE}/api/templates", headers=H).json()
     check("listar modelos (>=3)", isinstance(tps, list) and len(tps) >= 3, f"n={len(tps) if isinstance(tps,list) else tps}")
+    check("galeria contem extrato-dominio",
+          any(t.get("key") == "extrato-dominio" for t in tps))
     inst = c.post(f"{BASE}/api/templates/totais-planilha/instantiate", headers=H).json()
     check("instanciar modelo cria projeto", "project_id" in inst, f"resp={inst}")
     if "project_id" in inst:
         CREATED_PROJECTS.append(inst["project_id"])
         tst = c.get(f"{BASE}/api/projects/{inst['project_id']}/stages", headers=H).json()
         check("modelo vem com fluxo completo (3 nos)", len(tst) == 3, f"stages={len(tst)}")
+    inst2 = c.post(f"{BASE}/api/templates/extrato-dominio/instantiate", headers=H).json()
+    check("instanciar extrato-dominio", "project_id" in inst2, f"resp={inst2}")
+    if "project_id" in inst2:
+        CREATED_PROJECTS.append(inst2["project_id"])
+
+    section("Classificacao contabil")
+    r = c.post(f"{BASE}/api/projects/{pid}/regras-classificacao", headers=H,
+               json=[{"padrao": "TARIFA BANCARIA QA", "conta_codigo": "777",
+                      "conta_nome": "Despesas QA"}])
+    check("salvar regra De/Para", r.status_code == 200 and r.json().get("salvas") == 1,
+          f"status={r.status_code}")
+    r = c.get(f"{BASE}/api/projects/{pid}/regras-classificacao", headers=H)
+    regras = r.json() if r.status_code == 200 else []
+    check("listar regras", any(x.get("padrao") == "TARIFA BANCARIA QA" for x in regras))
+    r = c.post(f"{BASE}/api/projects/{pid}/regras-classificacao", headers=H,
+               json=[{"padrao": "tarifa bancaria qa", "conta_codigo": "888"}])
+    regras2 = c.get(f"{BASE}/api/projects/{pid}/regras-classificacao", headers=H).json()
+    so_uma = [x for x in regras2 if x.get("padrao") == "TARIFA BANCARIA QA"]
+    check("upsert da regra (padrao repetido atualiza, nao duplica)",
+          len(so_uma) == 1 and so_uma[0]["conta_codigo"] == "888",
+          f"n={len(so_uma)}")
+    rid = so_uma[0]["id"]
+    r = c.delete(f"{BASE}/api/projects/{pid}/regras-classificacao/{rid}", headers=H)
+    check("excluir regra", r.status_code == 200)
+    r = c.post(f"{BASE}/api/projects/{pid}/classificar-grupos", headers=H,
+               json={"grupos": [], "contas": []})
+    check("classificar-grupos vazio -> []",
+          r.status_code == 200 and r.json().get("sugestoes") == [],
+          f"status={r.status_code}")
 
     section("Limpeza")
     for ppid in CREATED_PROJECTS:

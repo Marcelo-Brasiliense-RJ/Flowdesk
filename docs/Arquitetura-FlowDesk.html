@@ -614,7 +614,8 @@
     <h3>Características relevantes</h3>
     <ul>
       <li><b>Isolamento por subprocesso:</b> código de terceiros roda fora do processo da API; crash ou timeout não derruba o backend.</li>
-      <li><b>SDK injetado:</b> <code>flowdesk_sdk.py</code> oferece <code>get_input</code>, <code>set_output</code>, <code>get_file</code>, <code>output_path</code>, <code>log</code> e <code>extract_document</code> (OCR).</li>
+      <li><b>SDK injetado:</b> <code>flowdesk_sdk.py</code> oferece <code>get_input</code>, <code>set_output</code>, <code>get_file</code>, <code>output_path</code>, <code>log</code>, <code>extract_document</code> (OCR), <code>progress</code> (linha do tempo da execução), <code>get_table</code> (tabelas internas do projeto, como regras De/Para) e <code>read_table</code> (xlsx/xls/csv, tolerante a xls legado do Domínio via Excel da máquina).</li>
+      <li><b>Linha do tempo e tabelas:</b> a cada execução o runtime materializa as tabelas do projeto em <code>tables.json</code> e expõe os eventos de <code>progress()</code> (gravados em <code>progress.jsonl</code>) no polling da execução, alimentando a narração em tempo real no console e no app publicado.</li>
       <li><b>Encadeamento:</b> ao concluir com sucesso, o runtime dispara os stages script/job seguintes ligados por <code>Edge</code>. Formulários são portões do usuário e não encadeiam sozinhos.</li>
       <li><b>Resiliência de cold start:</b> falha intermitente de import de numpy/pandas no Windows dispara uma única nova tentativa.</li>
       <li><b>Notificação:</b> job agendado que falha aciona e-mail SMTP, se configurado.</li>
@@ -663,6 +664,21 @@
         <p>Toda ação proposta vira uma <code>PendingAction</code> que o usuário
         aprova ou rejeita antes de aplicar. A IA não altera o projeto sozinha.</p>
       </div>
+      <div class="card soft">
+        <h4>Classificação contábil</h4>
+        <p>Em automações como extrato bancário para o Domínio, a IA sugere a conta
+        contábil de cada grupo de histórico. Payload mínimo: só o texto do histórico
+        e as contas candidatas saem da máquina, nunca valores, saldos ou CNPJ.</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="lbl">Híbrido com aprendizado</span>
+      A classificação contábil combina regras De/Para do projeto (que entram
+      pré-aprovadas), sugestão de IA (que exige confirmação) e escolha manual,
+      numa tela de revisão com semáforo. Cada correção vira regra para a próxima
+      execução, então o esforço de revisão cai mês a mês. As regras vivem em
+      <code>DataTable</code> por projeto.
     </div>
 
     <div class="note">

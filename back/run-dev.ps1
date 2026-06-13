@@ -1,10 +1,13 @@
 # Inicia o backend FlowDesk em modo desenvolvimento.
 #
-# --reload-dir app: o reload observa SOMENTE back/app. Isso é essencial porque o
-# runtime regrava os scripts das automações em back/storage/<projeto>/src a cada
-# execução; se o reload observasse a árvore inteira, cada execução reiniciaria o
-# servidor e o ceifador de zumbis cancelaria a própria execução em andamento.
+# O reload observa SOMENTE back/app (caminho absoluto) e exclui storage/.
+# Isso é essencial: o runtime regrava scripts .py em back/storage/<projeto>/src
+# a cada execução; se o watcher enxergar isso, cada execução reinicia o servidor
+# e o ceifador de zumbis cancela a própria execução em andamento.
+# Para operação estável (suíte de QA, uso real), prefira sem --reload:
+#   .\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
 Set-Location $PSScriptRoot
 & "$PSScriptRoot\.venv\Scripts\python.exe" -m uvicorn main:app `
     --host 127.0.0.1 --port 8000 `
-    --reload --reload-dir app
+    --reload --reload-dir "$PSScriptRoot\app" `
+    --reload-exclude "$PSScriptRoot\storage\*"

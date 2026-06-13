@@ -132,33 +132,47 @@ def classificar_grupos(project_id: int, req: SugestaoRequest,
     from openai import OpenAI
     client = OpenAI(api_key=settings.openai_api_key)
     contas_txt = "\n".join(f"{c.codigo} = {c.nome}" for c in req.contas[:400])
-    grupos_txt = "\n".join(f"- [{g.tipo}] {g.padrao}" for g in req.grupos)
-    prompt = (
-        "Você é um contador brasileiro classificando movimentos de extrato bancário "
-        "na contrapartida contábil. O lado banco já está resolvido; sugira APENAS a "
-        "contrapartida, escolhendo estritamente um código da lista de contas analíticas.\n"
-        "Para [credito] (entrada no banco) a contrapartida típica é receita/recebimento; "
-        "para [debito] (saída) é despesa/pagamento.\n\n"
-        f"CONTAS ANALÍTICAS DISPONÍVEIS:\n{contas_txt}\n\n"
-        f"GRUPOS DE HISTÓRICO:\n{grupos_txt}\n\n"
-        'Responda SÓ JSON: {"sugestoes": [{"padrao": "...", "conta_codigo": "...", '
-        '"confianca": 0.0}]} — confianca entre 0 e 1; conta_codigo vazio se não houver '
-        "conta adequada (NUNCA invente código fora da lista)."
-    )
-    resp = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
-    try:
-        data = json.loads(resp.choices[0].message.content or "{}")
-        sugestoes = data.get("sugestoes", [])
-    except json.JSONDecodeError:
-        sugestoes = []
     validos = {c.codigo for c in req.contas}
-    for s in sugestoes:
-        if str(s.get("conta_codigo", "")) not in validos:
-            s["conta_codigo"] = ""
-            s["confianca"] = 0.0
+    sugestoes: list[dict] = []
+    # lotes pequenos: medido empiricamente, acima de ~10 grupos por chamada o
+    # gpt-4o-mini deixa de copiar o campo "padrao" literalmente e devolve
+    # categorias genéricas que não casam com grupo nenhum.
+    LOTE = 10
+    for ini in range(0, len(req.grupos), LOTE):
+        lote = req.grupos[ini:ini + LOTE]
+        grupos_txt = "\n".join(f'- padrao: "{g.padrao}" | tipo: {g.tipo}' for g in lote)
+        prompt = (
+            "Você é um contador brasileiro classificando movimentos de extrato bancário "
+            "na contrapartida contábil. O lado banco já está resolvido; sugira APENAS a "
+            "contrapartida, escolhendo estritamente um código da lista de contas analíticas.\n"
+            "Para tipo credito (entrada no banco) a contrapartida típica é receita/recebimento; "
+            "para tipo debito (saída) é despesa/pagamento.\n\n"
+            f"CONTAS ANALÍTICAS DISPONÍVEIS:\n{contas_txt}\n\n"
+            f"GRUPOS DE HISTÓRICO (um por linha):\n{grupos_txt}\n\n"
+            "Responda SÓ JSON, com UMA sugestão para CADA grupo da lista, no formato "
+            '{"sugestoes": [{"padrao": "...", "conta_codigo": "...", "confianca": 0.0}]}. '
+            'REGRAS: o campo "padrao" deve ser a CÓPIA EXATA, caractere a caractere, do '
+            "padrao do grupo (nunca resuma nem categorize); confianca entre 0 e 1; "
+            "conta_codigo vazio se não houver conta adequada (NUNCA invente código fora da lista)."
+        )
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        try:
+            data = json.loads(resp.choices[0].message.content or "{}")
+            parte = data.get("sugestoes", [])
+        except json.JSONDecodeError:
+            parte = []
+        # descarta padrões que o modelo inventou e códigos fora da lista
+        padroes_lote = {g.padrao for g in lote}
+        for s in parte:
+            if s.get("padrao") not in padroes_lote:
+                continue
+            if str(s.get("conta_codigo", "")) not in validos:
+                s["conta_codigo"] = ""
+                s["confianca"] = 0.0
+            sugestoes.append(s)
     return {"sugestoes": sugestoes}

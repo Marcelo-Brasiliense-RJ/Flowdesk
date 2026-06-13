@@ -214,9 +214,11 @@ def read_table(path, **kw):
     r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
                        capture_output=True, timeout=120)
     if r.returncode != 0 or not os.path.exists(dst):
+        detalhe = (r.stderr or b"").decode("latin1", "replace").strip()[:300]
         raise RuntimeError(
             "Não consegui ler este .xls (formato fora do padrão e a conversão "
-            "via Excel falhou). Exporte como .xlsx ou .csv e envie de novo.")
+            "via Excel falhou). Exporte como .xlsx ou .csv e envie de novo. "
+            f"[detalhe: {detalhe or 'sem stderr'}]")
     return pd.read_excel(dst, **kw)
 
 
