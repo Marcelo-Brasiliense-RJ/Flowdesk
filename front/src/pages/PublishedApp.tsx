@@ -179,14 +179,14 @@ export default function PublishedApp() {
   if (!info)
     return (
       <div className="flex h-full items-center justify-center">
-        <Spinner className="h-8 w-8 text-brand-600" />
+        <Spinner className="h-8 w-8 text-brandv" />
       </div>
     );
 
   if (info.error)
     return (
       <Shell name="Aplicação">
-        <p className="text-center text-slate-500">Aplicação não encontrada.</p>
+        <p className="text-center text-ink2">Aplicação não encontrada.</p>
       </Shell>
     );
 
@@ -194,7 +194,7 @@ export default function PublishedApp() {
     return (
       <Shell name={info.name}>
         <form onSubmit={login} className="space-y-4">
-          <p className="text-center text-sm text-slate-500">
+          <p className="text-center text-sm text-ink2">
             Acesso restrito {info.access_mode === "domain" && info.allowed_domain
               ? `ao domínio @${info.allowed_domain.replace("@", "")}`
               : "a usuários autorizados"}
@@ -216,7 +216,7 @@ export default function PublishedApp() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          {error && <div className="text-sm text-red-600">{error}</div>}
+          {error && <div className="text-sm text-err">{error}</div>}
           <button className="btn-primary w-full">Entrar</button>
         </form>
       </Shell>
@@ -230,8 +230,8 @@ export default function PublishedApp() {
       {phase === "processing" && (
         <div className="py-4">
           <div className="flex flex-col items-center gap-3 py-4">
-            <Spinner className="h-8 w-8 text-brand-600" />
-            <p className="text-sm text-slate-500">Processando sua solicitação...</p>
+            <Spinner className="h-8 w-8 text-brandv" />
+            <p className="text-sm text-ink2">Processando sua solicitação...</p>
           </div>
           <ProgressTimeline events={progress} running />
         </div>
@@ -248,7 +248,7 @@ export default function PublishedApp() {
         <ResultRenderer stage={stage} result={result} base={base} token={token} />
       )}
       {phase === "done" && (
-        <p className="text-center text-emerald-600">Concluído.</p>
+        <p className="text-center text-ok">Concluído.</p>
       )}
     </Shell>
   );
@@ -256,14 +256,14 @@ export default function PublishedApp() {
 
 function Shell({ name, children }: { name: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-full items-center justify-center bg-slate-100 p-4">
+    <div className="flex min-h-full items-center justify-center bg-surface-2 p-4">
       <div className="w-full max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <Logo />
-          <span className="text-sm text-slate-400">aplicação publicada</span>
+          <span className="text-sm text-ink3">aplicação publicada</span>
         </div>
         <div className="card p-8">
-          <h1 className="mb-6 text-xl font-bold text-brand-900">{name}</h1>
+          <h1 className="mb-6 text-xl font-bold text-ink">{name}</h1>
           {children}
         </div>
       </div>
@@ -299,11 +299,11 @@ function FormRenderer({
       className="space-y-4"
     >
       {stage.config?.description && (
-        <p className="text-sm text-slate-500">{stage.config.description}</p>
+        <p className="text-sm text-ink2">{stage.config.description}</p>
       )}
       {fields.map((f: any) => (
         <div key={f.name}>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
+          <label className="mb-1 block text-sm font-medium text-ink2">
             {f.label}
           </label>
           {f.type === "file" ? (
@@ -330,7 +330,7 @@ function FormRenderer({
           )}
         </div>
       ))}
-      {error && <div className="text-sm text-red-600">{error}</div>}
+      {error && <div className="text-sm text-err">{error}</div>}
       <button className="btn-primary w-full" disabled={busy}>
         {busy ? <Spinner /> : stage.config?.submit_label || "Enviar"}
       </button>
@@ -384,17 +384,17 @@ function ResultRenderer({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-emerald-600">
+      <p className="text-sm text-ok">
         {stage?.config?.description || "Processamento concluído."}
       </p>
       {summary && (
-        <div className="rounded-lg bg-slate-50 p-4 text-sm">
-          <div className="mb-2 font-semibold text-brand-900">Resumo</div>
+        <div className="rounded-lg bg-surface-2 p-4 text-sm">
+          <div className="mb-2 font-semibold text-ink">Resumo</div>
           <table className="w-full">
             <tbody>
               {Object.entries(summary).map(([k, v]) => (
-                <tr key={k} className="border-b border-slate-100 last:border-0">
-                  <td className="py-1 text-slate-400">{k}</td>
+                <tr key={k} className="border-b border-line last:border-0">
+                  <td className="py-1 text-ink3">{k}</td>
                   <td className="py-1 text-right font-medium">{String(v)}</td>
                 </tr>
               ))}
@@ -415,12 +415,12 @@ function ResultRenderer({
         </button>
       )}
       {filePath && blockedByReview && (
-        <p className="text-center text-xs text-amber-600">
+        <p className="text-center text-xs text-warn2">
           Confirme a revisão acima para liberar o download.
         </p>
       )}
-      {dlError && <div className="text-sm text-red-600">{dlError}</div>}
-      {result?.erro && <div className="text-sm text-red-600">{result.erro}</div>}
+      {dlError && <div className="text-sm text-err">{dlError}</div>}
+      {result?.erro && <div className="text-sm text-err">{result.erro}</div>}
     </div>
   );
 }

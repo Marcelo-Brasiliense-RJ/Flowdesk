@@ -22,8 +22,8 @@ export default function ProjectSettings() {
   return (
     <ProjectLayout project={project}>
       <div className="flex h-full">
-        <nav className="w-56 shrink-0 border-r border-slate-200 bg-white p-3">
-          <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <nav className="w-56 shrink-0 border-r border-line bg-surface p-3">
+          <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-ink3">
             Configurações
           </div>
           {SUB.map(([key, label, icon]) => (
@@ -32,8 +32,8 @@ export default function ProjectSettings() {
               to={`/projects/${id}/settings${key ? "/" + key : ""}`}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
                 sub === key
-                  ? "bg-brand-50 font-medium text-brand-700 shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-brand-700"
+                  ? "bg-surface-2 font-medium text-brandv shadow-token-sm"
+                  : "text-ink2 hover:bg-surface-2 hover:text-accentv"
               }`}
             >
               <span className="w-4 text-center text-xs">{icon}</span>
@@ -57,8 +57,8 @@ export default function ProjectSettings() {
 function Header({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="mb-4">
-      <h1 className="text-xl font-bold text-brand-900">{title}</h1>
-      {sub && <p className="text-sm text-slate-500">{sub}</p>}
+      <h1 className="text-xl font-bold text-ink">{title}</h1>
+      {sub && <p className="text-sm text-ink2">{sub}</p>}
     </div>
   );
 }
@@ -67,7 +67,7 @@ function Overview({ project }: { project: any }) {
   return (
     <div>
       <Header title="Configurações do Projeto" />
-      <div className="card max-w-lg divide-y divide-slate-100 p-5 text-sm">
+      <div className="card max-w-lg divide-y divide-[color:var(--border)] p-5 text-sm">
         <Row label="Nome" value={project?.name} />
         <Row label="Subdomínio" value={`/app/${project?.subdomain}`} />
         <Row label="Status" value={project?.status} />
@@ -80,8 +80,8 @@ function Overview({ project }: { project: any }) {
 function Row({ label, value }: { label: string; value: any }) {
   return (
     <div className="flex justify-between py-2">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-medium text-brand-900">{value}</span>
+      <span className="text-ink3">{label}</span>
+      <span className="font-medium text-ink">{value}</span>
     </div>
   );
 }
@@ -167,31 +167,31 @@ function Tables({ id }: { id: number }) {
               <div
                 key={t.id}
                 className={`group flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-                  sel?.id === t.id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
+                  sel?.id === t.id ? "bg-surface-2 text-brandv" : "text-ink2 hover:bg-surface-2"
                 }`}
               >
                 <button onClick={() => openTable(t)} className="flex-1 truncate text-left">
                   🗄️ {t.name}
                 </button>
-                <button onClick={() => delTable(t)} className="hidden text-slate-400 hover:text-red-600 group-hover:block">
+                <button onClick={() => delTable(t)} className="hidden text-ink3 hover:text-err group-hover:block">
                   ×
                 </button>
               </div>
             ))}
-            {tables.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">Nenhuma tabela.</div>}
+            {tables.length === 0 && <div className="px-3 py-2 text-xs text-ink3">Nenhuma tabela.</div>}
           </div>
         </div>
 
         {/* table data grid */}
         <div className="min-w-0 flex-1">
           {!sel ? (
-            <div className="card flex h-48 items-center justify-center text-sm text-slate-400">
+            <div className="card flex h-48 items-center justify-center text-sm text-ink3">
               Selecione ou crie uma tabela.
             </div>
           ) : (
             <div className="card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
-                <span className="font-semibold text-brand-900">{sel.name}</span>
+              <div className="flex items-center justify-between border-b border-line px-4 py-2">
+                <span className="font-semibold text-ink">{sel.name}</span>
                 <div className="flex gap-2">
                   <button onClick={addColumn} className="btn-outline py-1 text-xs">+ Coluna</button>
                   <button onClick={addRow} disabled={!sel.columns?.length} className="btn-primary py-1 text-xs disabled:opacity-50">
@@ -200,17 +200,17 @@ function Tables({ id }: { id: number }) {
                 </div>
               </div>
               {!sel.columns?.length ? (
-                <div className="p-6 text-center text-sm text-slate-400">
+                <div className="p-6 text-center text-sm text-ink3">
                   Adicione colunas para começar.
                 </div>
               ) : (
                 <div className="overflow-auto">
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+                    <thead className="bg-surface-2 text-xs uppercase text-ink3">
                       <tr>
                         {sel.columns.map((c) => (
                           <th key={c.name} className="px-3 py-2">
-                            {c.name} <span className="text-[9px] text-slate-300">{c.type}</span>
+                            {c.name} <span className="text-[9px] text-ink3">{c.type}</span>
                           </th>
                         ))}
                         <th className="w-8" />
@@ -218,11 +218,11 @@ function Tables({ id }: { id: number }) {
                     </thead>
                     <tbody>
                       {rows.map((row) => (
-                        <tr key={row.id} className="border-t border-slate-100">
+                        <tr key={row.id} className="border-t border-line">
                           {sel.columns.map((c) => (
                             <td key={c.name} className="px-1 py-1">
                               <input
-                                className="w-full rounded px-2 py-1 text-sm outline-none focus:bg-brand-50"
+                                className="w-full rounded px-2 py-1 text-sm outline-none focus:bg-surface-2"
                                 type={c.type === "number" ? "number" : c.type === "date" ? "date" : "text"}
                                 defaultValue={row.values[c.name] ?? ""}
                                 onBlur={(e) => saveCell(row, c.name, e.target.value)}
@@ -230,12 +230,12 @@ function Tables({ id }: { id: number }) {
                             </td>
                           ))}
                           <td className="px-2">
-                            <button onClick={() => delRow(row)} className="text-slate-300 hover:text-red-600">×</button>
+                            <button onClick={() => delRow(row)} className="text-ink3 hover:text-err">×</button>
                           </td>
                         </tr>
                       ))}
                       {rows.length === 0 && (
-                        <tr><td colSpan={sel.columns.length + 1} className="px-3 py-4 text-center text-slate-400">Sem linhas.</td></tr>
+                        <tr><td colSpan={sel.columns.length + 1} className="px-3 py-4 text-center text-ink3">Sem linhas.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -292,17 +292,17 @@ function Connectors({ id }: { id: number }) {
         {items.map((c) => (
           <div key={c.id} className="card p-4">
             <div className="flex items-start justify-between">
-              <div className="font-medium text-brand-900">{c.name}</div>
-              <button onClick={() => del(c)} className="text-slate-300 hover:text-red-600">×</button>
+              <div className="font-medium text-ink">{c.name}</div>
+              <button onClick={() => del(c)} className="text-ink3 hover:text-err">×</button>
             </div>
-            <div className="text-xs text-slate-400">{CONNECTOR_TYPES.find((t) => t.value === c.type)?.label || c.type}</div>
-            <span className={`badge mt-2 ${c.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+            <div className="text-xs text-ink3">{CONNECTOR_TYPES.find((t) => t.value === c.type)?.label || c.type}</div>
+            <span className="badge mt-2" data-status={c.connected ? "success" : "inactive"}>
               {c.connected ? "Conectado" : "Não conectado"}
             </span>
           </div>
         ))}
         {items.length === 0 && (
-          <div className="col-span-full rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
+          <div className="col-span-full rounded-xl border border-dashed border-line p-8 text-center text-sm text-ink3">
             Nenhum conector. Adicione Google Sheets, Slack ou uma API externa.
           </div>
         )}
@@ -342,16 +342,16 @@ function ApiKeys({ id }: { id: number }) {
         <table className="w-full text-left text-sm">
           <tbody>
             {keys.map((k) => (
-              <tr key={k.id} className="border-t border-slate-100 first:border-0">
-                <td className="px-4 py-2 font-medium">🔑 {k.name}</td>
-                <td className="px-4 py-2 font-mono text-xs text-slate-500">{k.token}</td>
+              <tr key={k.id} className="border-t border-line first:border-0">
+                <td className="px-4 py-2 font-medium text-ink">🔑 {k.name}</td>
+                <td className="px-4 py-2 font-mono text-xs text-ink2">{k.token}</td>
                 <td className="px-4 py-2 text-right">
-                  <button onClick={() => del(k)} className="text-xs text-red-500 hover:text-red-700">revogar</button>
+                  <button onClick={() => del(k)} className="text-xs text-err hover:underline">revogar</button>
                 </td>
               </tr>
             ))}
             {keys.length === 0 && (
-              <tr><td className="px-4 py-6 text-center text-slate-400">Nenhuma chave gerada.</td></tr>
+              <tr><td className="px-4 py-6 text-center text-ink3">Nenhuma chave gerada.</td></tr>
             )}
           </tbody>
         </table>
@@ -383,7 +383,7 @@ function EnvVars({ id }: { id: number }) {
     <div>
       <Header title="Variáveis de Ambiente" sub="Injetadas no subprocesso dos scripts. Valores ocultos por padrão." />
       <div className="card overflow-hidden">
-        <div className="flex gap-2 border-b border-slate-100 p-3">
+        <div className="flex gap-2 border-b border-line p-3">
           <input className="input max-w-[180px] font-mono" placeholder="CHAVE" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} />
           <input className="input" type="password" autoComplete="off" placeholder="valor (oculto)" value={value} onChange={(e) => setValue(e.target.value)} />
           <button onClick={save} className="btn-primary py-1.5 text-sm">Adicionar</button>
@@ -391,19 +391,19 @@ function EnvVars({ id }: { id: number }) {
         <table className="w-full text-left text-sm">
           <tbody>
             {vars.map((v) => (
-              <tr key={v.id} className="border-t border-slate-100">
-                <td className="px-4 py-2 font-mono">🔒 {v.key}</td>
-                <td className="px-4 py-2 font-mono text-slate-500">{reveal[v.id] ? v.value : "••••••••"}</td>
+              <tr key={v.id} className="border-t border-line">
+                <td className="px-4 py-2 font-mono text-brandv">🔒 {v.key}</td>
+                <td className="px-4 py-2 font-mono text-ink2">{reveal[v.id] ? v.value : "••••••••"}</td>
                 <td className="px-4 py-2 text-right">
-                  <button onClick={() => setReveal((r) => ({ ...r, [v.id]: !r[v.id] }))} className="mr-3 text-xs text-brand-600">
+                  <button onClick={() => setReveal((r) => ({ ...r, [v.id]: !r[v.id] }))} className="mr-3 text-xs text-brandv hover:underline">
                     {reveal[v.id] ? "ocultar" : "revelar"}
                   </button>
-                  <button onClick={() => api.del(`/api/projects/${id}/env/${v.id}`).then(load)} className="text-xs text-red-500">excluir</button>
+                  <button onClick={() => api.del(`/api/projects/${id}/env/${v.id}`).then(load)} className="text-xs text-err hover:underline">excluir</button>
                 </td>
               </tr>
             ))}
             {vars.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-6 text-center text-slate-400">Nenhuma variável.</td></tr>
+              <tr><td colSpan={3} className="px-4 py-6 text-center text-ink3">Nenhuma variável.</td></tr>
             )}
           </tbody>
         </table>
@@ -437,16 +437,16 @@ function Subdomain({ project, setProject }: { project: Project; setProject: (p: 
     <div>
       <Header title="Subdomínio" sub="URL pública da aplicação publicada" />
       <div className="card max-w-lg p-5">
-        <label className="mb-1 block text-sm font-medium text-slate-700">Endereço</label>
+        <label className="mb-1 block text-sm font-medium text-ink">Endereço</label>
         <div className="flex items-center gap-1">
-          <span className="rounded-l-lg border border-r-0 border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-400">/app/</span>
+          <span className="rounded-l-lg border border-r-0 border-line bg-surface-2 px-3 py-2 text-sm text-ink3">/app/</span>
           <input
             className="input rounded-l-none font-mono"
             value={sub}
             onChange={(e) => setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
           />
         </div>
-        {err && <div className="mt-2 text-sm text-red-600">{err}</div>}
+        {err && <div className="mt-2 text-sm text-err">{err}</div>}
         <div className="mt-4 flex items-center gap-2">
           <button onClick={save} disabled={saving} className="btn-primary py-1.5 text-sm">
             {saving ? "Salvando…" : "Salvar subdomínio"}
@@ -455,7 +455,7 @@ function Subdomain({ project, setProject }: { project: Project; setProject: (p: 
             Abrir aplicação →
           </a>
         </div>
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-xs text-ink3">
           URL completa: <code>{location.origin}/app/{sub}</code>
         </p>
       </div>

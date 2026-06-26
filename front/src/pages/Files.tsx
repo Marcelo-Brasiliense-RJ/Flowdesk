@@ -87,7 +87,7 @@ export default function Files() {
     <ProjectLayout project={project}>
       <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-brand-900">Arquivos</h1>
+          <h1 className="text-xl font-bold text-ink">Arquivos</h1>
           <div className="flex gap-2">
             <button onClick={newFolder} className="btn-outline py-1.5 text-sm">
               + Novo
@@ -108,15 +108,15 @@ export default function Files() {
         </div>
 
         <div className="mb-3 flex items-center gap-2 text-sm">
-          <button onClick={() => setPath("")} className="text-brand-600 hover:underline">
+          <button onClick={() => setPath("")} className="text-brandv hover:underline">
             raiz
           </button>
           {crumbs.map((c, i) => (
             <span key={i} className="flex items-center gap-2">
-              <span className="text-slate-300">/</span>
+              <span className="text-ink3">/</span>
               <button
                 onClick={() => setPath(crumbs.slice(0, i + 1).join("/"))}
-                className="text-brand-600 hover:underline"
+                className="text-brandv hover:underline"
               >
                 {c}
               </button>
@@ -132,7 +132,7 @@ export default function Files() {
 
         <div className="card overflow-hidden">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+            <thead className="bg-surface-2 text-xs uppercase text-ink3">
               <tr>
                 <th className="px-4 py-2">
                   <input type="checkbox" disabled />
@@ -145,7 +145,7 @@ export default function Files() {
             </thead>
             <tbody>
               {paged.map((e) => (
-                <tr key={e.path} className="border-t border-slate-100 hover:bg-slate-50">
+                <tr key={e.path} className="border-t border-line hover:bg-surface-2">
                   <td className="px-4 py-2">
                     <input type="checkbox" />
                   </td>
@@ -153,31 +153,31 @@ export default function Files() {
                     {e.is_dir ? (
                       <button
                         onClick={() => setPath(e.path)}
-                        className="font-medium text-brand-700 hover:underline"
+                        className="font-medium text-brandv hover:underline"
                       >
                         📁 {e.name}
                       </button>
                     ) : (
-                      <span className="text-slate-700">📄 {e.name}</span>
+                      <span className="text-ink">📄 {e.name}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-slate-400">
+                  <td className="px-4 py-2 text-ink3">
                     {e.is_dir ? "—" : formatSize(e.size)}
                   </td>
-                  <td className="px-4 py-2 text-slate-400">
+                  <td className="px-4 py-2 text-ink3">
                     {new Date(e.modified_at).toLocaleString("pt-BR")}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex justify-end gap-2 text-xs">
-                      <button onClick={() => rename(e)} className="text-slate-500 hover:text-brand-600">
+                      <button onClick={() => rename(e)} className="text-ink2 hover:text-accentv">
                         Renomear
                       </button>
                       {!e.is_dir && (
-                        <button onClick={() => download(e)} className="text-slate-500 hover:text-brand-600">
+                        <button onClick={() => download(e)} className="text-ink2 hover:text-accentv">
                           Baixar
                         </button>
                       )}
-                      <button onClick={() => remove(e)} className="text-red-500 hover:text-red-700">
+                      <button onClick={() => remove(e)} className="text-err hover:underline">
                         Excluir
                       </button>
                     </div>
@@ -186,7 +186,7 @@ export default function Files() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={5} className="px-4 py-8 text-center text-ink3">
                     Pasta vazia.
                   </td>
                 </tr>

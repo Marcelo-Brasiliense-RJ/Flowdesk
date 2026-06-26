@@ -41,8 +41,8 @@ export default function Logs() {
   return (
     <ProjectLayout project={project}>
       <div className="p-6">
-        <h1 className="mb-1 text-xl font-bold text-brand-900">Logs de execução</h1>
-        <p className="mb-4 text-sm text-slate-500">{total} execução(ões)</p>
+        <h1 className="mb-1 text-xl font-bold text-ink">Logs de execução</h1>
+        <p className="mb-4 text-sm text-ink2">{total} execução(ões)</p>
 
         <div className="card mb-4 grid grid-cols-2 gap-3 p-4 sm:grid-cols-5">
           <Field label="Etapa">
@@ -102,35 +102,35 @@ export default function Logs() {
 
         <div className="card overflow-hidden">
           {items.map((e) => (
-            <div key={e.id} className="border-b border-slate-100 last:border-0">
+            <div key={e.id} className="border-b border-line last:border-0">
               <button
                 onClick={() => setExpanded(expanded === e.id ? null : e.id)}
-                className="flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm hover:bg-slate-50"
+                className="flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm hover:bg-surface-2"
               >
-                <span className="w-40 truncate font-medium text-brand-900">
+                <span className="w-40 truncate font-medium text-ink">
                   {e.stage_name}
                 </span>
-                <span className="w-16 text-slate-400">{e.stage_type}</span>
+                <span className="w-16 text-ink3">{e.stage_type}</span>
                 <StatusBadge status={e.status} />
-                <span className="font-mono text-xs text-slate-400">
+                <span className="font-mono text-xs text-ink3">
                   {e.id.slice(0, 8)}
                 </span>
-                <span className="ml-auto text-xs text-slate-400">
+                <span className="ml-auto text-xs text-ink3">
                   {new Date(e.started_at).toLocaleString("pt-BR")}
                 </span>
-                <span className="text-slate-300">{expanded === e.id ? "▲" : "▼"}</span>
+                <span className="text-ink3">{expanded === e.id ? "▲" : "▼"}</span>
               </button>
               {expanded === e.id && (
-                <div className="space-y-2 bg-slate-50 px-4 py-3">
+                <div className="space-y-2 bg-surface-2 px-4 py-3">
                   <LogBlock title="stdout" color="text-emerald-200" body={e.stdout} />
                   {e.stderr && (
                     <LogBlock title="stderr" color="text-red-300" body={e.stderr} />
                   )}
                   <div>
-                    <div className="mb-1 text-xs font-semibold uppercase text-slate-400">
+                    <div className="mb-1 text-xs font-semibold uppercase text-ink3">
                       output
                     </div>
-                    <pre className="overflow-auto rounded bg-white p-2 text-xs">
+                    <pre className="overflow-auto rounded bg-surface p-2 text-xs">
                       {JSON.stringify(e.output_data, null, 2)}
                     </pre>
                   </div>
@@ -139,7 +139,7 @@ export default function Logs() {
             </div>
           ))}
           {items.length === 0 && (
-            <div className="px-4 py-8 text-center text-slate-400">
+            <div className="px-4 py-8 text-center text-ink3">
               Nenhuma execução encontrada.
             </div>
           )}
@@ -153,7 +153,7 @@ export default function Logs() {
           >
             Anterior
           </button>
-          <span className="text-slate-500">
+          <span className="text-ink2">
             {page} / {totalPages}
           </span>
           <button
@@ -172,7 +172,7 @@ export default function Logs() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-500">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-ink2">{label}</span>
       {children}
     </label>
   );
@@ -181,8 +181,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function LogBlock({ title, color, body }: { title: string; color: string; body: string }) {
   return (
     <div>
-      <div className="mb-1 text-xs font-semibold uppercase text-slate-400">{title}</div>
-      <pre className={`max-h-60 overflow-auto rounded bg-slate-900 p-2 text-xs ${color}`}>
+      <div className="mb-1 text-xs font-semibold uppercase text-ink3">{title}</div>
+      <pre className={`max-h-60 overflow-auto rounded p-2 text-xs ${color}`} style={{ background: "#0b1f33" }}>
         {body || "(vazio)"}
       </pre>
     </div>
