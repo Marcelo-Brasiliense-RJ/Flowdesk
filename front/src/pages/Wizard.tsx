@@ -85,7 +85,8 @@ function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
         </div>
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
           <motion.div
-            className="h-full rounded-full bg-accent-400"
+            className="h-full rounded-full"
+            style={{ background: "linear-gradient(90deg, var(--brand), var(--accent))" }}
             animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
             transition={{ type: "spring", stiffness: 200, damping: 30 }}
           />
@@ -103,24 +104,32 @@ function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
               {current && (
                 <motion.span
                   layoutId="rail-active"
-                  className="absolute inset-0 rounded-lg bg-brand-50"
+                  className="absolute inset-0 rounded-lg"
+                  style={{ background: "var(--accent-soft)" }}
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
                 />
               )}
               <span
                 className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
                   current
-                    ? "bg-brand-700 text-white"
+                    ? "text-white"
                     : done
-                    ? "bg-accent-500 text-white"
-                    : "bg-slate-100 text-slate-400"
+                    ? "text-white"
+                    : "text-ink3"
                 }`}
+                style={
+                  current
+                    ? { background: "linear-gradient(135deg, var(--brand), var(--accent))" }
+                    : done
+                    ? { background: "var(--accent)" }
+                    : { background: "var(--surface-2)" }
+                }
               >
                 {done ? <CheckIcon className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
               </span>
               <span
                 className={`relative z-10 text-sm ${
-                  current ? "font-semibold text-brand-900" : done ? "text-slate-600" : "text-slate-400"
+                  current ? "font-semibold text-ink" : done ? "text-ink2" : "text-ink3"
                 }`}
               >
                 {label}
@@ -129,7 +138,7 @@ function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
           );
         })}
       </ol>
-      <div className="mt-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-400">
+      <div className="mt-auto rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-ink3">
         Nada é publicado sem você testar antes. Você pode abrir o modo avançado a qualquer momento.
       </div>
     </aside>
@@ -139,18 +148,17 @@ function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
 /* ---------- progresso compacto (mobile) ---------- */
 function MobileProgress({ step }: { step: number }) {
   return (
-    <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-3 lg:hidden">
+    <div className="flex items-center gap-3 border-b border-line bg-surface px-5 py-3 lg:hidden">
       <div className="flex flex-1 gap-1.5">
         {STEPS.map((_, i) => (
           <span
             key={i}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${
-              i <= step ? "bg-accent-400" : "bg-slate-200"
-            }`}
+            className="h-1.5 flex-1 rounded-full transition-colors"
+            style={{ background: i <= step ? "var(--accent)" : "var(--border)" }}
           />
         ))}
       </div>
-      <span className="shrink-0 text-xs font-medium text-slate-500">{STEPS[step]}</span>
+      <span className="shrink-0 text-xs font-medium text-ink2">{STEPS[step]}</span>
     </div>
   );
 }
@@ -370,7 +378,7 @@ export default function Wizard() {
 
   if (!project)
     return (
-      <div className="flex h-full items-center justify-center text-brand-700">
+      <div className="flex h-full items-center justify-center text-accentv">
         <Spinner className="h-8 w-8" />
       </div>
     );
@@ -410,20 +418,20 @@ export default function Wizard() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
+    <div className="flex h-full flex-col" style={{ background: "var(--bg)" }}>
+      <header className="glass flex items-center justify-between border-b border-line px-4 py-2">
         <div className="flex items-center gap-2">
           <Link to="/" className="shrink-0">
             <Logo />
           </Link>
-          <span className="text-slate-300">/</span>
-          <span className="font-semibold text-brand-900">{project.name}</span>
-          <span className="badge bg-brand-50 text-brand-600">Assistente</span>
+          <span className="text-ink3">/</span>
+          <span className="font-semibold text-ink">{project.name}</span>
+          <span className="badge" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>Assistente</span>
         </div>
         {canManage && (
           <Link
             to={`/projects/${projectId}/editor`}
-            className="text-xs text-slate-400 hover:text-brand-700"
+            className="text-xs text-ink3 transition hover:text-accentv"
             title="Editar o código e o fluxo diretamente"
           >
             Modo avançado →
@@ -432,8 +440,11 @@ export default function Wizard() {
       </header>
 
       {project.wizard_dirty && !dismissedDirty && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm">
-          <span className="text-amber-800">
+        <div
+          className="flex flex-wrap items-center gap-3 border-b px-6 py-2.5 text-sm"
+          style={{ borderColor: "var(--warn2-soft)", background: "var(--warn2-soft)" }}
+        >
+          <span style={{ color: "var(--warn2)" }}>
             Esta automação foi ajustada manualmente no modo avançado. Editar pelo
             assistente pode sobrescrever esses ajustes.
           </span>
@@ -443,7 +454,8 @@ export default function Wizard() {
           {canManage && (
             <Link
               to={`/projects/${projectId}/editor`}
-              className="text-xs font-medium text-amber-700 hover:underline"
+              className="text-xs font-medium hover:underline"
+              style={{ color: "var(--warn2)" }}
             >
               Abrir no modo avançado
             </Link>
@@ -469,7 +481,7 @@ export default function Wizard() {
       ) : (
         <div className="flex min-h-0 flex-1">
           <StepRail step={step} plan={plan} />
-          <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+          <div className="flex min-h-0 flex-1 flex-col" style={{ background: "var(--bg)" }}>
             <MobileProgress step={step} />
             <div className="min-h-0 flex-1 overflow-auto p-6 lg:p-10">
               <div className={`mx-auto ${step === 4 ? "max-w-6xl" : "max-w-2xl"}`}>
@@ -486,7 +498,7 @@ export default function Wizard() {
                 </AnimatePresence>
               </div>
             </div>
-            <footer className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
+            <footer className="glass flex items-center justify-between border-t border-line px-6 py-3">
               <button
                 onClick={() => setStep(step - 1)}
                 disabled={step === 0}
@@ -494,7 +506,7 @@ export default function Wizard() {
               >
                 ← Voltar
               </button>
-              <span className="text-xs text-slate-400">Etapa {step + 1} de {STEPS.length}</span>
+              <span className="text-xs text-ink3">Etapa {step + 1} de {STEPS.length}</span>
               {step < STEPS.length - 1 ? (
                 <button
                   onClick={handleContinue}
@@ -539,17 +551,17 @@ function DescribeStep({
 }) {
   return (
     <motion.div variants={heroVariants} initial="hidden" animate="show" className="pt-4">
-      <motion.h1 variants={heroItem} className="text-center text-2xl font-bold text-brand-900">
+      <motion.h1 variants={heroItem} className="text-center text-2xl font-bold text-ink">
         O que você quer automatizar?
       </motion.h1>
-      <motion.p variants={heroItem} className="mx-auto mt-2 max-w-lg text-center text-sm text-slate-500">
+      <motion.p variants={heroItem} className="mx-auto mt-2 max-w-lg text-center text-sm text-ink2">
         Descreva em português, com o máximo de detalhe, e anexe um exemplo. Eu leio o seu
         pedido e só pergunto o que realmente faltar.
       </motion.p>
 
       <motion.div
         variants={heroItem}
-        className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        className="card mt-6 p-4"
       >
         <textarea
           ref={taRef}
@@ -594,14 +606,14 @@ function DescribeStep({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-500"
+            className="mt-4 flex items-center justify-center gap-2 text-sm text-ink2"
           >
             <Spinner className="h-4 w-4" /> Lendo seu pedido e montando as etapas…
           </motion.div>
         )}
       </AnimatePresence>
-      {error && <p className="mt-3 text-center text-sm text-red-600">{error}</p>}
-      <motion.p variants={heroItem} className="mt-3 text-center text-xs text-slate-400">
+      {error && <p className="mt-3 text-center text-sm text-err">{error}</p>}
+      <motion.p variants={heroItem} className="mt-3 text-center text-xs text-ink3">
         Dica: Ctrl/Cmd + Enter para analisar.
       </motion.p>
     </motion.div>
@@ -619,8 +631,8 @@ interface StepProps {
 function StepTitle({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="mb-4">
-      <h1 className="text-xl font-bold text-brand-900">{title}</h1>
-      <p className="mt-1 text-sm text-slate-500">{hint}</p>
+      <h1 className="text-xl font-bold text-ink">{title}</h1>
+      <p className="mt-1 text-sm text-ink2">{hint}</p>
     </div>
   );
 }
@@ -630,7 +642,8 @@ function ConfidentBanner({ text }: { text: string }) {
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+      className="mb-4 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+      style={{ borderColor: "var(--ok-soft)", background: "var(--ok-soft)", color: "var(--ok)" }}
     >
       <span className="mt-0.5 font-semibold">Entendi do seu pedido:</span>
       <span>{text}. Pode ajustar abaixo se quiser.</span>
@@ -643,7 +656,8 @@ function QuestionBanner({ text }: { text: string }) {
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mb-4 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800"
+      className="mb-4 rounded-lg border px-3 py-2 text-sm font-medium"
+      style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)", color: "var(--accent)" }}
     >
       {text}
     </motion.div>
@@ -664,12 +678,15 @@ function ChoiceCard({
       onClick={onClick}
       whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.99 }}
-      className={`w-full rounded-xl border p-4 text-left transition ${
-        active ? "border-brand-500 bg-brand-50" : "border-slate-200 bg-white hover:border-brand-300"
-      }`}
+      className="w-full rounded-xl border p-4 text-left transition"
+      style={
+        active
+          ? { borderColor: "var(--accent)", background: "var(--accent-soft)" }
+          : { borderColor: "var(--border)", background: "var(--surface)" }
+      }
     >
-      <div className="font-medium text-brand-900">{title}</div>
-      <div className="mt-0.5 text-sm text-slate-500">{desc}</div>
+      <div className="font-medium text-ink">{title}</div>
+      <div className="mt-0.5 text-sm text-ink2">{desc}</div>
     </motion.button>
   );
 }
@@ -697,8 +714,8 @@ function TriggerStep({ state, patch, plan }: StepProps) {
           onClick={() => set("webhook")} />
       </div>
       {kind === "schedule" && (
-        <div className="mt-4 flex items-center gap-2 rounded-lg bg-white p-3 text-sm">
-          <span className="text-slate-500">A cada</span>
+        <div className="mt-4 flex items-center gap-2 rounded-lg bg-surface p-3 text-sm">
+          <span className="text-ink2">A cada</span>
           <input type="number" min={1} value={state.trigger?.every ?? 1}
             onChange={(e) => patch({ trigger: { kind: "schedule", every: Math.max(1, Number(e.target.value)), unit: state.trigger?.unit ?? "hours" } })}
             className="input w-20" />
@@ -745,8 +762,8 @@ function InputStep({ state, patch, plan }: StepProps) {
           onClick={() => set("none")} />
       </div>
       {kind === "fields" && (
-        <div className="mt-4 space-y-2 rounded-lg bg-white p-3">
-          {fields.length === 0 && <p className="text-sm text-slate-400">Nenhum campo ainda.</p>}
+        <div className="mt-4 space-y-2 rounded-lg bg-surface p-3">
+          {fields.length === 0 && <p className="text-sm text-ink3">Nenhum campo ainda.</p>}
           {fields.map((f, i) => (
             <div key={i} className="flex items-center gap-2">
               <input className="input flex-1" placeholder="Rótulo do campo (ex: CNPJ)"
@@ -758,7 +775,7 @@ function InputStep({ state, patch, plan }: StepProps) {
                 <option value="date">data</option>
                 <option value="select">lista</option>
               </select>
-              <button type="button" onClick={() => removeField(i)} className="px-2 text-slate-400 hover:text-red-600">×</button>
+              <button type="button" onClick={() => removeField(i)} className="px-2 text-ink3 hover:text-err">×</button>
             </div>
           ))}
           <button type="button" onClick={addField} className="btn-outline py-1 text-xs">+ Adicionar campo</button>
@@ -783,7 +800,7 @@ function ProcessStep({ state, patch, plan }: StepProps) {
         value={state.process?.description ?? ""}
         onChange={(e) => patch({ process: { description: e.target.value } })}
       />
-      <p className="mt-2 text-xs text-slate-400">
+      <p className="mt-2 text-xs text-ink3">
         Ao continuar, a IA monta a automação e mostra uma explicação. Nada é publicado sem você testar antes.
       </p>
     </div>
@@ -918,14 +935,17 @@ function ReviewStep({
               onFlow={(active, status) => setFlow({ active, status })}
             />
           ) : (
-            <div className="flex items-center gap-2 rounded-2xl border-2 border-accent-200 bg-white p-5 text-sm text-slate-400 shadow-md">
+            <div
+              className="card flex items-center gap-2 p-5 text-sm text-ink3 shadow-token"
+              style={{ borderColor: "var(--accent)" }}
+            >
               <Spinner className="h-4 w-4" /> Preparando o teste…
             </div>
           )}
 
           {/* fluxo da automação: passo a passo visual e animado, logo abaixo do teste */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="card p-5">
+            <div className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-ink3">
               Fluxo da automação
             </div>
             <AutomationFlow steps={flowSteps} activeKey={flow.active} status={flow.status} />
@@ -934,32 +954,32 @@ function ReviewStep({
 
         {/* COMPLEMENTOS (suporte): contexto da automação, na mesma tela */}
         <aside className="space-y-3 lg:col-span-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-ink3">
             Sobre esta automação
           </div>
           {/* o que esta automação faz */}
-          <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-4">
+          <div className="rounded-xl border border-line bg-surface-2 p-4">
             <div className="mb-1.5 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-brand-900">O que esta automação faz</h3>
+              <h3 className="text-sm font-semibold text-ink">O que esta automação faz</h3>
               <button onClick={onRebuild} disabled={building}
-                className="text-xs text-slate-400 hover:text-brand-700 disabled:opacity-50">
+                className="text-xs text-ink3 hover:text-accentv disabled:opacity-50">
                 {building ? "Montando…" : "Montar de novo"}
               </button>
             </div>
             {building ? (
-              <div className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="flex items-center gap-2 text-sm text-ink3">
                 <Spinner className="h-4 w-4" /> Montando a automação…
               </div>
             ) : buildError ? (
-              <p className="text-sm text-red-600">{buildError}</p>
+              <p className="text-sm text-err">{buildError}</p>
             ) : (
               <AutomationDescription projectId={projectId} initial={build?.explanation || ""} />
             )}
           </div>
 
           {/* resumo em palavras */}
-          <div className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="rounded-xl border border-line bg-surface-2 p-4">
+            <div className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-ink3">
               Resumo em palavras
             </div>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3">
@@ -1039,7 +1059,7 @@ function AutomationFlow({
             {i > 0 && <FlowArrow label={s.edge} active={st === "running" || st === "done" || st === "error"} />}
             <motion.div
               variants={reduce ? undefined : flowItemV}
-              className={`relative flex w-full flex-col gap-2 rounded-xl border-2 bg-white p-3 shadow-sm lg:min-w-0 lg:flex-1 ${ring}`}
+              className={`relative flex w-full flex-col gap-2 rounded-xl border-2 bg-surface p-3 shadow-token-sm lg:min-w-0 lg:flex-1 ${ring}`}
               style={{ borderColor: meta.color }}
             >
               {st === "running" && (
@@ -1076,13 +1096,13 @@ function AutomationFlow({
                   <StageIcon type={s.type} className="h-4 w-4" />
                 </span>
                 <div className="leading-tight">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-ink3">
                     {meta.label}
                   </div>
-                  <div className="text-sm font-medium text-brand-900">{s.name}</div>
+                  <div className="text-sm font-medium text-ink">{s.name}</div>
                 </div>
               </div>
-              <p className="text-xs leading-relaxed text-slate-500">{s.desc}</p>
+              <p className="text-xs leading-relaxed text-ink2">{s.desc}</p>
             </motion.div>
           </div>
         );
@@ -1095,13 +1115,13 @@ function FlowArrow({ label, active = false }: { label?: string; active?: boolean
   return (
     <div className="flex shrink-0 items-center justify-center gap-1 py-1 lg:flex-col lg:px-3 lg:py-0">
       {label && (
-        <span className={`whitespace-nowrap text-[10px] font-medium ${active ? "text-accent-600" : "text-slate-400"}`}>
+        <span className={`whitespace-nowrap text-[10px] font-medium ${active ? "text-accentv" : "text-ink3"}`}>
           {label}
         </span>
       )}
       <svg
         viewBox="0 0 24 24"
-        className={`h-4 w-6 rotate-90 lg:rotate-0 ${active ? "text-accent-500" : "text-slate-300"}`}
+        className={`h-4 w-6 rotate-90 lg:rotate-0 ${active ? "text-accentv" : "text-ink3"}`}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
@@ -1119,8 +1139,8 @@ function FlowArrow({ label, active = false }: { label?: string; active?: boolean
 function Word({ term, desc, className = "" }: { term: string; desc: string; className?: string }) {
   return (
     <div className={className}>
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{term}</dt>
-      <dd className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{desc}</dd>
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink3">{term}</dt>
+      <dd className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-ink2">{desc}</dd>
     </div>
   );
 }
@@ -1170,7 +1190,7 @@ function AutomationDescription({ projectId, initial }: { projectId: number; init
 
   if (mode === "generating") {
     return (
-      <div className="flex items-center gap-2 text-sm text-slate-400">
+      <div className="flex items-center gap-2 text-sm text-ink3">
         <Spinner className="h-4 w-4" /> Gerando a descrição da automação…
       </div>
     );
@@ -1179,13 +1199,13 @@ function AutomationDescription({ projectId, initial }: { projectId: number; init
   if (mode === "view") {
     return (
       <div>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{text}</p>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink2">{text}</p>
         <button
           onClick={() => {
             setDraft(text);
             setMode("edit");
           }}
-          className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700"
+          className="mt-2 text-xs font-medium text-accentv hover:brightness-110"
         >
           Editar descrição
         </button>
@@ -1196,7 +1216,7 @@ function AutomationDescription({ projectId, initial }: { projectId: number; init
   return (
     <div>
       {mode === "ask" && (
-        <p className="mb-2 text-sm text-amber-700">
+        <p className="mb-2 text-sm" style={{ color: "var(--warn2)" }}>
           Não consegui descrever esta automação automaticamente. Descreva, em uma ou duas
           frases, o que ela faz.
         </p>
@@ -1404,20 +1424,20 @@ function TestPanel({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border-2 border-accent-200 bg-white shadow-md ring-1 ring-accent-100/60">
-      <div className="flex items-center gap-3 border-b border-accent-100 bg-accent-50/60 px-5 py-3.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-500 text-white shadow-sm">
+    <div className="card overflow-hidden border-2 shadow-token" style={{ borderColor: "var(--accent)" }}>
+      <div className="flex items-center gap-3 border-b border-line px-5 py-3.5" style={{ background: "var(--accent-soft)" }}>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-token-sm" style={{ background: "var(--accent)" }}>
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M6 4l14 8-14 8V4z" />
           </svg>
         </span>
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-600">Próximo passo</div>
-          <h3 className="text-base font-bold text-brand-900">Testar com dados de exemplo</h3>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-accentv">Próximo passo</div>
+          <h3 className="text-base font-bold text-ink">Testar com dados de exemplo</h3>
         </div>
       </div>
       <div className="p-5">
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-ink2">
         Rode a automação de verdade antes de publicar. Publicar só fica disponível após um teste bem-sucedido.
       </p>
 
@@ -1431,14 +1451,14 @@ function TestPanel({
               e.target.value = "";
             }} />
           </label>
-          {sampleName && <span className="text-emerald-600">✓ {sampleName}</span>}
+          {sampleName && <span className="text-ok">✓ {sampleName}</span>}
         </div>
       )}
       {inputKind === "fields" && (
         <div className="mt-3 space-y-2">
           {fields.map((f, i) => (
             <div key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-40 shrink-0 text-slate-500">{f.label || `Campo ${i + 1}`}</span>
+              <span className="w-40 shrink-0 text-ink2">{f.label || `Campo ${i + 1}`}</span>
               <input className="input" value={fieldValues[f.label] ?? ""}
                 onChange={(e) => setFieldValues((v) => ({ ...v, [f.label]: e.target.value }))} />
             </div>
@@ -1470,8 +1490,15 @@ function TestPanel({
         {exec && finished && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
             {passed ? (
-              <div className={`rounded-lg border p-3 ${looksEmpty ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
-                <div className={`text-sm font-medium ${looksEmpty ? "text-amber-800" : "text-emerald-700"}`}>
+              <div
+                className="rounded-lg border p-3"
+                style={
+                  looksEmpty
+                    ? { borderColor: "var(--warn2-soft)", background: "var(--warn2-soft)" }
+                    : { borderColor: "var(--ok-soft)", background: "var(--ok-soft)" }
+                }
+              >
+                <div className="text-sm font-medium" style={{ color: looksEmpty ? "var(--warn2)" : "var(--ok)" }}>
                   {classifReview
                     ? "Extrato lido. Agora revise a classificação abaixo."
                     : looksEmpty
@@ -1479,14 +1506,14 @@ function TestPanel({
                       : "Teste concluído com sucesso"}
                 </div>
                 {looksEmpty && (
-                  <p className="mt-1 text-xs text-amber-700">
+                  <p className="mt-1 text-xs" style={{ color: "var(--warn2)" }}>
                     A automação executou sem erro, porém não extraiu nenhum dado do arquivo. Baixe o
                     resultado para conferir e, se estiver vazio mesmo, ajuste a etapa de Processamento
                     (ou abra o modo avançado para ver os detalhes).
                   </p>
                 )}
                 {summary && (
-                  <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs text-slate-600">
+                  <pre className="mt-2 overflow-auto rounded bg-surface p-2 text-xs text-ink2">
                     {JSON.stringify(summary, null, 2)}
                   </pre>
                 )}
@@ -1503,13 +1530,13 @@ function TestPanel({
                       </svg>
                       Baixar resultado ({String(resultFile).split(/[\\/]/).pop()})
                     </button>
-                    {dlError && <span className="text-xs text-red-600">{dlError}</span>}
+                    {dlError && <span className="text-xs text-err">{dlError}</span>}
                   </div>
                 )}
               </div>
             ) : (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                <div className="text-sm font-medium text-red-700">{translateError(exec.stderr || "")}</div>
+              <div className="rounded-lg border p-3" style={{ borderColor: "var(--err-soft)", background: "var(--err-soft)" }}>
+                <div className="text-sm font-medium text-err">{translateError(exec.stderr || "")}</div>
                 <RepairPanel
                   projectId={projectId}
                   scriptStageId={scriptStageId}
@@ -1556,7 +1583,7 @@ function TestPanel({
         </div>
       )}
 
-      <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
+      <div className="mt-5 flex items-center gap-3 border-t border-line pt-4">
         <motion.button onClick={publish} disabled={!passed || looksEmpty || !!classifReview || publishing || published || blockedByReview}
           whileTap={{ scale: 0.97 }}
           className="btn-primary py-1.5 text-sm disabled:opacity-40"
@@ -1564,19 +1591,19 @@ function TestPanel({
           {published ? "Publicado ✓" : publishing ? "Publicando…" : "Publicar"}
         </motion.button>
         {blockedByReview && (
-          <span className="text-xs text-amber-600">Confirme a revisão do OCR para publicar.</span>
+          <span className="text-xs" style={{ color: "var(--warn2)" }}>Confirme a revisão do OCR para publicar.</span>
         )}
         {passed && !!classifReview && !published && (
-          <span className="text-xs text-amber-600">Confirme a classificação acima para concluir o teste.</span>
+          <span className="text-xs" style={{ color: "var(--warn2)" }}>Confirme a classificação acima para concluir o teste.</span>
         )}
         {passed && looksEmpty && !published && (
-          <span className="text-xs text-amber-600">O teste não extraiu dados. Ajuste o Processamento antes de publicar.</span>
+          <span className="text-xs" style={{ color: "var(--warn2)" }}>O teste não extraiu dados. Ajuste o Processamento antes de publicar.</span>
         )}
         {!passed && !published && (
-          <span className="text-xs text-slate-400">Publicar libera após um teste bem-sucedido.</span>
+          <span className="text-xs text-ink3">Publicar libera após um teste bem-sucedido.</span>
         )}
         {published && (
-          <span className="text-xs text-emerald-600">Automação no ar. Veja em Versões ou abra o app publicado.</span>
+          <span className="text-xs text-ok">Automação no ar. Veja em Versões ou abra o app publicado.</span>
         )}
       </div>
       </div>
@@ -1651,7 +1678,7 @@ function RepairPanel({
 
   if (phase === "exhausted") {
     return (
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-ink2">
         Tentei reparar algumas vezes sem sucesso. Ajuste a descrição na etapa Processamento e monte
         de novo, ou abra o modo avançado para ver os detalhes técnicos.
       </p>
@@ -1660,7 +1687,7 @@ function RepairPanel({
 
   if (phase === "proposing") {
     return (
-      <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+      <div className="mt-3 flex items-center gap-2 text-sm text-ink2">
         <Spinner className="h-4 w-4" /> A IA está analisando o erro e preparando uma correção…
       </div>
     );
@@ -1668,7 +1695,7 @@ function RepairPanel({
 
   if (phase === "applying") {
     return (
-      <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+      <div className="mt-3 flex items-center gap-2 text-sm text-ink2">
         <Spinner className="h-4 w-4" /> Aplicando a correção e testando de novo…
       </div>
     );
@@ -1678,10 +1705,10 @@ function RepairPanel({
     if (!proposal.has_changes) {
       return (
         <div className="mt-3 space-y-2">
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-ink2">
             {proposal.diagnosis || "Não consegui identificar uma correção automática."}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink3">
             Tente ajustar a descrição na etapa Processamento, ou abra o modo avançado.
           </p>
           <button onClick={() => setPhase("idle")} className="btn-ghost py-1 text-xs">
@@ -1691,18 +1718,18 @@ function RepairPanel({
       );
     }
     return (
-      <div className="mt-3 space-y-2.5 rounded-lg border border-slate-200 bg-white p-3">
+      <div className="mt-3 space-y-2.5 rounded-lg border border-line bg-surface p-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">O que aconteceu</div>
-          <p className="text-sm text-slate-700">{proposal.diagnosis}</p>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink3">O que aconteceu</div>
+          <p className="text-sm text-ink2">{proposal.diagnosis}</p>
         </div>
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Como vou resolver</div>
-          <p className="text-sm text-slate-700">{proposal.change_summary}</p>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink3">Como vou resolver</div>
+          <p className="text-sm text-ink2">{proposal.change_summary}</p>
         </div>
         <button
           onClick={() => setShowCode((v) => !v)}
-          className="text-xs font-medium text-brand-600 hover:text-brand-700"
+          className="text-xs font-medium text-accentv hover:brightness-110"
         >
           {showCode ? "Ocultar alteração no código" : "Ver alteração no código"}
         </button>
@@ -1712,7 +1739,7 @@ function RepairPanel({
           </pre>
         )}
         <div>
-          <label className="text-xs text-slate-500">Quer dar uma dica? (opcional)</label>
+          <label className="text-xs text-ink3">Quer dar uma dica? (opcional)</label>
           <input
             className="input mt-1 text-sm"
             placeholder="Ex: a coluna se chama 'Vlr Total'."
@@ -1720,7 +1747,7 @@ function RepairPanel({
             onChange={(e) => setHint(e.target.value)}
           />
         </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-err">{error}</p>}
         <div className="flex items-center gap-2 pt-0.5">
           <button onClick={apply} className="btn-accent py-1.5 text-sm">
             Aplicar e testar
@@ -1750,7 +1777,7 @@ function RepairPanel({
       </button>
       {attempts > 0 && (
         <div>
-          <label className="text-xs text-slate-500">Dica para a próxima tentativa (opcional)</label>
+          <label className="text-xs text-ink3">Dica para a próxima tentativa (opcional)</label>
           <input
             className="input mt-1 text-sm"
             placeholder="Ex: a coluna se chama 'Vlr Total'."
@@ -1759,8 +1786,8 @@ function RepairPanel({
           />
         </div>
       )}
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <p className="text-xs text-slate-500">
+      {error && <p className="text-xs text-err">{error}</p>}
+      <p className="text-xs text-ink3">
         Ou ajuste a descrição na etapa Processamento, ou abra o modo avançado.
       </p>
     </div>

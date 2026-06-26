@@ -78,11 +78,19 @@ export default function WorkflowMonitor() {
     <ProjectLayout project={project}>
       <div className="relative h-full">
         <div className="glass absolute left-0 right-0 top-0 z-10 flex items-center justify-between border-b border-line px-4 py-2">
-          <div>
+          <div className="flex items-center gap-2.5">
             <h1 className="font-semibold text-ink">Monitor do Workflow</h1>
-            <p className="text-xs text-ink2">
-              Atualiza em tempo real via WebSocket
-            </p>
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+              style={{ background: "var(--ok-soft)", color: "var(--ok)" }}
+              title="Atualiza em tempo real via WebSocket"
+            >
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: "var(--ok)", animation: "pulse 1.6s infinite" }}
+              />
+              tempo real
+            </span>
           </div>
           <Link to={`/projects/${id}/editor`} className="btn-primary py-1.5 text-sm">
             Editar projeto

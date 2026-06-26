@@ -9,8 +9,10 @@ export default function AccessControl() {
 
   return (
     <ProjectLayout project={project}>
-      <div className="p-6">
-        <h1 className="mb-4 text-xl font-bold text-ink">Controle de Acesso</h1>
+      <div className="mx-auto max-w-5xl p-6">
+        <h1 className="mb-5 text-2xl font-extrabold tracking-tight text-ink">
+          Controle de Acesso
+        </h1>
         <div className="mb-4 flex gap-1 border-b border-line">
           {[
             ["users", "Usuários"],
@@ -78,17 +80,19 @@ function Users({
     <div className="space-y-6">
       <div className="card p-4">
         <h2 className="mb-3 font-semibold text-ink">Política global</h2>
-        <label className="mb-2 flex items-center gap-2 text-sm">
+        <label className="mb-2 flex items-center gap-2 text-sm text-ink2">
           <input
             type="radio"
+            className="h-4 w-4 accent-[color:var(--accent)]"
             checked={mode === "whitelist"}
             onChange={() => setMode("whitelist")}
           />
           Permitir apenas usuários listados
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm text-ink2">
           <input
             type="radio"
+            className="h-4 w-4 accent-[color:var(--accent)]"
             checked={mode === "domain"}
             onChange={() => setMode("domain")}
           />
@@ -135,7 +139,11 @@ function Users({
                 <td className="px-4 py-2 text-ink">{m.email}</td>
                 <td className="px-4 py-2">
                   {m.roles.map((r) => (
-                    <span key={r} className="badge mr-1" data-status="queued">
+                    <span
+                      key={r}
+                      className="badge mr-1"
+                      style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                    >
                       {r}
                     </span>
                   ))}

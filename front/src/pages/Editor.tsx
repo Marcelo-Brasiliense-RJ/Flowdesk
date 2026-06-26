@@ -75,7 +75,7 @@ export default function Editor() {
         target: String(e.target_stage_id),
         label: e.variable_label,
         markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: "#94a3b8" },
+        style: { stroke: "var(--border-strong)" },
       }))
     );
   }, [projectId, setNodes, setEdges]);
@@ -235,20 +235,25 @@ export default function Editor() {
   return (
     <div className="flex h-full flex-col bg-surface-2">
       {/* Top bar */}
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <header className="glass flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2">
+        <div className="flex min-w-0 items-center gap-3">
           <Link to="/" className="shrink-0">
             <Logo />
           </Link>
           <span className="shrink-0 text-ink3">/</span>
-          <span className="truncate font-semibold text-ink">
-            {project?.name}
-          </span>
-          {project && (
-            <span className="shrink-0">
-              <StatusBadge status={project.status} />
-            </span>
-          )}
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-sm font-bold text-ink">
+                {project?.name || "Editor"}
+              </h1>
+              {project && (
+                <span className="shrink-0">
+                  <StatusBadge status={project.status} />
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-ink3">Modo avançado, código e fluxo</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span
@@ -392,13 +397,14 @@ export default function Editor() {
                   <button
                     onClick={saveFile}
                     disabled={saving === "saving"}
-                    className={`ml-auto rounded-lg px-2.5 py-1 text-xs font-medium ${
+                    className="btn-primary ml-auto px-2.5 py-1 text-xs"
+                    style={
                       saving === "saved"
-                        ? "bg-emerald-500 text-white"
+                        ? { background: "var(--ok)" }
                         : saving === "error"
-                        ? "bg-red-500 text-white"
-                        : "bg-accent-500 text-white hover:bg-accent-600"
-                    }`}
+                        ? { background: "var(--err)" }
+                        : undefined
+                    }
                   >
                     {saving === "saving"
                       ? "Salvando..."
@@ -456,7 +462,7 @@ export default function Editor() {
               onNodeClick={onNodeClick}
               fitView
             >
-              <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="#cbd5e1" />
+              <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="var(--border-strong)" />
               <Controls />
             </ReactFlow>
           </div>

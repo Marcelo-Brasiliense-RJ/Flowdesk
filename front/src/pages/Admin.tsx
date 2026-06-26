@@ -211,6 +211,9 @@ export default function Admin() {
           </div>
         </div>
 
+        {/* uso de IA · tokens — só renderiza com dados reais do backend */}
+        {adm.ai_usage && <AiUsage usage={adm.ai_usage} />}
+
         {/* gestão de usuários */}
         <div className="mb-6">
           <UsersAdmin />
@@ -475,6 +478,61 @@ function UsersAdmin() {
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * Uso de IA · Tokens. O design prevê entrada/saída/custo/limite mensal, mas o
+ * backend (campo ai_usage) só fornece tokens_total e top_projects. Renderizamos
+ * apenas o que existe; não fabricamos a divisão entrada/saída, custo nem limite.
+ */
+function AiUsage({ usage }: { usage: NonNullable<AdminData["ai_usage"]> }) {
+  const maxTokens = Math.max(1, ...usage.top_projects.map((p) => p.tokens));
+  return (
+    <div className="card mb-6 p-5">
+      <div className="mb-4">
+        <h2 className="font-bold text-ink">Uso de IA · Tokens da API</h2>
+        <p className="mt-0.5 text-xs text-ink3">Consumo total estimado do modelo</p>
+      </div>
+
+      <div className="mb-5 rounded-2xl p-4" style={{ background: "var(--surface-2)" }}>
+        <div className="flex items-center gap-2 text-xs text-ink2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15l-1.8-4.2L5.5 9l4.7-1.3z" />
+          </svg>
+          Total de tokens
+        </div>
+        <div className="mt-1.5 text-2xl font-extrabold text-ink">
+          {usage.tokens_total.toLocaleString("pt-BR")}
+        </div>
+      </div>
+
+      <div className="border-t border-line pt-4">
+        <div className="mb-3 text-xs font-bold uppercase tracking-wide text-ink3">
+          Top projetos por tokens
+        </div>
+        {usage.top_projects.length === 0 ? (
+          <p className="text-sm text-ink3">Nenhum consumo registrado ainda.</p>
+        ) : (
+          usage.top_projects.map((p) => (
+            <div key={p.project_id} className="mb-3 last:mb-0">
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <Link to={`/projects/${p.project_id}/assistente`} className="text-ink2 hover:text-accentv">
+                  {p.project_name}
+                </Link>
+                <span className="font-semibold text-ink">{p.tokens.toLocaleString("pt-BR")}</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${(p.tokens / maxTokens) * 100}%`, background: "var(--accent)" }}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

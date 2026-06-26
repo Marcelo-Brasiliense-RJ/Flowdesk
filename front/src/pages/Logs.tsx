@@ -41,10 +41,10 @@ export default function Logs() {
   return (
     <ProjectLayout project={project}>
       <div className="p-6">
-        <h1 className="mb-1 text-xl font-bold text-ink">Logs de execução</h1>
-        <p className="mb-4 text-sm text-ink2">{total} execução(ões)</p>
+        <h1 className="mb-1.5 text-xl font-extrabold text-ink">Logs de execução</h1>
+        <p className="mb-4 text-sm text-ink2">{total} execuções</p>
 
-        <div className="card mb-4 grid grid-cols-2 gap-3 p-4 sm:grid-cols-5">
+        <div className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-5">
           <Field label="Etapa">
             <select
               className="input"
@@ -105,23 +105,23 @@ export default function Logs() {
             <div key={e.id} className="border-b border-line last:border-0">
               <button
                 onClick={() => setExpanded(expanded === e.id ? null : e.id)}
-                className="flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm hover:bg-surface-2"
+                className="flex w-full items-center gap-3.5 px-[18px] py-3 text-left text-sm transition hover:bg-surface-2"
               >
-                <span className="w-40 truncate font-medium text-ink">
+                <span className="w-[150px] shrink-0 truncate font-semibold text-ink">
                   {e.stage_name}
                 </span>
-                <span className="w-16 text-ink3">{e.stage_type}</span>
+                <span className="w-[54px] shrink-0 text-xs text-ink3">{e.stage_type}</span>
                 <StatusBadge status={e.status} />
-                <span className="font-mono text-xs text-ink3">
+                <span className="shrink-0 font-mono text-[11px] text-ink3">
                   {e.id.slice(0, 8)}
                 </span>
                 <span className="ml-auto text-xs text-ink3">
                   {new Date(e.started_at).toLocaleString("pt-BR")}
                 </span>
-                <span className="text-ink3">{expanded === e.id ? "▲" : "▼"}</span>
+                <span className="shrink-0 text-[11px] text-ink3">{expanded === e.id ? "▲" : "▼"}</span>
               </button>
               {expanded === e.id && (
-                <div className="space-y-2 bg-surface-2 px-4 py-3">
+                <div className="space-y-2 bg-surface-2 px-[18px] pb-3.5 pt-1">
                   <LogBlock title="stdout" color="text-emerald-200" body={e.stdout} />
                   {e.stderr && (
                     <LogBlock title="stderr" color="text-red-300" body={e.stderr} />

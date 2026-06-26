@@ -90,7 +90,7 @@ export default function Files() {
           <h1 className="text-xl font-bold text-ink">Arquivos</h1>
           <div className="flex gap-2">
             <button onClick={newFolder} className="btn-outline py-1.5 text-sm">
-              + Novo
+              + Nova pasta
             </button>
             <button
               onClick={() => fileInput.current?.click()}
@@ -126,7 +126,10 @@ export default function Files() {
             className="input ml-auto max-w-xs"
             placeholder="Buscar nesta pasta..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
 
@@ -137,10 +140,10 @@ export default function Files() {
                 <th className="px-4 py-2">
                   <input type="checkbox" disabled />
                 </th>
-                <th className="px-4 py-2">Nome</th>
-                <th className="px-4 py-2">Tamanho</th>
-                <th className="px-4 py-2">Modificado</th>
-                <th className="px-4 py-2"></th>
+                <th className="px-4 py-2 font-bold tracking-wide">Nome</th>
+                <th className="px-4 py-2 font-bold tracking-wide">Tamanho</th>
+                <th className="px-4 py-2 font-bold tracking-wide">Modificado</th>
+                <th className="px-4 py-2 text-right font-bold tracking-wide">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -194,6 +197,28 @@ export default function Files() {
             </tbody>
           </table>
         </div>
+
+        {filtered.length > pageSize && (
+          <div className="mt-3 flex items-center justify-end gap-3 text-sm text-ink3">
+            <span>
+              {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="btn-outline py-1 text-sm disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <button
+              onClick={() => setPage((p) => (p * pageSize < filtered.length ? p + 1 : p))}
+              disabled={page * pageSize >= filtered.length}
+              className="btn-outline py-1 text-sm disabled:opacity-50"
+            >
+              Próxima
+            </button>
+          </div>
+        )}
       </div>
     </ProjectLayout>
   );
