@@ -1,10 +1,15 @@
 import type { StageType } from "../lib/types";
+import { useTheme } from "../lib/theme";
 
 export function Logo({ light = false }: { light?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <svg viewBox="0 0 64 64" className="h-7 w-7">
-        <rect width="64" height="64" rx="14" fill={light ? "#ffffff" : "#0a1f33"} />
+      <svg
+        viewBox="0 0 64 64"
+        className="h-7 w-7"
+        style={{ color: "var(--text)" }}
+      >
+        <rect width="64" height="64" rx="14" fill={light ? "#ffffff" : "currentColor"} />
         <circle cx="20" cy="22" r="6" fill="#18b1a8" />
         <circle cx="44" cy="22" r="6" fill="#1f6fb2" />
         <circle cx="32" cy="44" r="6" fill="#2dd4c4" />
@@ -17,41 +22,56 @@ export function Logo({ light = false }: { light?: boolean }) {
         />
       </svg>
       <span
-        className={`text-lg font-bold tracking-tight ${
-          light ? "text-white" : "text-brand-900"
+        className={`text-lg font-extrabold tracking-tight ${
+          light ? "text-white" : "text-ink"
         }`}
       >
-        Flow<span className="text-accent-500">Desk</span>
+        Flow<span style={{ color: "var(--accent)" }}>Desk</span>
       </span>
     </div>
   );
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  live: "No ar",
+  draft: "Rascunho",
+  inactive: "Inativo",
+  failed: "Falhou",
+  success: "Sucesso",
+  running: "Em andamento",
+  error: "Erro",
+  queued: "Na fila",
+};
+
 export function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    live: "bg-emerald-100 text-emerald-700",
-    draft: "bg-slate-100 text-slate-600",
-    inactive: "bg-slate-100 text-slate-500",
-    failed: "bg-orange-100 text-orange-700",
-    success: "bg-emerald-100 text-emerald-700",
-    running: "bg-amber-100 text-amber-700",
-    error: "bg-red-100 text-red-700",
-    queued: "bg-slate-100 text-slate-600",
-  };
-  const label: Record<string, string> = {
-    live: "No ar",
-    draft: "Rascunho",
-    inactive: "Inativo",
-    failed: "Falhou",
-    success: "Sucesso",
-    running: "Em andamento",
-    error: "Erro",
-    queued: "Na fila",
-  };
   return (
-    <span className={`badge ${map[status] || "bg-slate-100 text-slate-600"}`}>
-      {label[status] || status}
+    <span className="badge" data-status={status}>
+      {STATUS_LABEL[status] || status}
     </span>
+  );
+}
+
+/** Alterna entre tema claro e escuro. */
+export function ThemeToggle({ className = "" }: { className?: string }) {
+  const { theme, toggle } = useTheme();
+  return (
+    <button
+      onClick={toggle}
+      title="Alternar tema"
+      className={`flex items-center justify-center rounded-xl border border-line bg-surface text-ink2 transition hover:bg-surface-2 ${className}`}
+      style={{ width: 36, height: 36 }}
+    >
+      {theme === "dark" ? (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </svg>
+      ) : (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+        </svg>
+      )}
+    </button>
   );
 }
 

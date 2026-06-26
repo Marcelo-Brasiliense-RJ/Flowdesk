@@ -132,8 +132,8 @@ export default function Manage() {
       <div className="min-h-full">
         <TopNav />
         <main className="mx-auto max-w-3xl px-6 py-20 text-center">
-          <h1 className="text-xl font-bold text-brand-900">Acesso restrito</h1>
-          <p className="mt-2 text-sm text-slate-500">
+          <h1 className="text-xl font-bold text-ink">Acesso restrito</h1>
+          <p className="mt-2 text-sm text-ink2">
             Esta área é exclusiva para administradores e desenvolvedores.
           </p>
         </main>
@@ -142,20 +142,21 @@ export default function Manage() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50">
+    <div className="min-h-full">
       <TopNav />
       <main className="mx-auto max-w-7xl px-6 py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-brand-900">Gerenciamento de automações</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-2xl font-extrabold tracking-tight text-ink">Gerenciamento de automações</h1>
+            <p className="text-sm text-ink2">
               Manutenção e saúde de todas as automações da organização.
             </p>
           </div>
           {isAdmin && selected.size > 0 && (
             <button
               onClick={bulkDelete}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105"
+              style={{ background: "var(--err)" }}
             >
               Excluir selecionadas ({selected.size})
             </button>
@@ -167,8 +168,8 @@ export default function Manage() {
           {loading ? (
             [0, 1, 2, 3].map((i) => (
               <div key={i} className="card animate-pulse p-4">
-                <div className="h-3 w-20 rounded bg-slate-200" />
-                <div className="mt-2 h-7 w-12 rounded bg-slate-200" />
+                <div className="h-3 w-20 rounded" style={{ background: "var(--border-strong)" }} />
+                <div className="mt-2 h-7 w-12 rounded" style={{ background: "var(--border-strong)" }} />
               </div>
             ))
           ) : (
@@ -188,14 +189,14 @@ export default function Manage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <span className="text-xs text-slate-400">{filtered.length} de {apps.length}</span>
+          <span className="text-xs text-ink3">{filtered.length} de {apps.length}</span>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-line bg-surface-2 text-left text-[11px] uppercase tracking-wide text-ink3">
                   {isAdmin && <th className="w-10 px-4 py-3"></th>}
                   <th className="px-4 py-3 font-semibold">Aplicação</th>
                   <th className="px-4 py-3 font-semibold">Pasta</th>
@@ -205,22 +206,22 @@ export default function Manage() {
                   <th className="px-4 py-3 text-right font-semibold">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[color:var(--border)]">
                 {loading ? (
                   <tr>
                     <td colSpan={isAdmin ? 7 : 6} className="px-4 py-16 text-center">
-                      <Spinner className="mx-auto h-7 w-7 text-brand-600" />
+                      <Spinner className="mx-auto h-7 w-7 text-ink3" />
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 7 : 6} className="px-4 py-16 text-center text-sm text-slate-400">
+                    <td colSpan={isAdmin ? 7 : 6} className="px-4 py-16 text-center text-sm text-ink3">
                       Nenhuma aplicação encontrada.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((a) => (
-                    <tr key={a.id} className="transition hover:bg-slate-50/70">
+                    <tr key={a.id} className="transition hover:bg-surface-2">
                       {isAdmin && (
                         <td className="px-4 py-3">
                           <input
@@ -234,7 +235,7 @@ export default function Manage() {
                       <td className="px-4 py-3">
                         <button
                           onClick={() => nav(`/projects/${a.id}/assistente`)}
-                          className="text-left font-medium text-brand-900 hover:text-brand-700"
+                          className="text-left font-semibold text-ink transition hover:text-accentv"
                         >
                           {a.name}
                         </button>
@@ -242,12 +243,12 @@ export default function Manage() {
                           href={`/app/${a.subdomain}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="block truncate font-mono text-[11px] text-brand-500 hover:underline"
+                          className="block truncate font-mono text-[11px] text-brandv hover:underline"
                         >
                           /app/{a.subdomain}
                         </a>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{a.folder || "—"}</td>
+                      <td className="px-4 py-3 text-ink2">{a.folder || "—"}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={a.status} />
                       </td>
@@ -255,19 +256,22 @@ export default function Manage() {
                         {a.last_execution ? (
                           <div className="flex items-center gap-2">
                             <StatusBadge status={a.last_execution.status} />
-                            <span className="text-xs text-slate-400">{fmt(a.last_execution.finished_at)}</span>
+                            <span className="text-xs text-ink3">{fmt(a.last_execution.finished_at)}</span>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400">sem execuções</span>
+                          <span className="text-xs text-ink3">sem execuções</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {a.errors > 0 ? (
-                          <span className="inline-flex min-w-[1.5rem] justify-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          <span
+                            className="inline-flex min-w-[1.5rem] justify-center rounded-full px-2 py-0.5 text-xs font-semibold"
+                            data-status="error"
+                          >
                             {a.errors}
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-300">0</span>
+                          <span className="text-xs text-ink3">0</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -275,30 +279,31 @@ export default function Manage() {
                           <button
                             onClick={() => toggleStatus(a)}
                             disabled={busy === a.id}
-                            className={`rounded-md px-2.5 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                            className={`rounded-md px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${
                               a.status === "live"
-                                ? "border border-slate-300 text-slate-600 hover:bg-slate-100"
-                                : "bg-accent-500 text-white hover:bg-accent-600"
+                                ? "border border-line text-ink2 hover:bg-surface-2"
+                                : "text-white hover:brightness-105"
                             }`}
+                            style={a.status === "live" ? undefined : { background: "var(--accent)" }}
                           >
                             {busy === a.id ? "…" : a.status === "live" ? "Tirar do ar" : "Publicar"}
                           </button>
                           <Link
                             to={`/projects/${a.id}/logs`}
-                            className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-brand-50 hover:text-brand-700"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-ink2 transition hover:text-accentv"
                           >
                             Logs
                           </Link>
                           <Link
                             to={`/projects/${a.id}/workflow`}
-                            className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-brand-50 hover:text-brand-700"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-ink2 transition hover:text-accentv"
                           >
                             Workflow
                           </Link>
                           <button
                             onClick={() => deleteApp(a)}
                             disabled={busy === a.id}
-                            className="rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-err transition hover:underline disabled:opacity-50"
                           >
                             Excluir
                           </button>
@@ -325,16 +330,16 @@ function StatCard({
   value: number;
   tone: "brand" | "accent" | "slate" | "red";
 }) {
-  const toneCls = {
-    brand: "text-brand-700",
-    accent: "text-accent-600",
-    slate: "text-slate-600",
-    red: "text-red-600",
+  const toneColor = {
+    brand: "var(--brand)",
+    accent: "var(--accent)",
+    slate: "var(--text-2)",
+    red: "var(--err)",
   }[tone];
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${toneCls}`}>{value}</div>
+    <div className="card p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink3">{label}</div>
+      <div className="mt-1 text-2xl font-extrabold" style={{ color: toneColor }}>{value}</div>
     </div>
   );
 }

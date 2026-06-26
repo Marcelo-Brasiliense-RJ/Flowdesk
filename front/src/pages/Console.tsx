@@ -176,8 +176,8 @@ export default function Console() {
         <>
             <div className="mb-6 flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-brand-900">Automações</h1>
-                <p className="text-sm text-slate-500">
+                <h1 className="text-2xl font-extrabold tracking-tight text-ink">Automações</h1>
+                <p className="text-sm text-ink2">
                   {projects.length} automação(ões) · arraste um card para movê-lo entre pastas
                 </p>
               </div>
@@ -188,7 +188,8 @@ export default function Console() {
                       <button
                         onClick={bulkDelete}
                         disabled={selected.size === 0}
-                        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{ background: "var(--err)" }}
                       >
                         Excluir selecionados ({selected.size})
                       </button>
@@ -235,7 +236,7 @@ export default function Console() {
 
             {!loading && templates.length > 0 && (
               <section className="mb-8">
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink3">
                   Comece com um modelo
                 </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -244,12 +245,13 @@ export default function Console() {
                       key={t.key}
                       onClick={() => useTemplate(t.key)}
                       disabled={!!instantiating}
-                      className="rounded-xl border border-dashed border-brand-200 bg-brand-50/40 p-4 text-left transition hover:border-accent-400 hover:bg-accent-400/5 disabled:opacity-60"
+                      className="rounded-2xl border border-dashed border-line-strong p-4 text-left transition hover:border-accentv disabled:opacity-60"
+                      style={{ background: "var(--accent-soft)" }}
                     >
-                      <div className="font-medium text-brand-900">
+                      <div className="font-semibold text-ink">
                         {instantiating === t.key ? "Criando…" : t.name}
                       </div>
-                      <div className="mt-1 text-sm text-slate-500">{t.description}</div>
+                      <div className="mt-1 text-sm text-ink2">{t.description}</div>
                     </button>
                   ))}
                 </div>
@@ -258,7 +260,7 @@ export default function Console() {
 
             {loading ? (
               <div className="flex justify-center py-20">
-                <Spinner className="h-8 w-8 text-brand-600" />
+                <Spinner className="h-8 w-8 text-ink3" />
               </div>
             ) : (
               <>
@@ -345,34 +347,38 @@ function Section({
         if (id && onDropProject) onDropProject(id);
       }}
     >
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-ink3">
         {folderId && <span className="text-base">📁</span>}
         {title}
-        <span className="rounded-full bg-slate-100 px-2 text-xs text-slate-500">
+        <span
+          className="rounded-full px-2 text-xs text-neutral2"
+          style={{ background: "var(--neutral-soft)" }}
+        >
           {count}
         </span>
         {folderId && (
           <span className="relative">
             <button
               onClick={() => setMenu((m) => !m)}
-              className="rounded px-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              className="rounded px-1 text-ink3 transition hover:bg-surface-2 hover:text-ink2"
             >
               ⋮
             </button>
             {menu && (
               <div
-                className="absolute left-0 top-6 z-20 w-36 rounded-lg border border-slate-200 bg-white py-1 text-left normal-case shadow-lg"
+                className="absolute left-0 top-6 z-20 w-36 rounded-xl border border-line bg-surface py-1 text-left normal-case shadow-token-lg"
                 onClick={() => setMenu(false)}
               >
                 <button
                   onClick={onRenameFolder}
-                  className="block w-full px-3 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50"
+                  className="block w-full px-3 py-1.5 text-left text-sm text-ink2 hover:bg-surface-2"
                 >
                   Renomear pasta
                 </button>
                 <button
                   onClick={onDeleteFolder}
-                  className="block w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                  className="block w-full px-3 py-1.5 text-left text-sm text-err"
+                  style={{ background: "transparent" }}
                 >
                   Excluir pasta
                 </button>
@@ -383,17 +389,19 @@ function Section({
       </h2>
       {projects.length === 0 ? (
         <div
-          className={`rounded-xl border border-dashed p-6 text-center text-sm transition ${
-            over ? "border-brand-400 bg-brand-50 text-brand-600" : "border-slate-200 text-slate-400"
+          className={`rounded-2xl border border-dashed p-6 text-center text-sm transition ${
+            over ? "border-accentv text-accentv" : "border-line text-ink3"
           }`}
+          style={over ? { background: "var(--accent-soft)" } : undefined}
         >
           {over ? "Solte aqui para mover" : "Pasta vazia — arraste projetos para cá"}
         </div>
       ) : (
         <div
-          className={`grid grid-cols-1 gap-4 rounded-xl sm:grid-cols-2 lg:grid-cols-3 ${
-            over ? "ring-2 ring-brand-300 ring-offset-4" : ""
+          className={`grid grid-cols-1 gap-4 rounded-2xl sm:grid-cols-2 lg:grid-cols-3 ${
+            over ? "ring-2 ring-offset-4" : ""
           }`}
+          style={over ? { boxShadow: "0 0 0 2px var(--accent-glow)" } : undefined}
         >
           {projects.map((p) => (
             <ProjectCard
@@ -440,17 +448,19 @@ function ProjectCard({
       onClick={() =>
         selectMode ? onToggleSelect(project.id) : nav(`/projects/${project.id}/assistente`)
       }
-      className={`group relative flex cursor-pointer flex-col rounded-2xl border bg-white p-5 pl-6 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-brand-900/5 active:cursor-grabbing ${
-        selectMode && selected
-          ? "border-brand-500 ring-2 ring-brand-400/60"
-          : "border-slate-200/80 hover:border-brand-200"
+      className={`card group relative flex cursor-pointer flex-col p-5 pl-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-token active:cursor-grabbing ${
+        selectMode && selected ? "ring-2" : ""
       }`}
+      style={
+        selectMode && selected
+          ? { borderColor: "var(--accent)", boxShadow: "0 0 0 2px var(--accent-glow)" }
+          : undefined
+      }
     >
       {/* trilho lateral indica o status (no ar / rascunho) */}
       <span
-        className={`pointer-events-none absolute bottom-4 left-0 top-4 w-1 rounded-r-full transition-all duration-200 group-hover:bottom-3 group-hover:top-3 ${
-          live ? "bg-accent-400" : "bg-slate-200"
-        }`}
+        className="pointer-events-none absolute bottom-4 left-0 top-4 w-1 rounded-r-full transition-all duration-200 group-hover:bottom-3 group-hover:top-3"
+        style={{ background: live ? "var(--accent)" : "var(--border-strong)" }}
       />
 
       <div className="flex items-start justify-between gap-2">
@@ -464,7 +474,7 @@ function ProjectCard({
               className="mt-1 h-4 w-4 shrink-0 accent-brand-600"
             />
           )}
-          <h3 className="line-clamp-2 font-semibold leading-snug text-brand-900 transition-colors group-hover:text-brand-700">
+          <h3 className="line-clamp-2 font-semibold leading-snug text-ink">
             {project.name}
           </h3>
         </div>
@@ -476,7 +486,7 @@ function ProjectCard({
                 e.stopPropagation();
                 setMenu((m) => !m);
               }}
-              className="rounded-md px-1 text-lg leading-none text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"
+              className="rounded-md px-1 text-lg leading-none text-ink3 transition hover:bg-surface-2 hover:text-ink2"
             >
               ⋮
             </button>
@@ -486,7 +496,7 @@ function ProjectCard({
 
       {menu && (
         <div
-          className="absolute right-3 top-12 z-20 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl ring-1 ring-slate-900/5"
+          className="absolute right-3 top-12 z-20 w-44 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-token-lg"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -494,7 +504,7 @@ function ProjectCard({
               setMenu(false);
               onMove(project);
             }}
-            className="block w-full px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50"
+            className="block w-full px-3 py-2 text-left text-sm text-ink2 transition hover:bg-surface-2"
           >
             Mover para pasta
           </button>
@@ -503,14 +513,14 @@ function ProjectCard({
               setMenu(false);
               onDelete(project.id);
             }}
-            className="block w-full px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50"
+            className="block w-full px-3 py-2 text-left text-sm text-err transition"
           >
             Excluir projeto
           </button>
         </div>
       )}
 
-      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-500">
+      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink2">
         {project.description || "Sem descrição"}
       </p>
 
@@ -519,7 +529,7 @@ function ProjectCard({
         target="_blank"
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className="mt-4 inline-flex max-w-full items-center gap-1.5 self-start rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] text-brand-600 ring-1 ring-inset ring-slate-200/70 transition hover:bg-brand-50 hover:text-brand-700 hover:ring-brand-200"
+        className="mt-4 inline-flex max-w-full items-center gap-1.5 self-start rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-brandv ring-1 ring-inset ring-[color:var(--border)] transition hover:brightness-105"
         title={`Abrir app publicado: /app/${project.subdomain}`}
       >
         <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3 shrink-0 opacity-70" aria-hidden>
@@ -528,7 +538,7 @@ function ProjectCard({
         <span className="truncate">/app/{project.subdomain}</span>
       </a>
 
-      <div className="mt-4 flex items-center justify-end gap-1 border-t border-slate-100 pt-3 text-xs">
+      <div className="mt-4 flex items-center justify-end gap-1 border-t border-line pt-3 text-xs">
         <CardLink to={`/projects/${project.id}/workflow`}>Workflow</CardLink>
         <CardLink to={`/projects/${project.id}/logs`}>Logs</CardLink>
       </div>
@@ -541,7 +551,7 @@ function CardLink({ to, children }: { to: string; children: React.ReactNode }) {
     <Link
       to={to}
       onClick={(e) => e.stopPropagation()}
-      className="rounded-md px-2 py-1 font-medium text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
+      className="rounded-md px-2 py-1 font-medium text-ink3 transition hover:text-accentv"
     >
       {children}
     </Link>

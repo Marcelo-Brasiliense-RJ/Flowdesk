@@ -46,7 +46,7 @@ export default function Dashboard() {
     return (
       <div className="min-h-full">
         <TopNav />
-        <div className="flex items-center justify-center py-32 text-brand-600">
+        <div className="flex items-center justify-center py-32 text-ink3">
           <Spinner className="h-8 w-8" />
         </div>
       </div>
@@ -61,8 +61,8 @@ export default function Dashboard() {
       <TopNav />
       <main className="mx-auto max-w-7xl px-6 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-brand-900">Dashboard</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink">Dashboard</h1>
+          <p className="text-sm text-ink2">
             Visão operacional de todas as automações da organização
           </p>
         </div>
@@ -74,25 +74,22 @@ export default function Dashboard() {
             value={`${k.success_rate}%`}
             sub={`${k.success} de ${k.success + k.error} execuções`}
           />
-          <Kpi label="Projetos" value={k.projects}
-            sub={`${k.live} no ar · ${k.draft} rascunho`} accent="brand" />
-          <Kpi label="Execuções" value={k.executions}
-            sub={`${k.running} em andamento`} accent="slate" />
-          <Kpi label="Tempo médio" value={`${k.avg_seconds}s`}
-            sub="por execução finalizada" accent="slate" />
+          <Kpi label="Projetos" value={k.projects} sub={`${k.live} no ar · ${k.draft} rascunho`} />
+          <Kpi label="Execuções" value={k.executions} sub={`${k.running} em andamento`} />
+          <Kpi label="Tempo médio" value={`${k.avg_seconds}s`} sub="por execução finalizada" />
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* timeline chart */}
           <div className="card p-5 lg:col-span-2">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-brand-900">Execuções (7 dias)</h2>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
+              <h2 className="font-bold text-ink">Execuções (7 dias)</h2>
+              <div className="flex items-center gap-3 text-xs text-ink2">
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-accent-500" /> sucesso
+                  <span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} /> sucesso
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-red-500" /> erro
+                  <span className="h-2 w-2 rounded-full" style={{ background: "var(--err)" }} /> erro
                 </span>
               </div>
             </div>
@@ -102,40 +99,40 @@ export default function Dashboard() {
                   <div className="flex h-32 w-full max-w-[40px] flex-col justify-end gap-0.5">
                     {d.error > 0 && (
                       <div
-                        className="w-full rounded-t bg-red-400"
-                        style={{ height: `${(d.error / maxDay) * 100}%` }}
+                        className="w-full rounded-t"
+                        style={{ height: `${(d.error / maxDay) * 100}%`, background: "var(--err)" }}
                         title={`${d.error} erro(s)`}
                       />
                     )}
                     <div
-                      className="w-full rounded-t bg-accent-500"
-                      style={{ height: `${(d.success / maxDay) * 100}%` }}
+                      className="w-full rounded-t"
+                      style={{ height: `${(d.success / maxDay) * 100}%`, background: "var(--accent)" }}
                       title={`${d.success} sucesso(s)`}
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400">{d.label}</span>
+                  <span className="text-[10px] text-ink3">{d.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* status donut-ish summary */}
+          {/* status distribution */}
           <div className="card p-5">
-            <h2 className="mb-4 font-semibold text-brand-900">Distribuição</h2>
-            <StatRow color="bg-accent-500" label="Sucesso" value={k.success} total={k.executions} />
-            <StatRow color="bg-red-500" label="Erro" value={k.error} total={k.executions} />
-            <StatRow color="bg-amber-400" label="Em andamento" value={k.running} total={k.executions} />
+            <h2 className="mb-4 font-bold text-ink">Distribuição</h2>
+            <StatRow color="var(--accent)" label="Sucesso" value={k.success} total={k.executions} />
+            <StatRow color="var(--err)" label="Erro" value={k.error} total={k.executions} />
+            <StatRow color="var(--warn2)" label="Em andamento" value={k.running} total={k.executions} />
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* per-project health */}
           <div className="card overflow-hidden">
-            <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-brand-900">
+            <h2 className="border-b border-line px-5 py-3 font-bold text-ink">
               Saúde por projeto
             </h2>
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+              <thead className="bg-surface-2 text-xs uppercase text-ink3">
                 <tr>
                   <th className="px-4 py-2">Projeto</th>
                   <th className="px-4 py-2">Status</th>
@@ -145,21 +142,21 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {data.by_project.map((p) => (
-                  <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <tr key={p.id} className="border-t border-line hover:bg-surface-2">
                     <td className="px-4 py-2">
-                      <Link to={`/projects/${p.id}/logs`} className="font-medium text-brand-700 hover:underline">
+                      <Link to={`/projects/${p.id}/logs`} className="font-medium text-brandv hover:underline">
                         {p.name}
                       </Link>
                     </td>
                     <td className="px-4 py-2"><StatusBadge status={p.status} /></td>
-                    <td className="px-4 py-2 text-right text-slate-600">{p.executions}</td>
-                    <td className={`px-4 py-2 text-right font-medium ${p.errors ? "text-red-600" : "text-slate-400"}`}>
+                    <td className="px-4 py-2 text-right text-ink2">{p.executions}</td>
+                    <td className={`px-4 py-2 text-right font-medium ${p.errors ? "text-err" : "text-ink3"}`}>
                       {p.errors}
                     </td>
                   </tr>
                 ))}
                 {data.by_project.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-400">Nenhum projeto.</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-ink3">Nenhum projeto.</td></tr>
                 )}
               </tbody>
             </table>
@@ -167,29 +164,29 @@ export default function Dashboard() {
 
           {/* recent errors */}
           <div className="card overflow-hidden">
-            <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-brand-900">
+            <h2 className="border-b border-line px-5 py-3 font-bold text-ink">
               Erros recentes
             </h2>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-[color:var(--border)]">
               {data.recent_errors.map((e) => (
                 <Link
                   key={e.id}
                   to={`/projects/${e.project_id}/logs`}
-                  className="block px-5 py-3 hover:bg-red-50/50"
+                  className="block px-5 py-3 transition hover:bg-surface-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-brand-900">
+                    <span className="text-sm font-semibold text-ink">
                       {e.project_name} · {e.stage_name}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-ink3">
                       {new Date(e.started_at).toLocaleString("pt-BR")}
                     </span>
                   </div>
-                  <pre className="mt-1 truncate text-xs text-red-600">{e.stderr || "erro"}</pre>
+                  <pre className="mt-1 truncate font-mono text-xs text-err">{e.stderr || "erro"}</pre>
                 </Link>
               ))}
               {data.recent_errors.length === 0 && (
-                <div className="px-5 py-8 text-center text-sm text-slate-400">
+                <div className="px-5 py-8 text-center text-sm text-ink3">
                   Nenhum erro recente. Tudo rodando bem.
                 </div>
               )}
@@ -203,22 +200,23 @@ export default function Dashboard() {
 
 function KpiHero({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-brand-800 to-brand-600 p-5 text-white shadow-sm">
-      <div className="text-xs font-medium uppercase tracking-wide text-brand-100/80">{label}</div>
-      <div className="mt-1 text-3xl font-bold">{value}</div>
-      <div className="mt-1 text-xs text-brand-100/80">{sub}</div>
+    <div
+      className="rounded-2xl p-5 text-white"
+      style={{ background: "var(--kpi-grad)", boxShadow: "var(--shadow)" }}
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide text-white/75">{label}</div>
+      <div className="mt-1 text-3xl font-extrabold">{value}</div>
+      <div className="mt-1 text-xs text-white/75">{sub}</div>
     </div>
   );
 }
 
-function Kpi({ label, value, sub, accent }: { label: string; value: number | string; sub: string; accent: "brand" | "slate" }) {
+function Kpi({ label, value, sub }: { label: string; value: number | string; sub: string }) {
   return (
     <div className="card p-5">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-1 text-3xl font-bold ${accent === "brand" ? "text-brand-700" : "text-brand-900"}`}>
-        {value}
-      </div>
-      <div className="mt-1 text-xs text-slate-500">{sub}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-ink3">{label}</div>
+      <div className="mt-1 text-3xl font-extrabold text-ink">{value}</div>
+      <div className="mt-1 text-xs text-ink2">{sub}</div>
     </div>
   );
 }
@@ -228,11 +226,11 @@ function StatRow({ color, label, value, total }: { color: string; label: string;
   return (
     <div className="mb-3 last:mb-0">
       <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="text-slate-600">{label}</span>
-        <span className="font-medium text-brand-900">{value} <span className="text-xs text-slate-400">({pct}%)</span></span>
+        <span className="text-ink2">{label}</span>
+        <span className="font-semibold text-ink">{value} <span className="text-xs text-ink3">({pct}%)</span></span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
+      <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );

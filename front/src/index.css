@@ -2,8 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===================== DESIGN TOKENS ===================== */
+/* Sistema de design FlowDesk (importado do Claude Design "FlowDesk App"). */
 :root {
   color-scheme: light;
+  --bg: #e9edf3;
+  --surface: #ffffff;
+  --surface-2: #f5f8fc;
+  --surface-glass: rgba(255, 255, 255, 0.72);
+  --border: rgba(15, 47, 79, 0.1);
+  --border-strong: rgba(15, 47, 79, 0.2);
+  --text: #0a1f33;
+  --text-2: #46586d;
+  --text-3: #8597a8;
+  --brand: #155489;
+  --brand-strong: #0f2f4f;
+  --accent: #0f8f88;
+  --accent-2: #2dd4c4;
+  --accent-soft: rgba(24, 177, 168, 0.12);
+  --accent-glow: rgba(24, 177, 168, 0.45);
+  --shadow-sm: 0 1px 2px rgba(10, 31, 51, 0.07);
+  --shadow: 0 10px 30px -14px rgba(10, 31, 51, 0.3);
+  --shadow-lg: 0 32px 70px -28px rgba(10, 31, 51, 0.4);
+  --glow-1: rgba(45, 212, 196, 0.2);
+  --glow-2: rgba(31, 111, 178, 0.16);
+  --ok: #1f9d6b;
+  --ok-soft: rgba(31, 157, 107, 0.14);
+  --err: #e5484d;
+  --err-soft: rgba(229, 72, 77, 0.13);
+  --warn2: #c98a00;
+  --warn2-soft: rgba(201, 138, 0, 0.15);
+  --neutral: #6b7a8c;
+  --neutral-soft: rgba(107, 122, 140, 0.14);
+  --kpi-grad: linear-gradient(135deg, #14406b, #155489);
+  --user-bubble: #155489;
+  --user-text: #ffffff;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #06121e;
+  --surface: #102539;
+  --surface-2: #0b1c2d;
+  --surface-glass: rgba(16, 37, 57, 0.66);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #eaf1f8;
+  --text-2: #9fb3c5;
+  --text-3: #6a8097;
+  --brand: #4a80c2;
+  --brand-strong: #7ba7d8;
+  --accent: #2dd4c4;
+  --accent-2: #5ee9dc;
+  --accent-soft: rgba(45, 212, 196, 0.14);
+  --accent-glow: rgba(45, 212, 196, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 12px 32px -14px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 36px 80px -28px rgba(0, 0, 0, 0.7);
+  --glow-1: rgba(45, 212, 196, 0.16);
+  --glow-2: rgba(31, 111, 178, 0.24);
+  --ok: #34d399;
+  --ok-soft: rgba(52, 211, 153, 0.15);
+  --err: #ff7a7a;
+  --err-soft: rgba(255, 122, 122, 0.15);
+  --warn2: #f4c150;
+  --warn2-soft: rgba(244, 193, 80, 0.15);
+  --neutral: #9fb3c5;
+  --neutral-soft: rgba(159, 179, 197, 0.14);
+  --kpi-grad: linear-gradient(135deg, #14406b, #1f6fb2);
+  --user-bubble: #1f6fb2;
+  --user-text: #ffffff;
 }
 
 html,
@@ -15,37 +83,109 @@ body,
 
 body {
   font-family: "Inter", system-ui, sans-serif;
-  background: #f4f6f9;
-  color: #0a1f33;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ===================== STATUS PILLS ===================== */
+/* Cor por estado, dirigida por data-status (igual ao design). */
+[data-status="live"],
+[data-status="success"] {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+[data-status="draft"],
+[data-status="queued"],
+[data-status="inactive"] {
+  background: var(--neutral-soft);
+  color: var(--neutral);
+}
+[data-status="error"],
+[data-status="failed"] {
+  background: var(--err-soft);
+  color: var(--err);
+}
+[data-status="running"] {
+  background: var(--warn2-soft);
+  color: var(--warn2);
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition;
   }
+  /* Botão primário: gradiente brand -> accent (identidade do design). */
   .btn-primary {
-    @apply btn bg-brand-700 text-white hover:bg-brand-800;
+    @apply btn text-white;
+    background: linear-gradient(135deg, var(--brand), var(--accent));
+    box-shadow: 0 10px 22px -12px var(--accent-glow);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.06);
   }
   .btn-accent {
-    @apply btn bg-accent-500 text-white hover:bg-accent-600;
+    @apply btn text-white;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
   }
   .btn-ghost {
-    @apply btn text-brand-700 hover:bg-brand-50;
+    @apply btn bg-transparent text-ink2;
+  }
+  .btn-ghost:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
   }
   .btn-outline {
-    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    @apply btn;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+  }
+  .btn-outline:hover {
+    background: var(--surface-2);
   }
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    @apply rounded-2xl;
   }
   .input {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500;
+    @apply w-full rounded-xl px-3 py-2 text-sm outline-none transition;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .input::placeholder {
+    color: var(--text-3);
   }
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  /* Input de vidro sobre fundo escuro (tela de login). */
+  .login-input {
+    @apply w-full rounded-xl px-3 py-2.5 text-sm text-white outline-none;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .login-input::placeholder {
+    color: rgba(234, 241, 248, 0.5);
+  }
+  .login-input:focus {
+    border-color: rgba(45, 212, 196, 0.6);
+  }
+  /* Superfície com efeito de vidro (headers / sidebars). */
+  .glass {
+    background: var(--surface-glass);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
 }
 
+/* ===================== KEYFRAMES ===================== */
 @keyframes modalIn {
   from {
     opacity: 0;
@@ -59,18 +199,50 @@ body {
 .modal-in {
   animation: modalIn 0.16s ease-out;
 }
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -22px);
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(0, 0, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  }
+}
 
 /* React Flow dotted canvas tweaks */
 .react-flow__attribution {
   display: none;
 }
 
-/* thin scrollbars */
+/* thin scrollbars, tokenizados */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: var(--border-strong);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

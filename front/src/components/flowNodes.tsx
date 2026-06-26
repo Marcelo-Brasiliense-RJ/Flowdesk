@@ -23,13 +23,13 @@ function NodeShell({ data }: { data: NodeData }) {
   const meta = STAGE_META[data.type];
   return (
     <div
-      className="min-w-[170px] rounded-xl border-2 bg-white px-3 py-2 shadow-sm"
+      className="min-w-[170px] rounded-xl border-2 bg-surface px-3 py-2 shadow-token-sm"
       style={{ borderColor: meta.color }}
     >
       <Handle
         type="target"
         position={Position.Left}
-        style={{ background: meta.color, width: 12, height: 12, border: "2px solid white" }}
+        style={{ background: meta.color, width: 12, height: 12, border: "2px solid var(--surface)" }}
       />
       <div className="flex items-center gap-2">
         <span
@@ -39,37 +39,37 @@ function NodeShell({ data }: { data: NodeData }) {
           <StageIcon type={data.type} className="h-4 w-4" />
         </span>
         <div className="leading-tight">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink3">
             {meta.label}
           </div>
-          <div className="text-sm font-medium text-brand-900">{data.label}</div>
+          <div className="text-sm font-medium text-ink">{data.label}</div>
         </div>
       </div>
       {data.dots && (
         <div className="mt-2 flex items-center gap-1.5">
           {data.dots.length === 0 && (
-            <span className="text-[10px] text-slate-400">sem execuções</span>
+            <span className="text-[10px] text-ink3">sem execuções</span>
           )}
           {data.dots.map((d) => (
             <button
               key={d.id}
               title={`${d.status} · ${d.id.slice(0, 8)}`}
               onClick={() => data.onDot?.(d.id)}
-              className="h-3 w-3 rounded-full ring-1 ring-white"
-              style={{ background: DOT_COLOR[d.status] || "#cbd5e1" }}
+              className="h-3 w-3 rounded-full ring-1"
+              style={{ background: DOT_COLOR[d.status] || "#cbd5e1", "--tw-ring-color": "var(--surface)" } as React.CSSProperties}
             />
           ))}
         </div>
       )}
       {data.type === "script" && data.pending !== undefined && (
         <div className="mt-2">
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
             <div
-              className="h-full bg-accent-500 transition-all"
-              style={{ width: data.pending > 0 ? "70%" : "0%" }}
+              className="h-full transition-all"
+              style={{ width: data.pending > 0 ? "70%" : "0%", background: "var(--accent)" }}
             />
           </div>
-          <div className="mt-1 text-[10px] text-slate-500">
+          <div className="mt-1 text-[10px] text-ink2">
             {data.pending} tarefa(s) pendente(s) ({data.avg ?? 0}m média)
           </div>
         </div>
@@ -77,7 +77,7 @@ function NodeShell({ data }: { data: NodeData }) {
       <Handle
         type="source"
         position={Position.Right}
-        style={{ background: meta.color, width: 12, height: 12, border: "2px solid white" }}
+        style={{ background: meta.color, width: 12, height: 12, border: "2px solid var(--surface)" }}
       />
     </div>
   );

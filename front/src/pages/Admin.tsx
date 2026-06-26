@@ -101,8 +101,8 @@ export default function Admin() {
       <div className="min-h-full">
         <TopNav />
         <main className="mx-auto max-w-3xl px-6 py-20 text-center">
-          <h1 className="text-xl font-bold text-brand-900">Acesso restrito</h1>
-          <p className="mt-2 text-sm text-slate-500">
+          <h1 className="text-xl font-bold text-ink">Acesso restrito</h1>
+          <p className="mt-2 text-sm text-ink2">
             O painel de controle é exclusivo para administradores.
           </p>
         </main>
@@ -115,8 +115,8 @@ export default function Admin() {
       <div className="min-h-full">
         <TopNav />
         <main className="mx-auto max-w-3xl px-6 py-20 text-center">
-          <h1 className="text-xl font-bold text-brand-900">Não foi possível carregar</h1>
-          <p className="mt-2 text-sm text-slate-500">{err}</p>
+          <h1 className="text-xl font-bold text-ink">Não foi possível carregar</h1>
+          <p className="mt-2 text-sm text-ink2">{err}</p>
         </main>
       </div>
     );
@@ -126,7 +126,7 @@ export default function Admin() {
     return (
       <div className="min-h-full">
         <TopNav />
-        <div className="flex items-center justify-center py-32 text-brand-600">
+        <div className="flex items-center justify-center py-32 text-ink3">
           <Spinner className="h-8 w-8" />
         </div>
       </div>
@@ -137,17 +137,17 @@ export default function Admin() {
   const sys = adm.system;
 
   return (
-    <div className="min-h-full bg-slate-50">
+    <div className="min-h-full">
       <TopNav />
       <main className="mx-auto max-w-7xl px-6 py-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-brand-900">Painel de controle</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-2xl font-extrabold tracking-tight text-ink">Painel de controle</h1>
+            <p className="text-sm text-ink2">
               Visão geral da plataforma. Atualiza a cada 15 segundos.
             </p>
           </div>
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-ink3">
             Sistema no ar há {fmtUptime(adm.requests.uptime_seconds)}
           </span>
         </div>
@@ -164,17 +164,17 @@ export default function Admin() {
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="card p-5 lg:col-span-2">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold text-brand-900">Execuções (7 dias)</h2>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <Legend color="bg-accent-500" label="sucesso" />
-                <Legend color="bg-red-500" label="erro" />
+              <h2 className="font-bold text-ink">Execuções (7 dias)</h2>
+              <div className="flex items-center gap-3 text-xs text-ink2">
+                <Legend color="var(--accent)" label="sucesso" />
+                <Legend color="var(--err)" label="erro" />
               </div>
             </div>
             <TimelineChart days={days} />
           </div>
 
           <div className="card flex flex-col p-5">
-            <h2 className="mb-4 font-semibold text-brand-900">Distribuição</h2>
+            <h2 className="mb-4 font-bold text-ink">Distribuição</h2>
             <Donut success={k.success} error={k.error} running={k.running} />
           </div>
         </div>
@@ -182,7 +182,7 @@ export default function Admin() {
         {/* consumo de máquina + requisições */}
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="card p-5 lg:col-span-2">
-            <h2 className="mb-4 font-semibold text-brand-900">Consumo de máquina</h2>
+            <h2 className="mb-4 font-bold text-ink">Consumo de máquina</h2>
             {sys.available ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Gauge label="CPU" pct={sys.cpu_percent ?? 0} detail={`${Math.round(sys.cpu_percent ?? 0)}%`} />
@@ -190,14 +190,14 @@ export default function Admin() {
                 <Gauge label="Disco" pct={sys.disk_percent ?? 0} detail={`${sys.disk_used_gb} / ${sys.disk_total_gb} GB`} />
               </div>
             ) : (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-ink3">
                 Métricas de máquina indisponíveis (psutil não instalado no servidor).
               </p>
             )}
           </div>
 
           <div className="card p-5">
-            <h2 className="mb-4 font-semibold text-brand-900">Requisições</h2>
+            <h2 className="mb-4 font-bold text-ink">Requisições</h2>
             <MiniStat label="Total desde o último reinício" value={adm.requests.total.toLocaleString("pt-BR")} />
             <MiniStat label="Última hora" value={adm.requests.last_hour.toLocaleString("pt-BR")} />
             <MiniStat label="Último minuto" value={adm.requests.last_minute.toLocaleString("pt-BR")} />
@@ -220,11 +220,11 @@ export default function Admin() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* aplicações por execução */}
           <div className="card overflow-hidden">
-            <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-brand-900">
+            <h2 className="border-b border-line px-5 py-3 font-bold text-ink">
               Aplicações mais usadas
             </h2>
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+              <thead className="bg-surface-2 text-xs uppercase text-ink3">
                 <tr>
                   <th className="px-4 py-2">Aplicação</th>
                   <th className="px-4 py-2">Status</th>
@@ -234,21 +234,21 @@ export default function Admin() {
               </thead>
               <tbody>
                 {dash.by_project.slice(0, 8).map((p) => (
-                  <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
+                  <tr key={p.id} className="border-t border-line hover:bg-surface-2">
                     <td className="px-4 py-2">
-                      <Link to={`/projects/${p.id}/logs`} className="font-medium text-brand-700 hover:underline">
+                      <Link to={`/projects/${p.id}/logs`} className="font-medium text-brandv hover:underline">
                         {p.name}
                       </Link>
                     </td>
                     <td className="px-4 py-2"><StatusBadge status={p.status} /></td>
-                    <td className="px-4 py-2 text-right text-slate-600">{p.executions}</td>
-                    <td className={`px-4 py-2 text-right font-medium ${p.errors ? "text-red-600" : "text-slate-400"}`}>
+                    <td className="px-4 py-2 text-right text-ink2">{p.executions}</td>
+                    <td className={`px-4 py-2 text-right font-medium ${p.errors ? "text-err" : "text-ink3"}`}>
                       {p.errors}
                     </td>
                   </tr>
                 ))}
                 {dash.by_project.length === 0 && (
-                  <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-400">Nenhuma aplicação.</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-ink3">Nenhuma aplicação.</td></tr>
                 )}
               </tbody>
             </table>
@@ -256,27 +256,27 @@ export default function Admin() {
 
           {/* pedidos / pesquisas no chat */}
           <div className="card overflow-hidden">
-            <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-brand-900">
+            <h2 className="border-b border-line px-5 py-3 font-bold text-ink">
               Últimos pedidos ao assistente
             </h2>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-[color:var(--border)]">
               {adm.chat.recent_prompts.map((m) => (
                 <Link
                   key={m.id}
                   to={`/projects/${m.project_id}/assistente`}
-                  className="block px-5 py-3 hover:bg-brand-50/40"
+                  className="block px-5 py-3 transition hover:bg-surface-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-brand-700">{m.project_name || "—"}</span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs font-semibold text-brandv">{m.project_name || "—"}</span>
+                    <span className="text-xs text-ink3">
                       {m.created_at ? new Date(m.created_at).toLocaleString("pt-BR") : ""}
                     </span>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-sm text-slate-600">{m.content}</p>
+                  <p className="mt-1 line-clamp-2 text-sm text-ink2">{m.content}</p>
                 </Link>
               ))}
               {adm.chat.recent_prompts.length === 0 && (
-                <div className="px-5 py-8 text-center text-sm text-slate-400">
+                <div className="px-5 py-8 text-center text-sm text-ink3">
                   Nenhum pedido registrado ainda.
                 </div>
               )}
@@ -285,25 +285,25 @@ export default function Admin() {
 
           {/* erros recentes */}
           <div className="card overflow-hidden lg:col-span-2">
-            <h2 className="border-b border-slate-100 px-5 py-3 font-semibold text-brand-900">
+            <h2 className="border-b border-line px-5 py-3 font-bold text-ink">
               Erros recentes
             </h2>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-[color:var(--border)]">
               {dash.recent_errors.map((e) => (
-                <Link key={e.id} to={`/projects/${e.project_id}/logs`} className="block px-5 py-3 hover:bg-red-50/50">
+                <Link key={e.id} to={`/projects/${e.project_id}/logs`} className="block px-5 py-3 transition hover:bg-surface-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-brand-900">
+                    <span className="text-sm font-semibold text-ink">
                       {e.project_name} · {e.stage_name}
                     </span>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-ink3">
                       {new Date(e.started_at).toLocaleString("pt-BR")}
                     </span>
                   </div>
-                  <pre className="mt-1 truncate text-xs text-red-600">{e.stderr || "erro"}</pre>
+                  <pre className="mt-1 truncate font-mono text-xs text-err">{e.stderr || "erro"}</pre>
                 </Link>
               ))}
               {dash.recent_errors.length === 0 && (
-                <div className="px-5 py-8 text-center text-sm text-slate-400">
+                <div className="px-5 py-8 text-center text-sm text-ink3">
                   Nenhum erro recente. Tudo rodando bem.
                 </div>
               )}
@@ -387,31 +387,36 @@ function UsersAdmin() {
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-        <h2 className="font-semibold text-brand-900">Usuários e papéis</h2>
+      <div className="flex items-center justify-between border-b border-line px-5 py-3">
+        <h2 className="font-bold text-ink">Usuários e papéis</h2>
         <button onClick={() => setCreating((v) => !v)} className="btn-primary py-1.5 text-sm">
           {creating ? "Cancelar" : "+ Novo usuário"}
         </button>
       </div>
       {msg && (
-        <div className="border-b border-brand-100 bg-brand-50 px-5 py-2 text-sm text-brand-800">{msg}</div>
+        <div
+          className="border-b border-line px-5 py-2 text-sm text-accentv"
+          style={{ background: "var(--accent-soft)" }}
+        >
+          {msg}
+        </div>
       )}
       {creating && (
-        <form onSubmit={createUser} className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
+        <form onSubmit={createUser} className="flex flex-wrap items-end gap-3 border-b border-line bg-surface-2 px-5 py-4">
           <div className="min-w-[220px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-slate-500">E-mail</label>
+            <label className="mb-1 block text-xs font-medium text-ink2">E-mail</label>
             <input className="input" type="email" required value={nEmail} onChange={(e) => setNEmail(e.target.value)} />
           </div>
           <div className="min-w-[160px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-slate-500">Nome</label>
+            <label className="mb-1 block text-xs font-medium text-ink2">Nome</label>
             <input className="input" value={nName} onChange={(e) => setNName(e.target.value)} />
           </div>
           <div className="min-w-[160px]">
-            <label className="mb-1 block text-xs font-medium text-slate-500">Senha inicial</label>
+            <label className="mb-1 block text-xs font-medium text-ink2">Senha inicial</label>
             <input className="input" type="password" required minLength={8} value={nPwd} onChange={(e) => setNPwd(e.target.value)} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Papel</label>
+            <label className="mb-1 block text-xs font-medium text-ink2">Papel</label>
             <select className="input" value={nRole} onChange={(e) => setNRole(e.target.value as any)}>
               <option value="user">Usuário</option>
               <option value="dev">Dev</option>
@@ -422,7 +427,7 @@ function UsersAdmin() {
         </form>
       )}
       <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+        <thead className="bg-surface-2 text-xs uppercase text-ink3">
           <tr>
             <th className="px-4 py-2">Usuário</th>
             <th className="px-4 py-2">Papel</th>
@@ -432,10 +437,10 @@ function UsersAdmin() {
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.id} className="border-t border-slate-100">
+            <tr key={u.id} className="border-t border-line">
               <td className="px-4 py-2">
-                <div className="font-medium text-brand-900">{u.name || u.email}</div>
-                <div className="text-xs text-slate-400">{u.email}</div>
+                <div className="font-semibold text-ink">{u.name || u.email}</div>
+                <div className="text-xs text-ink3">{u.email}</div>
               </td>
               <td className="px-4 py-2">
                 <select
@@ -449,15 +454,15 @@ function UsersAdmin() {
                 </select>
               </td>
               <td className="px-4 py-2">
-                <span className={`badge ${u.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                <span className="badge" data-status={u.is_active ? "live" : "inactive"}>
                   {u.is_active ? "Ativo" : "Inativo"}
                 </span>
               </td>
               <td className="px-4 py-2 text-right">
-                <button onClick={() => resetPassword(u)} className="mr-2 text-xs text-brand-600 hover:underline">
+                <button onClick={() => resetPassword(u)} className="mr-2 text-xs text-brandv hover:underline">
                   Redefinir senha
                 </button>
-                <button onClick={() => toggleActive(u)} className="text-xs text-slate-500 hover:underline">
+                <button onClick={() => toggleActive(u)} className="text-xs text-ink2 hover:underline">
                   {u.is_active ? "Desativar" : "Reativar"}
                 </button>
               </td>
@@ -465,7 +470,7 @@ function UsersAdmin() {
           ))}
           {users.length === 0 && (
             <tr>
-              <td colSpan={4} className="px-4 py-8 text-center text-slate-400">Carregando usuários…</td>
+              <td colSpan={4} className="px-4 py-8 text-center text-ink3">Carregando usuários…</td>
             </tr>
           )}
         </tbody>
@@ -477,17 +482,20 @@ function UsersAdmin() {
 function Legend({ color, label }: { color: string; label: string }) {
   return (
     <span className="flex items-center gap-1">
-      <span className={`h-2 w-2 rounded-full ${color}`} /> {label}
+      <span className="h-2 w-2 rounded-full" style={{ background: color }} /> {label}
     </span>
   );
 }
 
 function KpiHero({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-xl bg-gradient-to-br from-brand-800 to-brand-600 p-5 text-white shadow-sm">
-      <div className="text-xs font-medium uppercase tracking-wide text-brand-100/80">{label}</div>
-      <div className="mt-1 text-3xl font-bold">{value}</div>
-      <div className="mt-1 text-xs text-brand-100/80">{sub}</div>
+    <div
+      className="rounded-2xl p-5 text-white"
+      style={{ background: "var(--kpi-grad)", boxShadow: "var(--shadow)" }}
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide text-white/75">{label}</div>
+      <div className="mt-1 text-3xl font-extrabold">{value}</div>
+      <div className="mt-1 text-xs text-white/75">{sub}</div>
     </div>
   );
 }
@@ -495,33 +503,33 @@ function KpiHero({ label, value, sub }: { label: string; value: string; sub: str
 function Kpi({ label, value, sub }: { label: string; value: number | string; sub: string }) {
   return (
     <div className="card p-5">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 text-3xl font-bold text-brand-900">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{sub}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-ink3">{label}</div>
+      <div className="mt-1 text-3xl font-extrabold text-ink">{value}</div>
+      <div className="mt-1 text-xs text-ink2">{sub}</div>
     </div>
   );
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2 last:mb-0 last:border-0 last:pb-0">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-lg font-bold text-brand-900">{value}</span>
+    <div className="mb-3 flex items-center justify-between border-b border-line pb-2 last:mb-0 last:border-0 last:pb-0">
+      <span className="text-sm text-ink2">{label}</span>
+      <span className="text-lg font-bold text-ink">{value}</span>
     </div>
   );
 }
 
 function Gauge({ label, pct, detail }: { label: string; pct: number; detail: string }) {
   const p = Math.max(0, Math.min(100, pct));
-  const tone = p >= 85 ? "bg-red-500" : p >= 60 ? "bg-amber-400" : "bg-accent-500";
+  const tone = p >= 85 ? "var(--err)" : p >= 60 ? "var(--warn2)" : "var(--accent)";
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="font-medium text-slate-600">{label}</span>
-        <span className="text-xs text-slate-400">{detail}</span>
+        <span className="font-medium text-ink2">{label}</span>
+        <span className="text-xs text-ink3">{detail}</span>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full ${tone} transition-all duration-500`} style={{ width: `${p}%` }} />
+      <div className="h-3 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p}%`, background: tone }} />
       </div>
     </div>
   );
@@ -536,18 +544,18 @@ function TimelineChart({ days }: { days: { label: string; success: number; error
           <div className="flex h-32 w-full max-w-[44px] flex-col justify-end gap-0.5">
             {d.error > 0 && (
               <div
-                className="w-full rounded-t bg-red-400"
-                style={{ height: `${(d.error / max) * 100}%` }}
+                className="w-full rounded-t"
+                style={{ height: `${(d.error / max) * 100}%`, background: "var(--err)" }}
                 title={`${d.error} erro(s)`}
               />
             )}
             <div
-              className="w-full rounded-t bg-accent-500"
-              style={{ height: `${(d.success / max) * 100}%` }}
+              className="w-full rounded-t"
+              style={{ height: `${(d.success / max) * 100}%`, background: "var(--accent)" }}
               title={`${d.success} sucesso(s)`}
             />
           </div>
-          <span className="text-[10px] text-slate-400">{d.label}</span>
+          <span className="text-[10px] text-ink3">{d.label}</span>
         </div>
       ))}
     </div>
@@ -568,7 +576,7 @@ function Donut({ success, error, running }: { success: number; error: number; ru
     <div className="flex flex-1 flex-col items-center justify-center gap-4">
       <div className="relative h-36 w-36">
         <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90">
-          <circle cx="70" cy="70" r={r} fill="none" stroke="#f1f5f9" strokeWidth="16" />
+          <circle cx="70" cy="70" r={r} fill="none" stroke="var(--border)" strokeWidth="16" />
           {total > 0 &&
             segs.map((s, i) => {
               const len = (s.v / total) * c;
@@ -591,20 +599,20 @@ function Donut({ success, error, running }: { success: number; error: number; ru
             })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-bold text-brand-900">{total}</span>
-          <span className="text-[10px] uppercase tracking-wide text-slate-400">execuções</span>
+          <span className="text-2xl font-bold text-ink">{total}</span>
+          <span className="text-[10px] uppercase tracking-wide text-ink3">execuções</span>
         </div>
       </div>
       <div className="w-full space-y-1.5">
         {segs.map((s) => (
           <div key={s.label} className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 text-slate-600">
+            <span className="flex items-center gap-2 text-ink2">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
               {s.label}
             </span>
-            <span className="font-medium text-brand-900">
+            <span className="font-medium text-ink">
               {s.v}
-              <span className="ml-1 text-xs text-slate-400">
+              <span className="ml-1 text-xs text-ink3">
                 ({total ? Math.round((s.v / total) * 100) : 0}%)
               </span>
             </span>

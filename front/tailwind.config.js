@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: ["selector", '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -22,10 +23,29 @@ export default {
           500: "#18b1a8",
           600: "#0f8f88",
         },
+        // Cores semânticas dirigidas por tokens (dark-aware).
+        brandv: "var(--brand)",
+        accentv: "var(--accent)",
+        surface: "var(--surface)",
+        "surface-2": "var(--surface-2)",
+        ink: "var(--text)",
+        ink2: "var(--text-2)",
+        ink3: "var(--text-3)",
+        line: "var(--border)",
+        "line-strong": "var(--border-strong)",
+        ok: "var(--ok)",
+        err: "var(--err)",
+        warn2: "var(--warn2)",
+        neutral2: "var(--neutral)",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Menlo", "monospace"],
+      },
+      boxShadow: {
+        token: "var(--shadow)",
+        "token-sm": "var(--shadow-sm)",
+        "token-lg": "var(--shadow-lg)",
       },
     },
   },
