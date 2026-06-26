@@ -72,6 +72,10 @@ async def lifespan(app: FastAPI):
                 conn.execute(
                     text("ALTER TABLE projects ADD COLUMN wizard_dirty BOOLEAN NOT NULL DEFAULT 0")
                 )
+            if "created_by_id" not in proj_cols:
+                conn.execute(
+                    text("ALTER TABLE projects ADD COLUMN created_by_id INTEGER")
+                )
             user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
             if "role" not in user_cols:
                 conn.execute(
@@ -81,6 +85,9 @@ async def lifespan(app: FastAPI):
             # Postgres aceita IF NOT EXISTS
             conn.execute(
                 text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user'")
+            )
+            conn.execute(
+                text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_by_id INTEGER")
             )
         # ceifador de zumbis: execuções queued/running de processos anteriores
         # nunca vão terminar; marca como erro para não poluir métricas e monitor.

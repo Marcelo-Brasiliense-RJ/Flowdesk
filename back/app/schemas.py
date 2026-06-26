@@ -140,6 +140,8 @@ class ProjectOut(ORMModel):
     wizard_dirty: bool = False
     created_at: dt.datetime
     updated_at: dt.datetime
+    owner_name: Optional[str] = None
+    execution_count: int = 0
 
 
 class FolderCreate(BaseModel):

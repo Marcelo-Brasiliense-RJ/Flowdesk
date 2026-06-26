@@ -72,6 +72,10 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    # quem criou o projeto (nullable: projetos antigos não registravam o autor)
+    created_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     folder_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("project_folders.id"), nullable=True
     )

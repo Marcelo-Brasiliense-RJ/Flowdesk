@@ -165,12 +165,32 @@ def delete_folder(
 # ---- projects ----
 @router.get("/projects", response_model=list[ProjectOut])
 def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return (
+    projects = (
         db.query(Project)
         .filter(Project.org_id == user.org_id)
         .order_by(Project.updated_at.desc())
         .all()
     )
+    if not projects:
+        return []
+    ids = [p.id for p in projects]
+    counts = dict(
+        db.query(Execution.project_id, func.count(Execution.id))
+        .filter(Execution.project_id.in_(ids))
+        .group_by(Execution.project_id)
+        .all()
+    )
+    owner_ids = {p.created_by_id for p in projects if p.created_by_id}
+    owners = (
+        dict(db.query(User.id, User.name).filter(User.id.in_(owner_ids)).all())
+        if owner_ids
+        else {}
+    )
+    for p in projects:
+        # atributos não mapeados, lidos pelo ProjectOut (from_attributes)
+        p.execution_count = counts.get(p.id, 0)
+        p.owner_name = owners.get(p.created_by_id)
+    return projects
 
 
 @router.post("/projects", response_model=ProjectOut)
@@ -185,6 +205,7 @@ def create_project(
         subdomain = f"{base}-{uuid.uuid4().hex[:4]}"
     project = Project(
         org_id=user.org_id,
+        created_by_id=user.id,
         folder_id=body.folder_id,
         name=body.name,
         description=body.description,

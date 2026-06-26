@@ -36,6 +36,8 @@ export interface Project {
   wizard_dirty: boolean;
   created_at: string;
   updated_at: string;
+  owner_name?: string | null;
+  execution_count?: number;
 }
 
 export type TriggerKind = "manual" | "schedule" | "webhook";

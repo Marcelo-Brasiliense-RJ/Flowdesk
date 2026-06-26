@@ -7,6 +7,19 @@ import type { Folder, Project, TemplateInfo } from "../lib/types";
 import { Spinner, StatusBadge } from "../components/ui";
 import TopNav from "../components/TopNav";
 
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function fmtData(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const hoje = new Date();
+  if (d.toDateString() === hoje.toDateString()) {
+    return `hoje, ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export default function Console() {
   const dlg = useDialog();
   const nav = useNavigate();
@@ -178,7 +191,7 @@ export default function Console() {
               <div>
                 <h1 className="text-2xl font-extrabold tracking-tight text-ink">Automações</h1>
                 <p className="text-sm text-ink2">
-                  {projects.length} automação(ões) · arraste um card para movê-lo entre pastas
+                  {projects.length} automações · organize em pastas e acompanhe a saúde de cada uma
                 </p>
               </div>
               <div className="flex gap-2">
@@ -524,23 +537,62 @@ function ProjectCard({
         {project.description || "Sem descrição"}
       </p>
 
-      <a
-        href={`/app/${project.subdomain}`}
-        target="_blank"
-        rel="noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className="mt-4 inline-flex max-w-full items-center gap-1.5 self-start rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-brandv ring-1 ring-inset ring-[color:var(--border)] transition hover:brightness-105"
-        title={`Abrir app publicado: /app/${project.subdomain}`}
-      >
-        <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3 shrink-0 opacity-70" aria-hidden>
-          <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span className="truncate">/app/{project.subdomain}</span>
-      </a>
+      <div className="mt-4 flex items-center gap-2">
+        <a
+          href={`/app/${project.subdomain}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex min-w-0 items-center gap-1.5 rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-brandv ring-1 ring-inset ring-[color:var(--border)] transition hover:brightness-105"
+          title={`Abrir app publicado: /app/${project.subdomain}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3 shrink-0 opacity-70" aria-hidden>
+            <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="truncate">/app/{project.subdomain}</span>
+        </a>
+        {live && (
+          <a
+            href={`/app/${project.subdomain}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="btn-primary ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+            title="Abrir automação publicada"
+          >
+            Usar
+            <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3" aria-hidden>
+              <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+        )}
+      </div>
 
-      <div className="mt-4 flex items-center justify-end gap-1 border-t border-line pt-3 text-xs">
-        <CardLink to={`/projects/${project.id}/workflow`}>Workflow</CardLink>
-        <CardLink to={`/projects/${project.id}/logs`}>Logs</CardLink>
+      <div className="mt-3 flex flex-col gap-1.5 text-[11px] text-ink3">
+        {project.owner_name && (
+          <div className="flex items-center gap-1.5">
+            <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3 shrink-0" aria-hidden>
+              <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.9" />
+              <path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            </svg>
+            Criado por <span className="font-semibold text-ink2">{project.owner_name}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" className="h-3 w-3 shrink-0" aria-hidden>
+            <rect x="3" y="4.5" width="18" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.9" />
+            <path d="M3 9h18M8 2.5v4M16 2.5v4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          </svg>
+          Criado em {fmtData(project.created_at)} · atualizado {fmtData(project.updated_at)}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs text-ink3">
+        <span>{project.execution_count ?? 0} execuções</span>
+        <span className="flex gap-1">
+          <CardLink to={`/projects/${project.id}/workflow`}>Workflow</CardLink>
+          <CardLink to={`/projects/${project.id}/logs`}>Logs</CardLink>
+        </span>
       </div>
     </div>
   );
