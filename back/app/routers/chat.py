@@ -165,7 +165,7 @@ require_env (key, description, example).
 
 REGRAS DE CÓDIGO PARA TAREFAS CONTÁBEIS/FISCAIS (siga à risca):
 - Saída de arquivo: SEMPRE set_output({"arquivo_resultado": str(output_path("nome.xlsx")), ...}). Nunca passe o nome nu.
-- Aging / dias de atraso: dias = (data_base - vencimento).days. dias <= 0 é "A vencer"; 1-30, 31-60, 61-90, 90+ usam o limite superior inclusivo. Pergunte a data-base se não vier. Para "por cliente E faixa", use pivot_table(index=cliente, columns=faixa, values=valor, aggfunc="sum").
+- Aging / dias de atraso: dias = (data_base - vencimento).days. dias <= 0 é "A vencer". Faixas com limite superior INCLUSIVO e sem sobreposição: "1-30" (1<=dias<=30), "31-60" (31<=dias<=60), "61-90" (61<=dias<=90), "90+" (dias>90). Pergunte a data-base se não vier. Para "por cliente E faixa", use pivot_table(index=cliente, columns=faixa, values=valor, aggfunc="sum").
 - Conciliação débito x crédito que zera: pareie por VALOR ABSOLUTO (abs(valor)), tratando crédito negativo. Pareamento 1:1, marcando cada lançamento já usado; com valores repetidos, ordene de forma estável. Mantenha TODOS os registros (Conciliados + Não Conciliados = carregados) e gere resumo com as contagens que fecham.
 - Conciliação por valor + data com tolerância: case mesmo valor com diferença de datas <= tolerância (em dias); > tolerância NÃO casa. Casamento 1:1 (não reutilize a mesma linha). Inclua na saída a coluna "dif_dias". Remova não casados por ÍNDICE da linha, nunca por valor de data.
 - Antes de declarar sucesso, valide invariantes: somas por categoria fecham com o total carregado; não há divisão por zero; colunas esperadas existem (erro claro em PT-BR se faltar)."""
