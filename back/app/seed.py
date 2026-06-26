@@ -286,3 +286,28 @@ def seed_if_empty() -> None:
         db.commit()
     finally:
         db.close()
+
+
+def heal_seed_scripts() -> int:
+    """Mantém os scripts dos projetos seed sincronizados com a versão canônica,
+    mesmo em bases já existentes (seed_if_empty só roda em DB vazio)."""
+    from app.database import SessionLocal
+    db = SessionLocal()
+    curados = 0
+    try:
+        canon = {("conciliador", "processar.py"): RECONCILE_SCRIPT}
+        for (subdomain, path), content in canon.items():
+            proj = db.query(Project).filter(Project.subdomain == subdomain).first()
+            if not proj:
+                continue
+            sf = db.query(SourceFile).filter(
+                SourceFile.project_id == proj.id, SourceFile.path == path
+            ).first()
+            if sf and sf.content != content:
+                sf.content = content
+                db.commit()
+                storage.materialize_sources(db, proj)
+                curados += 1
+        return curados
+    finally:
+        db.close()

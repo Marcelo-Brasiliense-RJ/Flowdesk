@@ -99,6 +99,8 @@ async def lifespan(app: FastAPI):
             )
         )
     seed_if_empty()
+    from app.seed import heal_seed_scripts
+    heal_seed_scripts()
     loop = asyncio.get_event_loop()
     runtime.start(loop)
     scheduler.start(loop)
