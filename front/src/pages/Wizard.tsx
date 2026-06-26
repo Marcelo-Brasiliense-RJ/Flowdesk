@@ -73,92 +73,83 @@ const CheckIcon: StepIcon = ({ className }) => (
 const STEP_ICONS: StepIcon[] = [TriggerIcon, InputIcon, ProcessIcon, OutputIcon, ReviewIcon];
 
 /* ---------- stepper vertical (desktop) ---------- */
-function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
+/* ---------- progresso horizontal (layout do design) ---------- */
+function StepProgress({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
+  // trilho preenchido: os círculos ficam centrados de 10% a 90% (vão 80%)
+  const fillW = (Math.min(step, STEPS.length - 1) / (STEPS.length - 1)) * 80;
   return (
-    <aside className="hidden w-72 shrink-0 flex-col border-r border-line bg-surface px-5 py-6 lg:flex">
-      <div className="mb-6 px-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-ink3">
+    <div className="card mb-6 p-5">
+      <div className="mb-5 flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-ink3">
           Montagem da automação
-        </div>
-        <div className="mt-1 text-sm text-ink2">
-          {step >= STEPS.length - 1 ? "Pronta para testar" : `Etapa ${step + 1} de ${STEPS.length}`}
-        </div>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
-          <motion.div
-            className="h-full rounded-full"
-            style={{ background: "linear-gradient(90deg, var(--brand), var(--accent))" }}
-            animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-            transition={{ type: "spring", stiffness: 200, damping: 30 }}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-accentv">
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: "var(--accent)", animation: "pulse 1.4s infinite" }}
           />
-        </div>
+          {step >= STEPS.length - 1 ? "Pronta para testar" : "Em montagem"}
+        </span>
       </div>
-      <ol className="space-y-1">
+      <div className="relative flex items-start justify-between">
+        {/* trilho base */}
+        <div
+          className="absolute left-[10%] right-[10%] top-[15px] h-[3px] rounded-full"
+          style={{ background: "var(--border)" }}
+        />
+        {/* trilho preenchido */}
+        <motion.div
+          className="absolute left-[10%] top-[15px] h-[3px] rounded-full"
+          style={{ background: "linear-gradient(90deg, var(--brand), var(--accent))" }}
+          animate={{ width: `${fillW}%` }}
+          transition={{ type: "spring", stiffness: 120, damping: 24 }}
+        />
         {STEPS.map((label, i) => {
           const dimKey = (["trigger", "input", "process", "output"] as const)[i];
           const confident = i < 4 && (plan?.[dimKey] as DimPlan)?.confident;
-          const done = i < step || (confident && i !== step);
+          const done = i < step || (!!confident && i !== step);
           const current = i === step;
-          const Icon = STEP_ICONS[i];
           return (
-            <li key={label} className="relative flex items-center gap-3 rounded-lg px-2 py-2">
-              {current && (
-                <motion.span
-                  layoutId="rail-active"
-                  className="absolute inset-0 rounded-lg"
-                  style={{ background: "var(--accent-soft)" }}
-                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                />
-              )}
+            <div
+              key={label}
+              className="relative z-10 flex flex-1 flex-col items-center gap-2.5"
+            >
               <span
-                className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
-                  current
-                    ? "text-white"
-                    : done
-                    ? "text-white"
-                    : "text-ink3"
-                }`}
+                className="flex h-8 w-8 items-center justify-center rounded-full border-2 text-[12.5px] font-bold transition"
                 style={
-                  current
-                    ? { background: "linear-gradient(135deg, var(--brand), var(--accent))" }
-                    : done
-                    ? { background: "var(--accent)" }
-                    : { background: "var(--surface-2)" }
+                  done
+                    ? { background: "var(--accent)", borderColor: "var(--accent)", color: "#fff" }
+                    : current
+                    ? {
+                        background: "var(--surface)",
+                        borderColor: "var(--accent)",
+                        color: "var(--accent)",
+                        boxShadow: "0 0 0 4px var(--accent-soft)",
+                      }
+                    : { background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-3)" }
                 }
               >
-                {done ? <CheckIcon className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                {done ? <CheckIcon className="h-4 w-4" /> : i + 1}
               </span>
               <span
-                className={`relative z-10 text-sm ${
-                  current ? "font-semibold text-ink" : done ? "text-ink2" : "text-ink3"
-                }`}
+                className="text-center text-[12.5px] leading-tight"
+                style={{
+                  fontWeight: current ? 700 : 500,
+                  color: current ? "var(--text)" : "var(--text-3)",
+                }}
               >
                 {label}
               </span>
-            </li>
+            </div>
           );
         })}
-      </ol>
-      <div className="mt-auto rounded-xl bg-surface-2 p-3 text-xs leading-relaxed text-ink3">
+      </div>
+      <div
+        className="mt-5 rounded-xl px-3.5 py-3 text-center text-[12.5px] leading-relaxed text-ink3"
+        style={{ background: "var(--surface-2)" }}
+      >
         Nada é publicado sem você testar antes. Você pode abrir o modo avançado a qualquer momento.
       </div>
-    </aside>
-  );
-}
-
-/* ---------- progresso compacto (mobile) ---------- */
-function MobileProgress({ step }: { step: number }) {
-  return (
-    <div className="flex items-center gap-3 border-b border-line bg-surface px-5 py-3 lg:hidden">
-      <div className="flex flex-1 gap-1.5">
-        {STEPS.map((_, i) => (
-          <span
-            key={i}
-            className="h-1.5 flex-1 rounded-full transition-colors"
-            style={{ background: i <= step ? "var(--accent)" : "var(--border)" }}
-          />
-        ))}
-      </div>
-      <span className="shrink-0 text-xs font-medium text-ink2">{STEPS[step]}</span>
     </div>
   );
 }
@@ -479,26 +470,21 @@ export default function Wizard() {
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1">
-          <StepRail step={step} plan={plan} />
-          <div className="flex min-h-0 flex-1 flex-col" style={{ background: "var(--bg)" }}>
-            <MobileProgress step={step} />
-            <div className="min-h-0 flex-1 overflow-auto p-6 lg:p-10">
-              <div className={`mx-auto ${step === 4 ? "max-w-6xl" : "max-w-2xl"}`}>
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={step}
-                    initial={reduce ? false : { opacity: 0, x: 24 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={reduce ? undefined : { opacity: 0, x: -24 }}
-                    transition={{ type: "spring", stiffness: 320, damping: 30 }}
-                  >
-                    {renderStep()}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            </div>
-            <footer className="glass flex items-center justify-between border-t border-line px-6 py-3">
+        <div className="min-h-0 flex-1 overflow-auto p-6 lg:p-10" style={{ background: "var(--bg)" }}>
+          <div className={`mx-auto ${step === 4 ? "max-w-5xl" : "max-w-3xl"}`}>
+            <StepProgress step={step} plan={plan} />
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={step}
+                initial={reduce ? false : { opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduce ? undefined : { opacity: 0, x: -24 }}
+                transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              >
+                {renderStep()}
+              </motion.div>
+            </AnimatePresence>
+            <div className="mt-8 flex items-center justify-between">
               <button
                 onClick={() => setStep(step - 1)}
                 disabled={step === 0}
@@ -518,7 +504,7 @@ export default function Wizard() {
               ) : (
                 <span className="w-24" />
               )}
-            </footer>
+            </div>
           </div>
         </div>
       )}
