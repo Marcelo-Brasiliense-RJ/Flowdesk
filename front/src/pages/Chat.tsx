@@ -91,8 +91,14 @@ export default function Chat() {
             className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4"
           >
             {/* atmosfera: gradiente suave da marca + brilho */}
-            <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-brand-50 via-white to-accent-400/10" />
-            <div className="pointer-events-none absolute left-1/2 top-1/4 -z-10 h-72 w-72 -translate-x-1/2 rounded-full bg-accent-400/20 blur-3xl" />
+            <div
+              className="pointer-events-none absolute inset-0 -z-10"
+              style={{ background: "linear-gradient(to bottom, var(--accent-soft), var(--bg) 55%, var(--accent-soft))" }}
+            />
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/4 -z-10 h-72 w-72 -translate-x-1/2 rounded-full blur-3xl"
+              style={{ background: "var(--accent-glow)" }}
+            />
 
             <motion.div
               variants={container}
@@ -100,16 +106,16 @@ export default function Chat() {
               animate="show"
               className="w-full max-w-2xl"
             >
-              <motion.div variants={item} className="mb-1 text-center text-sm font-medium text-accent-600">
+              <motion.div variants={item} className="mb-1 text-center text-sm font-medium text-accentv">
                 Olá, {firstName} 👋
               </motion.div>
               <motion.h1
                 variants={item}
-                className="text-center text-3xl font-bold tracking-tight text-brand-900"
+                className="text-center text-3xl font-bold tracking-tight text-ink"
               >
                 O que vamos automatizar hoje?
               </motion.h1>
-              <motion.p variants={item} className="mx-auto mt-2 max-w-lg text-center text-sm text-slate-500">
+              <motion.p variants={item} className="mx-auto mt-2 max-w-lg text-center text-sm text-ink2">
                 Descreva o processo em português e anexe um exemplo. O Smart Chat cria um
                 projeto e monta a automação com você, passo a passo.
               </motion.p>
@@ -135,8 +141,8 @@ export default function Chat() {
                     ? "0 20px 50px -12px rgba(24,177,168,0.35)"
                     : "0 10px 30px -15px rgba(10,31,51,0.25)",
                 }}
-                className={`relative mt-7 rounded-2xl border bg-white p-4 transition-colors ${
-                  dragOver ? "border-accent-400 ring-2 ring-accent-200" : "border-slate-200"
+                className={`relative mt-7 rounded-2xl border bg-surface p-4 transition-colors ${
+                  dragOver ? "border-accentv ring-2 ring-accent-200" : "border-line"
                 }`}
               >
                 <textarea
@@ -160,11 +166,15 @@ export default function Chat() {
                       className="mt-2 flex flex-wrap gap-1.5 overflow-hidden"
                     >
                       {files.map((f, i) => (
-                        <span key={i} className="badge bg-brand-50 text-brand-600">
+                        <span
+                          key={i}
+                          className="badge"
+                          style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                        >
                           📎 {f.name}
                           <button
                             onClick={() => setFiles((fs) => fs.filter((_, idx) => idx !== i))}
-                            className="ml-1 text-brand-400 hover:text-red-500"
+                            className="ml-1 text-accentv hover:text-err"
                           >
                             ✕
                           </button>
@@ -203,7 +213,8 @@ export default function Chat() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl bg-accent-50/90 text-sm font-medium text-accent-700"
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl text-sm font-medium text-accentv"
+                      style={{ background: "var(--accent-soft)" }}
                     >
                       📎 Solte o arquivo aqui
                     </motion.div>
@@ -219,14 +230,14 @@ export default function Chat() {
                     onClick={() => useSuggestion(s)}
                     whileHover={{ scale: 1.04, y: -2 }}
                     whileTap={{ scale: 0.97 }}
-                    className="rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-xs text-slate-600 backdrop-blur transition-colors hover:border-accent-300 hover:text-brand-800"
+                    className="rounded-full border border-line bg-surface/70 px-3 py-1.5 text-xs text-ink2 backdrop-blur transition-colors hover:border-accentv hover:text-ink"
                   >
                     {s}
                   </motion.button>
                 ))}
               </motion.div>
 
-              <motion.p variants={item} className="mt-4 text-center text-xs text-slate-400">
+              <motion.p variants={item} className="mt-4 text-center text-xs text-ink3">
                 Dica: Ctrl/Cmd + Enter para começar.
               </motion.p>
             </motion.div>
@@ -237,16 +248,16 @@ export default function Chat() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-1 flex-col overflow-hidden bg-gradient-to-b from-slate-50 to-white"
+            className="flex flex-1 flex-col overflow-hidden bg-surface-2"
           >
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-5 py-2.5 backdrop-blur"
+              className="glass flex items-center justify-between border-b border-line px-5 py-2.5"
             >
               <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-wide text-slate-400">Projeto</div>
-                <div className="truncate font-semibold text-brand-900">{project.name}</div>
+                <div className="text-[11px] uppercase tracking-wide text-ink3">Projeto</div>
+                <div className="truncate font-semibold text-ink">{project.name}</div>
               </div>
               <div className="flex gap-2">
                 <motion.button

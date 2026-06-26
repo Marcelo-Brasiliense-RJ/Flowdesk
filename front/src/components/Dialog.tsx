@@ -88,23 +88,24 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {children}
       {state && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(6,18,30,.55)", backdropFilter: "blur(6px)" }}
           onMouseDown={cancel}
         >
           <div
-            className="modal-in w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+            className="modal-in card w-full max-w-md p-6 shadow-token-lg"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-brand-900">{state.opts.title}</h2>
+            <h2 className="text-lg font-bold text-ink">{state.opts.title}</h2>
 
             {state.kind === "confirm" && state.opts.message && (
-              <p className="mt-2 text-sm text-slate-500">{state.opts.message}</p>
+              <p className="mt-2 text-sm text-ink2">{state.opts.message}</p>
             )}
 
             {state.kind === "prompt" && (
               <div className="mt-4">
                 {state.opts.label && (
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <label className="mb-1 block text-sm font-medium text-ink2">
                     {state.opts.label}
                   </label>
                 )}
@@ -121,7 +122,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             {state.kind === "select" && (
               <div className="mt-4">
                 {state.opts.label && (
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <label className="mb-1 block text-sm font-medium text-ink2">
                     {state.opts.label}
                   </label>
                 )}
@@ -148,9 +149,14 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                 onClick={accept}
                 className={`py-1.5 text-sm ${
                   state.kind === "confirm" && state.opts.danger
-                    ? "btn bg-red-600 text-white hover:bg-red-700"
+                    ? "btn text-white"
                     : "btn-primary"
                 }`}
+                style={
+                  state.kind === "confirm" && state.opts.danger
+                    ? { background: "var(--err)" }
+                    : undefined
+                }
               >
                 {(state.opts as any).confirmLabel ||
                   (state.kind === "confirm" ? "Confirmar" : "Salvar")}

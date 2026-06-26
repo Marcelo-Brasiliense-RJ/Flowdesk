@@ -35,24 +35,23 @@ export default function OcrReview({
 
   return (
     <div
-      className={`rounded-xl border p-4 ${
-        needs ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"
-      }`}
+      className="rounded-xl border p-4"
+      style={
+        needs
+          ? { borderColor: "var(--warn2)", background: "var(--warn2-soft)" }
+          : { borderColor: "var(--border)", background: "var(--surface)" }
+      }
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="font-semibold text-brand-900">Revisão do texto reconhecido</div>
+        <div className="font-semibold text-ink">Revisão do texto reconhecido</div>
         {typeof conf === "number" && (
-          <span
-            className={`badge ${
-              conf >= 0.85 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-            }`}
-          >
+          <span className="badge" data-status={conf >= 0.85 ? "success" : "running"}>
             confiança {Math.round(conf * 100)}%
           </span>
         )}
       </div>
 
-      <p className={`mt-1 text-sm ${needs ? "text-amber-700" : "text-slate-500"}`}>
+      <p className={`mt-1 text-sm ${needs ? "text-warn2" : "text-ink2"}`}>
         {needs
           ? "Alguns trechos foram lidos com baixa confiança. Confira os itens destacados antes de confiar no resultado."
           : "Reconhecimento com alta confiança. Confira mesmo assim, se quiser."}
@@ -60,12 +59,16 @@ export default function OcrReview({
 
       {low.length > 0 && (
         <div className="mt-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+          <div className="text-xs font-semibold uppercase tracking-wide text-warn2">
             Trechos a conferir
           </div>
           <ul className="mt-1 space-y-1">
             {low.map((t, i) => (
-              <li key={i} className="rounded bg-amber-100 px-2 py-1 text-sm text-amber-900">
+              <li
+                key={i}
+                className="rounded px-2 py-1 text-sm text-warn2"
+                style={{ background: "var(--warn2-soft)" }}
+              >
                 {t}
               </li>
             ))}
@@ -75,7 +78,7 @@ export default function OcrReview({
 
       {editing ? (
         <div className="mt-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink2">
             Corrija o texto abaixo e reprocesse
           </div>
           <textarea
@@ -98,8 +101,8 @@ export default function OcrReview({
         </div>
       ) : (
         <details className="mt-3 text-sm">
-          <summary className="cursor-pointer text-slate-500">Ver todo o texto extraído</summary>
-          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs text-slate-700">
+          <summary className="cursor-pointer text-ink2">Ver todo o texto extraído</summary>
+          <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-surface-2 p-3 text-xs text-ink2">
             {review.text || "(vazio)"}
           </pre>
         </details>
@@ -124,7 +127,7 @@ export default function OcrReview({
             </button>
           )}
           {confirmed && (
-            <span className="text-sm font-medium text-emerald-600">Revisão confirmada.</span>
+            <span className="text-sm font-medium text-ok">Revisão confirmada.</span>
           )}
         </div>
       )}

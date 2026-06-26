@@ -97,19 +97,19 @@ export default function ClassificacaoReview({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <h4 className="text-sm font-bold text-brand-900">Revisão da classificação</h4>
-      <p className="mt-0.5 text-xs text-slate-500">
+    <div className="card p-4">
+      <h4 className="text-sm font-bold text-ink">Revisão da classificação</h4>
+      <p className="mt-0.5 text-xs text-ink2">
         {data.total_lancamentos} lançamentos em {data.grupos.length} grupos. Verde veio
         das suas regras; âmbar é sugestão da IA (confirme); vermelho precisa de conta.
       </p>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        <label className="text-xs text-slate-600">
+        <label className="text-xs text-ink2">
           Conta do banco (lado banco)
           <ContaSelect contas={data.contas} value={contaBanco} onChange={setContaBanco} />
         </label>
-        <label className="text-xs text-slate-600">
+        <label className="text-xs text-ink2">
           Competência: início
           <input
             className="input mt-1 py-1.5 text-sm"
@@ -118,7 +118,7 @@ export default function ClassificacaoReview({
             placeholder="dd/mm/aaaa"
           />
         </label>
-        <label className="text-xs text-slate-600">
+        <label className="text-xs text-ink2">
           Competência: fim
           <input
             className="input mt-1 py-1.5 text-sm"
@@ -143,8 +143,8 @@ export default function ClassificacaoReview({
         ))}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+        <label className="flex items-center gap-1.5 text-xs text-ink2">
           <input
             type="checkbox"
             checked={lembrar}
@@ -163,7 +163,7 @@ export default function ClassificacaoReview({
         </button>
       </div>
       {!pronto && (
-        <p className="mt-1 text-right text-xs text-amber-600">
+        <p className="mt-1 text-right text-xs text-warn2">
           {pendentes.length > 0 && `${pendentes.length} grupo(s) pendente(s). `}
           {!contaBanco.trim() && "Informe a conta do banco."}
         </p>
@@ -188,19 +188,19 @@ function GrupoRow({
   onConfirmar: () => void;
 }) {
   const cor = !escolha?.conta
-    ? "border-red-200 bg-red-50"
+    ? { borderColor: "var(--err)", background: "var(--err-soft)" }
     : escolha.confirmado
-      ? "border-emerald-200 bg-emerald-50/60"
-      : "border-amber-200 bg-amber-50";
+      ? { borderColor: "var(--ok)", background: "var(--ok-soft)" }
+      : { borderColor: "var(--warn2)", background: "var(--warn2-soft)" };
   const valor = grupo.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   return (
-    <div className={`rounded-lg border p-2.5 ${cor}`}>
+    <div className="rounded-lg border p-2.5" style={cor}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-brand-900" title={grupo.exemplo}>
+          <div className="truncate text-sm font-medium text-ink" title={grupo.exemplo}>
             {grupo.padrao || "(sem histórico)"}
           </div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-ink2">
             {grupo.qtd} lançamento(s) · {valor} · {grupo.tipo === "credito" ? "entrada" : "saída"}
             {escolha?.origem === "regra" && " · sua regra"}
             {escolha?.origem === "ia" &&
@@ -223,9 +223,10 @@ function GrupoRow({
             onClick={() => onEscolher("IGNORAR")}
             className={`rounded-md px-2 py-1 text-xs ${
               escolha?.conta === "IGNORAR"
-                ? "bg-slate-700 text-white"
-                : "text-slate-400 hover:bg-slate-100"
+                ? "text-white"
+                : "text-ink3 hover:bg-surface-2"
             }`}
+            style={escolha?.conta === "IGNORAR" ? { background: "var(--neutral)" } : undefined}
             title="Não importar este grupo"
           >
             Ignorar
@@ -233,12 +234,12 @@ function GrupoRow({
         </div>
       </div>
       {escolha?.conta && escolha.conta !== "IGNORAR" && (
-        <div className="mt-1 text-[11px] text-slate-600">
+        <div className="mt-1 text-[11px] text-ink2">
           → {escolha.conta} {contasPorCodigo[escolha.conta]?.nome || ""}
         </div>
       )}
       {escolha?.conta === "IGNORAR" && (
-        <div className="mt-1 text-[11px] text-slate-500">→ fora da planilha (ignorado)</div>
+        <div className="mt-1 text-[11px] text-ink2">→ fora da planilha (ignorado)</div>
       )}
     </div>
   );
@@ -281,7 +282,7 @@ function ContaSelect({
         }}
       />
       {aberto && (
-        <div className="absolute z-20 mt-1 max-h-48 w-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+        <div className="absolute z-20 mt-1 max-h-48 w-72 overflow-auto rounded-lg border border-line bg-surface shadow-token-lg">
           {filtradas.map((c) => (
             <button
               key={c.codigo}
@@ -291,15 +292,15 @@ function ContaSelect({
                 setBusca("");
                 setAberto(false);
               }}
-              className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-brand-50"
+              className="block w-full px-2.5 py-1.5 text-left text-xs hover:bg-surface-2"
             >
-              <span className="font-mono text-brand-700">{c.codigo}</span>{" "}
-              <span className="text-slate-700">{c.nome}</span>
-              <span className="ml-1 text-slate-300">{c.classificacao}</span>
+              <span className="font-mono text-brandv">{c.codigo}</span>{" "}
+              <span className="text-ink2">{c.nome}</span>
+              <span className="ml-1 text-ink3">{c.classificacao}</span>
             </button>
           ))}
           {filtradas.length === 0 && (
-            <div className="px-2.5 py-2 text-xs text-slate-400">Nenhuma conta encontrada.</div>
+            <div className="px-2.5 py-2 text-xs text-ink3">Nenhuma conta encontrada.</div>
           )}
         </div>
       )}

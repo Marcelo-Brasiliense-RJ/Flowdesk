@@ -194,17 +194,11 @@ export default function SmartChat({
   const colCls = centered ? "mx-auto w-full max-w-3xl" : "w-full";
 
   return (
-    <div className="flex h-full flex-col bg-white">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5">
+    <div className="flex h-full flex-col bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-brand-900">Smart Chat</span>
-          <span
-            className={`badge ${
-              ctx.ai_enabled
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-slate-100 text-slate-500"
-            }`}
-          >
+          <span className="text-sm font-semibold text-ink">Smart Chat</span>
+          <span className="badge" data-status={ctx.ai_enabled ? "success" : "inactive"}>
             {ctx.ai_enabled ? "IA ativa" : "modo simulado"}
           </span>
         </div>
@@ -212,22 +206,22 @@ export default function SmartChat({
           <button
             onClick={clearChat}
             title="Limpar conversa"
-            className="text-xs text-slate-400 hover:text-red-600"
+            className="text-xs text-ink3 hover:text-err"
           >
             Limpar conversa
           </button>
         )}
       </div>
 
-      <div className="border-b border-slate-100 px-4 py-1.5">
-        <div className="flex items-center justify-between text-[11px] text-slate-400">
+      <div className="border-b border-line px-4 py-1.5">
+        <div className="flex items-center justify-between text-[11px] text-ink3">
           <span>Contexto da IA</span>
           <span>{ctx.percent}%</span>
         </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
           <div
-            className="h-full bg-brand-500"
-            style={{ width: `${Math.min(100, ctx.percent)}%` }}
+            className="h-full"
+            style={{ width: `${Math.min(100, ctx.percent)}%`, background: "var(--brand)" }}
           />
         </div>
       </div>
@@ -235,7 +229,7 @@ export default function SmartChat({
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className={`${colCls} space-y-3`}>
           {messages.length === 0 && (
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
+            <div className="rounded-2xl border border-line bg-surface-2 p-4 text-sm text-ink2">
               Descreva a automação que você quer criar. A IA fará perguntas e
               proporá ações que você aprova antes de aplicar.
             </div>
@@ -264,8 +258,11 @@ export default function SmartChat({
       </div>
 
       {pending.length > 0 && (
-        <div className="max-h-64 overflow-auto border-t border-slate-200 bg-amber-50 p-3">
-          <div className="mb-2 text-xs font-semibold uppercase text-amber-700">
+        <div
+          className="max-h-64 overflow-auto border-t border-line p-3"
+          style={{ background: "var(--warn2-soft)" }}
+        >
+          <div className="mb-2 text-xs font-semibold uppercase text-warn2">
             Pendências ({pending.length})
           </div>
           <div className="space-y-2">
@@ -273,18 +270,19 @@ export default function SmartChat({
               a.kind === "require_env" ? (
                 <div
                   key={a.id}
-                  className="rounded-lg border border-orange-300 bg-white p-2.5"
+                  className="rounded-lg border bg-surface p-2.5"
+                  style={{ borderColor: "var(--warn2)" }}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase text-orange-600">
+                    <span className="text-[10px] font-semibold uppercase text-warn2">
                       configuração obrigatória
                     </span>
                   </div>
-                  <div className="text-sm font-medium text-brand-900">
+                  <div className="text-sm font-medium text-ink">
                     {a.payload?.key}
                   </div>
                   {a.payload?.description && (
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-ink2">
                       {a.payload.description}
                     </div>
                   )}
@@ -306,21 +304,22 @@ export default function SmartChat({
                       Salvar
                     </button>
                   </div>
-                  <p className="mt-1 text-[10px] text-orange-600">
+                  <p className="mt-1 text-[10px] text-warn2">
                     Necessário preencher para testar a automação.
                   </p>
                 </div>
               ) : (
                 <div
                   key={a.id}
-                  className="rounded-lg border border-amber-200 bg-white p-2.5"
+                  className="rounded-lg border bg-surface p-2.5"
+                  style={{ borderColor: "var(--warn2)" }}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-slate-500">{a.kind}</span>
+                    <span className="font-mono text-xs text-ink2">{a.kind}</span>
                   </div>
-                  <div className="text-sm font-medium text-brand-900">{a.title}</div>
+                  <div className="text-sm font-medium text-ink">{a.title}</div>
                   {a.payload?.path && (
-                    <div className="text-xs text-slate-400">{a.payload.path}</div>
+                    <div className="text-xs text-ink3">{a.payload.path}</div>
                   )}
                   <div className="mt-2 flex gap-2">
                     <button
@@ -354,9 +353,9 @@ export default function SmartChat({
       )}
 
       {built && !activeQuestions && (
-        <div className="border-t border-accent-100 bg-accent-50/60 px-4 py-2.5">
+        <div className="border-t border-line px-4 py-2.5" style={{ background: "var(--accent-soft)" }}>
           <div className={`${colCls} flex flex-wrap items-center justify-between gap-2`}>
-            <span className="text-sm text-brand-800">
+            <span className="text-sm text-ink">
               Sua automação está pronta para testar.
             </span>
             <button
@@ -372,14 +371,15 @@ export default function SmartChat({
         </div>
       )}
 
-      <div className="border-t border-slate-200 p-3">
+      <div className="border-t border-line p-3">
         <div className={colCls}>
         {attached.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
             {attached.map((f, i) => (
               <span
                 key={i}
-                className="badge bg-brand-50 text-brand-600"
+                className="badge"
+                style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
                 title={f.name}
               >
                 📎 {f.name}
@@ -388,7 +388,7 @@ export default function SmartChat({
                   onClick={() =>
                     setAttached((a) => a.filter((_, idx) => idx !== i))
                   }
-                  className="ml-1 text-brand-400 hover:text-red-500"
+                  className="ml-1 text-accentv hover:text-err"
                 >
                   ✕
                 </button>
@@ -458,17 +458,19 @@ function Bubble({
     >
       {!isUser && <Avatar />}
       <div
-        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-token-sm ${
           isUser
-            ? "rounded-br-md bg-brand-700 text-white"
-            : "rounded-bl-md border border-slate-200 bg-white text-slate-700"
+            ? "rounded-br-md"
+            : "rounded-bl-md border border-line bg-surface-2 text-ink"
         }`}
+        style={isUser ? { background: "var(--user-bubble)", color: "var(--user-text)" } : undefined}
       >
         <MessageContent text={message.content} markdown={!isUser} />
         {streaming && (
           <motion.span
             aria-hidden
-            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-full bg-accent-500 align-middle"
+            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 rounded-full align-middle"
+            style={{ background: "var(--accent)" }}
             animate={{ opacity: [1, 0.15, 1] }}
             transition={{ duration: 0.9, repeat: Infinity }}
           />
@@ -481,7 +483,10 @@ function Bubble({
 /** Avatar do assistente — gradiente da marca, dá rosto à conversa. */
 function Avatar() {
   return (
-    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-accent-500 text-[11px] font-bold text-white shadow-sm">
+    <div
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-token-sm"
+      style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))" }}
+    >
       FD
     </div>
   );
@@ -496,11 +501,12 @@ function TypingIndicator() {
       className="flex items-end gap-2"
     >
       <Avatar />
-      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-3 shadow-sm">
+      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-line bg-surface-2 px-3.5 py-3 shadow-token-sm">
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className="h-1.5 w-1.5 rounded-full bg-slate-400"
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: "var(--text-3)" }}
             animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
             transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
           />
@@ -606,29 +612,32 @@ function InterviewPanel({
   const disabled = busy || working;
 
   return (
-    <div className="border-t border-slate-200 bg-brand-50/70 p-3">
+    <div className="border-t border-line p-3" style={{ background: "var(--accent-soft)" }}>
       <div className={centered ? "mx-auto w-full max-w-3xl" : "w-full"}>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-semibold text-brand-700">
+        <span className="text-xs font-semibold text-brandv">
           Só mais algumas perguntas para acertar a automação
         </span>
-        <span className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-brandv"
+          style={{ background: "var(--accent-soft)" }}
+        >
           {idx + 1} de {total}
         </span>
       </div>
-      <div className="mb-2.5 h-1 w-full overflow-hidden rounded-full bg-brand-100">
+      <div className="mb-2.5 h-1 w-full overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
         <div
-          className="h-full rounded-full bg-accent-400 transition-all duration-300"
-          style={{ width: `${((idx + 1) / total) * 100}%` }}
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${((idx + 1) / total) * 100}%`, background: "var(--accent)" }}
         />
       </div>
       {idx === 0 && (
-        <p className="mb-2 text-xs leading-relaxed text-slate-500">
+        <p className="mb-2 text-xs leading-relaxed text-ink2">
           Pode responder clicando em uma opção ou escrevendo. Se não souber, é só pular.
         </p>
       )}
 
-      <div className="text-sm font-medium text-brand-900">{q.label || q.question || q.text}</div>
+      <div className="text-sm font-medium text-ink">{q.label || q.question || q.text}</div>
 
       {hasOptions ? (
         <div className="mt-2">
@@ -641,11 +650,12 @@ function InterviewPanel({
                   type="button"
                   disabled={disabled}
                   onClick={() => answer(opt)}
-                  className={`badge border transition disabled:opacity-50 ${
+                  className={`badge border bg-surface transition disabled:opacity-50 hover:bg-surface-2 ${
                     isRec
-                      ? "border-accent-500 bg-white text-accent-600 hover:bg-accent-50"
-                      : "border-slate-300 bg-white text-slate-600 hover:border-brand-400 hover:text-brand-700"
+                      ? "text-accentv"
+                      : "border-line text-ink2 hover:text-ink"
                   }`}
+                  style={isRec ? { borderColor: "var(--accent)" } : undefined}
                 >
                   {opt}
                   {isRec && " ★"}
@@ -658,9 +668,10 @@ function InterviewPanel({
               onClick={() => setOther((v) => !v)}
               className={`badge border transition ${
                 other
-                  ? "border-brand-500 bg-brand-50 text-brand-700"
-                  : "border-dashed border-slate-300 bg-white text-slate-500 hover:border-brand-400"
+                  ? "text-brandv"
+                  : "border-dashed border-line bg-surface text-ink2 hover:bg-surface-2"
               }`}
+              style={other ? { borderColor: "var(--brand)", background: "var(--accent-soft)" } : undefined}
             >
               Outro…
             </button>
@@ -713,7 +724,7 @@ function InterviewPanel({
       )}
 
       {/* upload base file / generate a sample to test */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-brand-100 pt-2 text-xs">
+      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2 text-xs">
         <label className="btn-outline cursor-pointer py-1 text-xs">
           📎 Subir arquivo base
           <input
@@ -736,7 +747,7 @@ function InterviewPanel({
           {working ? "Gerando..." : "Gerar exemplo p/ testar"}
         </button>
         {files.length > 0 && (
-          <span className="text-emerald-600">✓ {files.length} arquivo(s)</span>
+          <span className="text-ok">✓ {files.length} arquivo(s)</span>
         )}
       </div>
 
@@ -745,7 +756,7 @@ function InterviewPanel({
           <button
             type="button"
             onClick={() => setIdx(idx - 1)}
-            className="text-slate-500 hover:text-brand-700"
+            className="text-ink2 hover:text-accentv"
           >
             ← Voltar
           </button>
@@ -755,7 +766,7 @@ function InterviewPanel({
         <button
           type="button"
           onClick={() => answer("(sem preferência)")}
-          className="text-slate-400 hover:text-brand-600"
+          className="text-ink3 hover:text-accentv"
         >
           Pular
         </button>
@@ -788,17 +799,17 @@ function splitCode(text: string) {
 /** Componentes de estilo para o markdown do assistente (sem plugin typography). */
 const MD_COMPONENTS = {
   p: (props: any) => <p className="mb-2 leading-relaxed last:mb-0" {...props} />,
-  strong: (props: any) => <strong className="font-semibold text-brand-900" {...props} />,
+  strong: (props: any) => <strong className="font-semibold text-ink" {...props} />,
   em: (props: any) => <em className="italic" {...props} />,
   ul: (props: any) => <ul className="my-2 list-disc space-y-1 pl-5" {...props} />,
   ol: (props: any) => <ol className="my-2 list-decimal space-y-1 pl-5" {...props} />,
   li: (props: any) => <li className="leading-relaxed" {...props} />,
-  a: (props: any) => <a className="font-medium text-brand-600 underline" {...props} />,
-  h1: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
-  h2: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
-  h3: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-brand-900" {...props} />,
+  a: (props: any) => <a className="font-medium text-brandv underline" {...props} />,
+  h1: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-ink" {...props} />,
+  h2: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-ink" {...props} />,
+  h3: (props: any) => <h3 className="mb-1 mt-2 font-semibold text-ink" {...props} />,
   code: (props: any) => (
-    <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[12px] text-brand-800" {...props} />
+    <code className="rounded bg-surface-2 px-1 py-0.5 font-mono text-[12px] text-brandv" {...props} />
   ),
 };
 
@@ -826,8 +837,8 @@ function MessageContent({ text, markdown }: { text: string; markdown?: boolean }
 function CodeBlock({ lang, body }: { lang: string; body: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-slate-700 text-left">
-      <div className="flex items-center justify-between bg-slate-800 px-3 py-1">
+    <div className="my-2 overflow-hidden rounded-lg text-left" style={{ border: "1px solid #0b1f33" }}>
+      <div className="flex items-center justify-between px-3 py-1" style={{ background: "#0b1f33" }}>
         <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
           {lang || "código"}
         </span>
@@ -843,7 +854,7 @@ function CodeBlock({ lang, body }: { lang: string; body: string }) {
           {copied ? "copiado" : "copiar"}
         </button>
       </div>
-      <pre className="overflow-auto bg-slate-900 p-3 font-mono text-xs leading-relaxed text-slate-100">
+      <pre className="overflow-auto p-3 font-mono text-xs leading-relaxed text-slate-100" style={{ background: "#0b1f33" }}>
         <code>{body}</code>
       </pre>
     </div>
