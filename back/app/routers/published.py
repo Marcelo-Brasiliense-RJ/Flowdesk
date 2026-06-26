@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -238,18 +239,26 @@ def app_salvar_regras(subdomain: str, body: dict, token: str | None = None,
     return salvar_regras_interno(db, project.id, regras)
 
 
+def _resolve_download_target(root: Path, output_folder_name: str, path: str) -> Path:
+    candidate = Path(path)
+    target = (candidate if candidate.is_absolute() else (root / path)).resolve()
+    # scripts às vezes gravam só o nome do arquivo; o real vive na pasta de saída
+    if not target.exists() and not candidate.is_absolute():
+        alt = (root / output_folder_name / path).resolve()
+        if alt.exists():
+            return alt
+    return target
+
+
 @router.get("/{subdomain}/download")
 def app_download(subdomain: str, path: str, token: str | None = None, db: Session = Depends(get_db)):
     project = _get_live_project(db, subdomain)
     _require_app_user(db, subdomain, token)
     root = storage.ensure_project_dirs(project)
-    # accept absolute paths produced by scripts as long as they stay in the project
-    from pathlib import Path
 
-    candidate = Path(path)
-    target = candidate if candidate.is_absolute() else (root / path)
-    target = target.resolve()
-    if root.resolve() not in target.parents and target != root.resolve():
+    target = _resolve_download_target(root, project.output_folder_name, path)
+    root_r = root.resolve()
+    if root_r not in target.parents and target != root_r:
         raise HTTPException(status_code=400, detail="Caminho inválido")
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
