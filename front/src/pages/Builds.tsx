@@ -45,18 +45,18 @@ export default function Builds() {
   return (
     <ProjectLayout project={project}>
       <div className="p-6">
-        <h1 className="mb-1 text-xl font-bold text-brand-900">Histórico de versões</h1>
-        <p className="mb-4 text-sm text-slate-500">
+        <h1 className="mb-1 text-xl font-bold text-ink">Histórico de versões</h1>
+        <p className="mb-4 text-sm text-ink2">
           Cada publicação gera uma versão imutável. Apenas uma fica "No ar".
         </p>
         {restoreMsg && (
-          <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-800">
+          <div className="mb-3 rounded-lg border border-line px-3 py-2 text-sm text-accentv" style={{ background: "var(--accent-soft)" }}>
             {restoreMsg}
           </div>
         )}
         <div className="card overflow-hidden">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+            <thead className="bg-surface-2 text-xs uppercase text-ink3">
               <tr>
                 <th className="px-4 py-2">ID</th>
                 <th className="px-4 py-2">Data/Hora</th>
@@ -67,34 +67,34 @@ export default function Builds() {
             </thead>
             <tbody>
               {paged.map((b) => (
-                <tr key={b.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2 font-mono text-brand-600">{b.hash}</td>
-                  <td className="px-4 py-2 text-slate-500">
+                <tr key={b.id} className="border-t border-line">
+                  <td className="px-4 py-2 font-mono text-brandv">{b.hash}</td>
+                  <td className="px-4 py-2 text-ink2">
                     {new Date(b.created_at).toLocaleString("pt-BR")}
                   </td>
-                  <td className="px-4 py-2 text-slate-500">{b.framework_version}</td>
+                  <td className="px-4 py-2 text-ink2">{b.framework_version}</td>
                   <td className="px-4 py-2">
                     <StatusBadge status={b.status} />
                   </td>
                   <td className="relative px-4 py-2 text-right">
                     <button
                       onClick={() => setMenu(menu === b.id ? null : b.id)}
-                      className="rounded px-2 text-slate-400 hover:bg-slate-100"
+                      className="rounded px-2 text-ink3 hover:bg-surface-2"
                     >
                       ⋮
                     </button>
                     {menu === b.id && (
-                      <div className="absolute right-4 z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 text-left shadow-lg">
+                      <div className="absolute right-4 z-10 mt-1 w-48 rounded-lg border border-line bg-surface py-1 text-left shadow-token-lg">
                         <button
                           onClick={() => restore(b)}
-                          className="block w-full px-4 py-1.5 text-left text-sm text-brand-700 hover:bg-slate-50"
+                          className="block w-full px-4 py-1.5 text-left text-sm text-brandv hover:bg-surface-2"
                         >
                           Restaurar código desta versão
                         </button>
                         {b.status !== "live" && (
                           <button
                             onClick={() => activate(b.id)}
-                            className="block w-full px-4 py-1.5 text-left text-sm text-emerald-600 hover:bg-slate-50"
+                            className="block w-full px-4 py-1.5 text-left text-sm text-ok hover:bg-surface-2"
                           >
                             Tornar "No ar"
                           </button>
@@ -106,7 +106,7 @@ export default function Builds() {
               ))}
               {builds.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={5} className="px-4 py-8 text-center text-ink3">
                     Nenhuma versão publicada ainda.
                   </td>
                 </tr>
@@ -123,7 +123,7 @@ export default function Builds() {
             >
               Anterior
             </button>
-            <span className="text-slate-500">
+            <span className="text-ink2">
               {page} / {totalPages}
             </span>
             <button

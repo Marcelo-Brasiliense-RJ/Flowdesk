@@ -10,8 +10,8 @@ export default function AccessControl() {
   return (
     <ProjectLayout project={project}>
       <div className="p-6">
-        <h1 className="mb-4 text-xl font-bold text-brand-900">Controle de Acesso</h1>
-        <div className="mb-4 flex gap-1 border-b border-slate-200">
+        <h1 className="mb-4 text-xl font-bold text-ink">Controle de Acesso</h1>
+        <div className="mb-4 flex gap-1 border-b border-line">
           {[
             ["users", "Usuários"],
             ["roles", "Papéis"],
@@ -21,8 +21,8 @@ export default function AccessControl() {
               onClick={() => setTab(k as any)}
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
                 tab === k
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-slate-500"
+                  ? "border-[color:var(--brand)] text-brandv"
+                  : "border-transparent text-ink2"
               }`}
             >
               {l}
@@ -77,7 +77,7 @@ function Users({
   return (
     <div className="space-y-6">
       <div className="card p-4">
-        <h2 className="mb-3 font-semibold text-brand-900">Política global</h2>
+        <h2 className="mb-3 font-semibold text-ink">Política global</h2>
         <label className="mb-2 flex items-center gap-2 text-sm">
           <input
             type="radio"
@@ -107,8 +107,8 @@ function Users({
       </div>
 
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 className="font-semibold text-brand-900">Usuários</h2>
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h2 className="font-semibold text-ink">Usuários</h2>
           <div className="flex gap-2">
             <input
               className="input max-w-xs"
@@ -122,7 +122,7 @@ function Users({
           </div>
         </div>
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+          <thead className="bg-surface-2 text-xs uppercase text-ink3">
             <tr>
               <th className="px-4 py-2">E-mail</th>
               <th className="px-4 py-2">Papéis</th>
@@ -131,11 +131,11 @@ function Users({
           </thead>
           <tbody>
             {members.map((m) => (
-              <tr key={m.id} className="border-t border-slate-100">
-                <td className="px-4 py-2">{m.email}</td>
+              <tr key={m.id} className="border-t border-line">
+                <td className="px-4 py-2 text-ink">{m.email}</td>
                 <td className="px-4 py-2">
                   {m.roles.map((r) => (
-                    <span key={r} className="badge mr-1 bg-brand-50 text-brand-600">
+                    <span key={r} className="badge mr-1" data-status="queued">
                       {r}
                     </span>
                   ))}
@@ -145,7 +145,7 @@ function Users({
                     onClick={() =>
                       api.del(`/api/projects/${id}/members/${m.id}`).then(load)
                     }
-                    className="text-slate-400 hover:text-red-600"
+                    className="text-ink3 hover:text-err"
                   >
                     ⋮
                   </button>
@@ -181,7 +181,7 @@ function Roles({ id }: { id: number }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <input
           className="input max-w-[160px]"
           placeholder="Nome do papel"
@@ -199,7 +199,7 @@ function Roles({ id }: { id: number }) {
         </button>
       </div>
       <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-400">
+        <thead className="bg-surface-2 text-xs uppercase text-ink3">
           <tr>
             <th className="px-4 py-2">Nome</th>
             <th className="px-4 py-2">Descrição</th>
@@ -208,13 +208,13 @@ function Roles({ id }: { id: number }) {
         </thead>
         <tbody>
           {roles.map((r) => (
-            <tr key={r.id} className="border-t border-slate-100">
-              <td className="px-4 py-2 font-medium">{r.name}</td>
-              <td className="px-4 py-2 text-slate-500">{r.description}</td>
+            <tr key={r.id} className="border-t border-line">
+              <td className="px-4 py-2 font-medium text-ink">{r.name}</td>
+              <td className="px-4 py-2 text-ink2">{r.description}</td>
               <td className="px-4 py-2 text-right">
                 <button
                   onClick={() => api.del(`/api/projects/${id}/roles/${r.id}`).then(load)}
-                  className="text-slate-400 hover:text-red-600"
+                  className="text-ink3 hover:text-err"
                 >
                   ⋮
                 </button>
