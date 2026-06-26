@@ -260,6 +260,24 @@ def _context_usage(db: Session, project_id: int) -> dict:
             "percent": round(min(100.0, used / CONTEXT_WINDOW * 100), 2)}
 
 
+_BUILD_VERB = r"(monta|montar|monte|cria|criar|crie|constr[oóu]i?r?|finaliz\w*|implementa\w*|gera|gerar|gere)"
+
+
+def _is_build_intent(content: str) -> bool:
+    c = content.strip().lower()
+    if c.startswith("respostas da entrevista"):
+        return True
+    # comando explícito: verbo de construção no INÍCIO da mensagem...
+    if re.match(rf"\s*{_BUILD_VERB}\b", c):
+        return True
+    # ...ou verbo de construção acompanhado de "agora"
+    if re.search(rf"\b{_BUILD_VERB}\b", c) and re.search(r"\bagora\b", c):
+        return True
+    # ponytail: heurística com teto conhecido. Se algum fluxo legítimo de "só
+    # construir" regredir, afrouxar aqui é o ponto único de ajuste.
+    return False
+
+
 @router.get("/projects/{project_id}/chat", response_model=list[ChatMessageOut])
 def list_chat(project_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     get_project(db, project_id, user)
@@ -308,13 +326,7 @@ def chat_stream(
         .order_by(ChatMessage.created_at)
         .all()
     )
-    build_intent = body.content.strip().lower().startswith("respostas da entrevista") or bool(
-        re.search(
-            r"\b(monta|montar|monte|cria|criar|crie|gera|gerar|gere|constr|finaliz|implementa)",
-            body.content,
-            re.IGNORECASE,
-        )
-    )
+    build_intent = _is_build_intent(body.content)
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
