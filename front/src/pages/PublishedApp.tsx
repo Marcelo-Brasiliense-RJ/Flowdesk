@@ -5,6 +5,7 @@ import OcrReview from "../components/OcrReview";
 import ProgressTimeline from "../components/ProgressTimeline";
 import ClassificacaoReview from "../components/ClassificacaoReview";
 import type { ClassificacaoReviewData, ProgressEvent } from "../lib/types";
+import { formatSummaryValue } from "./publishedSummary";
 
 interface Stage {
   id: number;
@@ -395,7 +396,7 @@ function ResultRenderer({
               {Object.entries(summary).map(([k, v]) => (
                 <tr key={k} className="border-b border-line last:border-0">
                   <td className="py-1 text-ink3">{k}</td>
-                  <td className="py-1 text-right font-medium">{String(v)}</td>
+                  <td className="py-1 text-right font-medium">{formatSummaryValue(v)}</td>
                 </tr>
               ))}
             </tbody>
