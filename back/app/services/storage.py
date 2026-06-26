@@ -152,12 +152,21 @@ def output_path(name: str) -> Path:
     return d / name
 
 
+def _json_default(o):
+    # numpy/pandas escalares expõem .item() -> int/float nativo (não string)
+    if hasattr(o, "item"):
+        try:
+            return o.item()
+        except Exception:
+            pass
+    return str(o)
+
+
 def set_output(data) -> None:
     if not isinstance(data, dict):
         data = {"resultado": data}
-    # default=str serializa Path e outros objetos com seguranca
     Path(_OUTPUT).write_text(
-        json.dumps(data, ensure_ascii=False, default=str), encoding="utf-8"
+        json.dumps(data, ensure_ascii=False, default=_json_default), encoding="utf-8"
     )
 
 

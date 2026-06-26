@@ -58,3 +58,12 @@ def test_read_table_xlsx_and_csv(tmp_path, monkeypatch):
     df0.to_csv(csv, index=False)
     assert sdk.read_table(str(xlsx)).shape == (2, 2)
     assert sdk.read_table(str(csv)).shape == (2, 2)
+
+
+def test_set_output_preserva_numpy_como_numero(tmp_path, monkeypatch):
+    import numpy as np
+    sdk, _ = _load_sdk(tmp_path, monkeypatch)
+    sdk.set_output({"total": np.int64(1700), "frac": np.float64(2.5)})
+    saved = json.loads((tmp_path / "output.json").read_text(encoding="utf-8"))
+    assert saved["total"] == 1700 and isinstance(saved["total"], int)
+    assert saved["frac"] == 2.5 and isinstance(saved["frac"], float)
