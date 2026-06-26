@@ -75,15 +75,15 @@ const STEP_ICONS: StepIcon[] = [TriggerIcon, InputIcon, ProcessIcon, OutputIcon,
 /* ---------- stepper vertical (desktop) ---------- */
 function StepRail({ step, plan }: { step: number; plan: AnalyzePlan | null }) {
   return (
-    <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200 bg-white px-5 py-6 lg:flex">
+    <aside className="hidden w-72 shrink-0 flex-col border-r border-line bg-surface px-5 py-6 lg:flex">
       <div className="mb-6 px-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-ink3">
           Montagem da automação
         </div>
-        <div className="mt-1 text-sm text-slate-500">
+        <div className="mt-1 text-sm text-ink2">
           {step >= STEPS.length - 1 ? "Pronta para testar" : `Etapa ${step + 1} de ${STEPS.length}`}
         </div>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
           <motion.div
             className="h-full rounded-full bg-accent-400"
             animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }}

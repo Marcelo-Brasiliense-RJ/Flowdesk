@@ -233,15 +233,15 @@ export default function Editor() {
   }, [stages, files]);
 
   return (
-    <div className="flex h-full flex-col bg-slate-50">
+    <div className="flex h-full flex-col bg-surface-2">
       {/* Top bar */}
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Link to="/" className="shrink-0">
             <Logo />
           </Link>
-          <span className="shrink-0 text-slate-300">/</span>
-          <span className="truncate font-semibold text-brand-900">
+          <span className="shrink-0 text-ink3">/</span>
+          <span className="truncate font-semibold text-ink">
             {project?.name}
           </span>
           {project && (
@@ -253,7 +253,7 @@ export default function Editor() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span
             className={`hidden text-xs md:inline ${
-              problems.length ? "text-orange-600" : "text-emerald-600"
+              problems.length ? "text-warn2" : "text-ok"
             }`}
           >
             {problems.length
@@ -301,22 +301,22 @@ export default function Editor() {
 
       {/* 3 panels */}
       <div className="flex min-h-0 flex-1 overflow-x-auto">
-        <div className="flex w-[320px] min-w-[300px] shrink-0 flex-col border-r border-slate-200">
+        <div className="flex w-[320px] min-w-[300px] shrink-0 flex-col border-r border-line">
           <SmartChat projectId={projectId} onApplied={() => { loadFiles(); loadGraph(); }} />
         </div>
 
         {/* center: explorer + monaco */}
         <div className="flex min-w-[320px] flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
-            <div className="flex w-56 shrink-0 flex-col overflow-auto border-r border-slate-200 bg-white">
+            <div className="flex w-56 shrink-0 flex-col overflow-auto border-r border-line bg-surface">
               <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink3">
                   Código Fonte
                 </span>
                 <button
                   onClick={newSourceFile}
                   title="Novo arquivo"
-                  className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-brand-50 hover:text-brand-700"
+                  className="flex h-5 w-5 items-center justify-center rounded text-ink3 hover:bg-surface-2 hover:text-accentv"
                 >
                   +
                 </button>
@@ -331,7 +331,7 @@ export default function Editor() {
                         key={f.path}
                         onClick={() => openFile(f.path)}
                         className={`group flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm ${
-                          active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
+                          active ? "bg-[color:var(--accent-soft)] text-accentv" : "text-ink2 hover:bg-surface-2"
                         }`}
                       >
                         <FileBadge path={f.path} />
@@ -342,7 +342,7 @@ export default function Editor() {
                             removeSourceFile(f.path);
                           }}
                           title="Excluir arquivo"
-                          className="hidden h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:text-red-600 group-hover:flex"
+                          className="hidden h-4 w-4 shrink-0 items-center justify-center rounded text-ink3 hover:text-err group-hover:flex"
                         >
                           ×
                         </button>
@@ -350,11 +350,11 @@ export default function Editor() {
                     );
                   })}
                 {files.filter((f) => !f.is_dir).length === 0 && (
-                  <div className="px-2 py-1 text-xs text-slate-400">Nenhum arquivo</div>
+                  <div className="px-2 py-1 text-xs text-ink3">Nenhum arquivo</div>
                 )}
               </div>
 
-              <div className="mt-3 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="mt-3 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink3">
                 Projeto
               </div>
               <div className="space-y-0.5 px-2 pb-2">
@@ -366,9 +366,9 @@ export default function Editor() {
             </div>
 
             <div className="flex min-w-0 flex-1 flex-col">
-              <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-100 px-2 py-1">
+              <div className="flex items-center gap-1 border-b border-line bg-surface-2 px-2 py-1">
                 {openTabs.length === 0 && (
-                  <span className="px-2 py-1 text-xs text-slate-400">
+                  <span className="px-2 py-1 text-xs text-ink3">
                     Selecione um arquivo
                   </span>
                 )}
@@ -378,13 +378,13 @@ export default function Editor() {
                     onClick={() => openFile(t)}
                     className={`flex items-center gap-1 rounded-t px-3 py-1 text-xs ${
                       activePath === t
-                        ? "bg-white text-brand-900"
-                        : "text-slate-500 hover:bg-white/60"
+                        ? "bg-surface text-ink"
+                        : "text-ink2 hover:bg-surface-2"
                     }`}
                   >
                     {t}
                     {activePath === t && dirty && (
-                      <span className="text-orange-500">●</span>
+                      <span className="text-warn2">●</span>
                     )}
                   </button>
                 ))}
@@ -431,7 +431,7 @@ export default function Editor() {
                     options={{ fontSize: 13, minimap: { enabled: false } }}
                   />
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-slate-400">
+                  <div className="flex h-full flex-col items-center justify-center gap-1 text-sm text-ink3">
                     <span>Nenhum arquivo aberto</span>
                     <span className="text-xs">Clique em um nó do fluxo para pré-visualizar</span>
                   </div>
@@ -442,7 +442,7 @@ export default function Editor() {
         </div>
 
         {/* right: canvas */}
-        <div className="flex w-[40%] min-w-[340px] shrink-0 flex-col border-l border-slate-200">
+        <div className="flex w-[40%] min-w-[340px] shrink-0 flex-col border-l border-line">
           <div className="min-h-0 flex-1">
             <ReactFlow
               nodes={nodes}
@@ -460,13 +460,13 @@ export default function Editor() {
               <Controls />
             </ReactFlow>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 bg-white px-3 py-2">
-            <span className="text-xs text-slate-400">Adicionar:</span>
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-line bg-surface px-3 py-2">
+            <span className="text-xs text-ink3">Adicionar:</span>
             {PALETTE.map((t) => (
               <button
                 key={t}
                 onClick={() => addStage(t)}
-                className="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-50"
+                className="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] text-ink2 hover:bg-surface-2"
                 style={{ color: STAGE_META[t].color }}
               >
                 <StageIcon type={t} className="h-5 w-5" />
@@ -478,8 +478,8 @@ export default function Editor() {
       </div>
 
       {/* footer */}
-      <div className="h-44 shrink-0 border-t border-slate-200 bg-white">
-        <div className="flex gap-1 border-b border-slate-200 px-3 py-1.5">
+      <div className="h-44 shrink-0 border-t border-line bg-surface">
+        <div className="flex gap-1 border-b border-line px-3 py-1.5">
           {[
             ["execucoes", "Execuções"],
             ["tarefas", "Tarefas"],
@@ -488,23 +488,23 @@ export default function Editor() {
               key={k}
               onClick={() => setFooter(k as any)}
               className={`rounded px-3 py-1 text-xs font-medium ${
-                footer === k ? "bg-brand-50 text-brand-700" : "text-slate-500"
+                footer === k ? "bg-[color:var(--accent-soft)] text-accentv" : "text-ink2"
               }`}
             >
               {l}
             </button>
           ))}
-          <Link to={`/projects/${projectId}/logs`} className="ml-auto text-xs text-brand-500 hover:underline">
+          <Link to={`/projects/${projectId}/logs`} className="ml-auto text-xs text-brandv hover:underline">
             Ver todos os logs →
           </Link>
         </div>
         <div className="h-[calc(100%-37px)] overflow-auto p-2">
           {footer === "execucoes" ? (
             executions.length === 0 ? (
-              <div className="p-3 text-sm text-slate-400">Nenhuma execução ainda.</div>
+              <div className="p-3 text-sm text-ink3">Nenhuma execução ainda.</div>
             ) : (
               <table className="w-full text-left text-xs">
-                <thead className="text-slate-400">
+                <thead className="text-ink3">
                   <tr>
                     <th className="px-2 py-1">Etapa</th>
                     <th className="px-2 py-1">Tipo</th>
@@ -515,16 +515,16 @@ export default function Editor() {
                 </thead>
                 <tbody>
                   {executions.map((e) => (
-                    <tr key={e.id} className="border-t border-slate-100">
+                    <tr key={e.id} className="border-t border-line">
                       <td className="px-2 py-1">{e.stage_name}</td>
                       <td className="px-2 py-1">{e.stage_type}</td>
                       <td className="px-2 py-1">
                         <StatusBadge status={e.status} />
                       </td>
-                      <td className="px-2 py-1 font-mono text-slate-400">
+                      <td className="px-2 py-1 font-mono text-ink3">
                         {e.id.slice(0, 8)}
                       </td>
-                      <td className="px-2 py-1 text-slate-400">
+                      <td className="px-2 py-1 text-ink3">
                         {new Date(e.started_at).toLocaleString("pt-BR")}
                       </td>
                     </tr>
@@ -533,13 +533,13 @@ export default function Editor() {
               </table>
             )
           ) : (
-            <div className="p-3 text-sm text-slate-500">
+            <div className="p-3 text-sm text-ink2">
               {problems.length === 0 ? (
                 "Nenhuma tarefa pendente."
               ) : (
                 <ul className="list-inside list-disc">
                   {problems.map((p) => (
-                    <li key={p} className="text-orange-600">
+                    <li key={p} className="text-warn2">
                       {p}
                     </li>
                   ))}
@@ -621,22 +621,22 @@ function JobPreview({
     <div className="max-w-lg space-y-4">
       <div className="card p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-semibold text-brand-900">Agendamento</h3>
+          <h3 className="font-semibold text-ink">Agendamento</h3>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <span className="text-slate-500">{enabled ? "Ativo" : "Pausado"}</span>
+            <span className="text-ink2">{enabled ? "Ativo" : "Pausado"}</span>
             <button
               type="button"
               onClick={() => setEnabled((v) => !v)}
-              className={`relative h-5 w-9 rounded-full transition ${enabled ? "bg-accent-500" : "bg-slate-300"}`}
+              className={`relative h-5 w-9 rounded-full transition ${enabled ? "bg-accent-500" : "bg-[color:var(--border-strong)]"}`}
             >
               <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${enabled ? "left-[18px]" : "left-0.5"}`}
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface transition-all ${enabled ? "left-[18px]" : "left-0.5"}`}
               />
             </button>
           </label>
         </div>
 
-        <label className="mb-1 block text-sm font-medium text-slate-700">Frequência</label>
+        <label className="mb-1 block text-sm font-medium text-ink2">Frequência</label>
         <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
           <option value="manual">Somente manual</option>
           <option value="interval">A cada intervalo</option>
@@ -645,7 +645,7 @@ function JobPreview({
 
         {type === "interval" && (
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm text-slate-500">A cada</span>
+            <span className="text-sm text-ink2">A cada</span>
             <input
               type="number"
               min={1}
@@ -663,15 +663,15 @@ function JobPreview({
 
         {type === "daily" && (
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm text-slate-500">Todos os dias às</span>
+            <span className="text-sm text-ink2">Todos os dias às</span>
             <input type="time" className="input w-32" value={time} onChange={(e) => setTime(e.target.value)} />
           </div>
         )}
 
-        <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          <span className="font-medium text-brand-900">Resumo:</span> {summary}
+        <div className="mt-4 rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink2">
+          <span className="font-medium text-ink">Resumo:</span> {summary}
           {!enabled && type !== "manual" && (
-            <span className="ml-1 text-amber-600">· pausado (ative para rodar automaticamente)</span>
+            <span className="ml-1 text-warn2">· pausado (ative para rodar automaticamente)</span>
           )}
         </div>
 
@@ -682,8 +682,8 @@ function JobPreview({
 
       <div className="card flex items-center justify-between p-5">
         <div>
-          <div className="text-sm font-medium text-brand-900">Script do Job</div>
-          <div className="text-xs text-slate-400">{stage.entry_file || `${stage.key}.py`}</div>
+          <div className="text-sm font-medium text-ink">Script do Job</div>
+          <div className="text-xs text-ink3">{stage.entry_file || `${stage.key}.py`}</div>
         </div>
         <div className="flex gap-2">
           <button
@@ -697,7 +697,7 @@ function JobPreview({
           </button>
         </div>
       </div>
-      {runMsg && <div className="text-sm text-slate-500">{runMsg}</div>}
+      {runMsg && <div className="text-sm text-ink2">{runMsg}</div>}
     </div>
   );
 }
@@ -727,7 +727,7 @@ function HookPreview({ projectId, stage }: { projectId: number; stage: Stage }) 
 
   if (!info)
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-400">
+      <div className="rounded-xl border border-line bg-surface p-5 text-sm text-ink3">
         Gerando webhook…
       </div>
     );
@@ -753,17 +753,17 @@ function HookPreview({ projectId, stage }: { projectId: number; stage: Stage }) 
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="rounded-xl border border-line bg-surface p-5">
       <div className="mb-1 flex items-center gap-2">
-        <span className="font-medium text-brand-900">Webhook de entrada</span>
+        <span className="font-medium text-ink">Webhook de entrada</span>
         <span className="badge bg-amber-100 text-amber-700">{info.method}</span>
       </div>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-ink2">
         Dispara o fluxo quando recebe uma requisição HTTP. Use esta URL no sistema externo.
       </p>
 
       <div className="mt-4">
-        <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <label className="text-xs font-medium uppercase tracking-wide text-ink3">
           URL de produção
         </label>
         <div className="mt-1 flex items-center gap-2">
@@ -785,19 +785,19 @@ function HookPreview({ projectId, stage }: { projectId: number; stage: Stage }) 
 
       <div className="mt-3 text-sm">
         {info.target ? (
-          <span className="text-slate-500">
+          <span className="text-ink2">
             Ao receber, dispara:{" "}
-            <span className="font-medium text-brand-900">{info.target.name}</span> ({info.target.type})
+            <span className="font-medium text-ink">{info.target.name}</span> ({info.target.type})
           </span>
         ) : (
-          <span className="text-orange-600">
+          <span className="text-warn2">
             Conecte este Hook a um Script no canvas para que o disparo execute algo.
           </span>
         )}
       </div>
 
       <div className="mt-3">
-        <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <label className="text-xs font-medium uppercase tracking-wide text-ink3">
           Exemplo (curl)
         </label>
         <pre className="mt-1 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-100">
@@ -810,10 +810,10 @@ function HookPreview({ projectId, stage }: { projectId: number; stage: Stage }) 
       </button>
       {result && (
         <div className="mt-2">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
+          <div className="text-xs font-medium uppercase tracking-wide text-ink3">
             Resposta
           </div>
-          <pre className="mt-1 overflow-auto rounded-lg bg-slate-50 p-3 text-xs">
+          <pre className="mt-1 overflow-auto rounded-lg bg-surface-2 p-3 text-xs">
             {JSON.stringify(result, null, 2)}
           </pre>
         </div>
@@ -839,7 +839,7 @@ function StagePreview({
   const isResult = cfg.mode === "result";
 
   return (
-    <div className="h-full overflow-auto bg-slate-50 p-6">
+    <div className="h-full overflow-auto bg-surface-2 p-6">
       <div className="mb-4 flex items-center gap-2">
         <span
           className="flex h-7 w-7 items-center justify-center rounded-lg text-white"
@@ -848,32 +848,32 @@ function StagePreview({
           <StageIcon type={stage.type} className="h-4 w-4" />
         </span>
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink3">
             {meta.label} · pré-visualização
           </div>
-          <div className="font-semibold text-brand-900">{stage.name}</div>
+          <div className="font-semibold text-ink">{stage.name}</div>
         </div>
       </div>
 
       {stage.type === "form" && !isResult && (
-        <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-brand-900">
+        <div className="mx-auto max-w-md rounded-xl border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-ink">
             {cfg.title || stage.name}
           </h2>
           {cfg.description && (
-            <p className="mt-1 text-sm text-slate-500">{cfg.description}</p>
+            <p className="mt-1 text-sm text-ink2">{cfg.description}</p>
           )}
           <div className="mt-4 space-y-3">
             {fields.length === 0 && (
-              <p className="text-sm text-slate-400">Este formulário ainda não tem campos.</p>
+              <p className="text-sm text-ink3">Este formulário ainda não tem campos.</p>
             )}
             {fields.map((f: any) => (
               <div key={f.name}>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label className="mb-1 block text-sm font-medium text-ink2">
                   {f.label || f.name}
                 </label>
                 {f.type === "file" ? (
-                  <div className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-400">
+                  <div className="rounded-lg border border-dashed border-line-strong px-3 py-2 text-sm text-ink3">
                     Selecionar arquivo…
                   </div>
                 ) : f.type === "select" ? (
@@ -895,12 +895,12 @@ function StagePreview({
       )}
 
       {stage.type === "form" && isResult && (
-        <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-brand-900">{cfg.title || "Resultado"}</h2>
-          <p className="mt-1 text-sm text-emerald-600">
+        <div className="mx-auto max-w-md rounded-xl border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-ink">{cfg.title || "Resultado"}</h2>
+          <p className="mt-1 text-sm text-ok">
             {cfg.description || "Tela de resultado exibida após o processamento."}
           </p>
-          <div className="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+          <div className="mt-4 rounded-lg bg-surface-2 p-4 text-sm text-ink2">
             Resumo da execução (chave <code>{cfg.summary_key || "resumo"}</code>) + botão de
             download do arquivo (<code>{cfg.result_file_key || "arquivo_resultado"}</code>).
           </div>
@@ -922,20 +922,20 @@ function StagePreview({
       )}
 
       {["script", "agent"].includes(stage.type) && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm">
-          <div className="font-medium text-brand-900">
+        <div className="rounded-xl border border-line bg-surface p-5 text-sm">
+          <div className="font-medium text-ink">
             {meta.label} sem arquivo de código ainda
           </div>
-          <p className="mt-1 text-slate-500">
+          <p className="mt-1 text-ink2">
             Arquivo esperado: <code>{stage.entry_file || `${stage.key}.py`}</code>. Use o
             Smart Chat ou o botão "+" no explorador para criar o código.
           </p>
         </div>
       )}
 
-      <details className="mt-4 text-xs text-slate-400">
+      <details className="mt-4 text-xs text-ink3">
         <summary className="cursor-pointer">configuração (JSON)</summary>
-        <pre className="mt-1 overflow-auto rounded bg-white p-2">
+        <pre className="mt-1 overflow-auto rounded bg-surface p-2">
           {JSON.stringify(cfg, null, 2)}
         </pre>
       </details>
@@ -955,7 +955,7 @@ function ExplorerLink({
   return (
     <Link
       to={to}
-      className="flex items-center gap-2 rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-50 hover:text-brand-700"
+      className="flex items-center gap-2 rounded px-2 py-1 text-sm text-ink2 hover:bg-surface-2 hover:text-accentv"
     >
       <span className="w-4 text-center text-xs">{icon}</span>
       <span className="truncate">{label}</span>
@@ -965,8 +965,8 @@ function ExplorerLink({
 
 const EXT_BADGE: Record<string, string> = {
   py: "bg-blue-100 text-blue-700",
-  md: "bg-slate-200 text-slate-600",
-  txt: "bg-slate-100 text-slate-500",
+  md: "bg-slate-200 text-ink2",
+  txt: "bg-surface-2 text-ink2",
   json: "bg-amber-100 text-amber-700",
   csv: "bg-emerald-100 text-emerald-700",
 };
@@ -974,7 +974,7 @@ const EXT_BADGE: Record<string, string> = {
 function FileBadge({ path }: { path: string }) {
   const ext = (path.split(".").pop() || "").toLowerCase();
   const label = ext ? ext.slice(0, 3) : "·";
-  const cls = EXT_BADGE[ext] || "bg-slate-100 text-slate-500";
+  const cls = EXT_BADGE[ext] || "bg-surface-2 text-ink2";
   return (
     <span
       className={`flex h-4 w-6 shrink-0 items-center justify-center rounded text-[9px] font-bold uppercase ${cls}`}

@@ -56,7 +56,7 @@ export default function WorkflowMonitor() {
         target: String(e.target_stage_id),
         label: e.variable_label,
         markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: "#94a3b8" },
+        style: { stroke: "var(--border-strong)" },
       }))
     );
   }, [id, setNodes, setEdges]);
@@ -77,10 +77,10 @@ export default function WorkflowMonitor() {
   return (
     <ProjectLayout project={project}>
       <div className="relative h-full">
-        <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-2 backdrop-blur">
+        <div className="glass absolute left-0 right-0 top-0 z-10 flex items-center justify-between border-b border-line px-4 py-2">
           <div>
-            <h1 className="font-semibold text-brand-900">Monitor do Workflow</h1>
-            <p className="text-xs text-slate-500">
+            <h1 className="font-semibold text-ink">Monitor do Workflow</h1>
+            <p className="text-xs text-ink2">
               Atualiza em tempo real via WebSocket
             </p>
           </div>
@@ -97,7 +97,7 @@ export default function WorkflowMonitor() {
             onEdgesChange={onEdgesChange}
             fitView
           >
-            <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="#cbd5e1" />
+            <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="var(--border-strong)" />
             <Controls />
           </ReactFlow>
         </div>
@@ -130,9 +130,9 @@ function ExecutionDrawer({
       .then(setExec);
   }, [projectId, executionId]);
   return (
-    <div className="absolute bottom-0 right-0 top-14 z-20 w-[460px] overflow-auto border-l border-slate-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
-        <span className="font-mono text-xs text-slate-500">{executionId}</span>
+    <div className="absolute bottom-0 right-0 top-14 z-20 w-[460px] overflow-auto border-l border-line bg-surface shadow-token-lg">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2">
+        <span className="font-mono text-xs text-ink2">{executionId}</span>
         <button onClick={onClose} className="btn-ghost px-2 py-1">
           ✕
         </button>
@@ -140,35 +140,35 @@ function ExecutionDrawer({
       {exec && (
         <div className="space-y-3 p-4 text-sm">
           <div>
-            <span className="text-slate-400">Etapa:</span> {exec.stage_name} (
+            <span className="text-ink3">Etapa:</span> {exec.stage_name} (
             {exec.stage_type})
           </div>
           <div>
-            <span className="text-slate-400">Status:</span> {exec.status}
+            <span className="text-ink3">Status:</span> {exec.status}
           </div>
           <div>
-            <div className="mb-1 text-xs font-semibold uppercase text-slate-400">
+            <div className="mb-1 text-xs font-semibold uppercase text-ink3">
               stdout
             </div>
-            <pre className="max-h-48 overflow-auto rounded bg-slate-900 p-2 text-xs text-emerald-200">
+            <pre className="max-h-48 overflow-auto rounded p-2 text-xs text-emerald-200" style={{ background: "#0b1f33" }}>
               {exec.stdout || "(vazio)"}
             </pre>
           </div>
           {exec.stderr && (
             <div>
-              <div className="mb-1 text-xs font-semibold uppercase text-red-400">
+              <div className="mb-1 text-xs font-semibold uppercase text-err">
                 stderr
               </div>
-              <pre className="max-h-48 overflow-auto rounded bg-slate-900 p-2 text-xs text-red-300">
+              <pre className="max-h-48 overflow-auto rounded p-2 text-xs text-red-300" style={{ background: "#0b1f33" }}>
                 {exec.stderr}
               </pre>
             </div>
           )}
           <div>
-            <div className="mb-1 text-xs font-semibold uppercase text-slate-400">
+            <div className="mb-1 text-xs font-semibold uppercase text-ink3">
               output
             </div>
-            <pre className="overflow-auto rounded bg-slate-50 p-2 text-xs">
+            <pre className="overflow-auto rounded bg-surface-2 p-2 text-xs">
               {JSON.stringify(exec.output_data, null, 2)}
             </pre>
           </div>

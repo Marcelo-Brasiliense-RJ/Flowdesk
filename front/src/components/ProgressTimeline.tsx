@@ -17,11 +17,11 @@ export default function ProgressTimeline({
         return (
           <li key={i} className="flex items-start gap-2 text-sm">
             {isLast && running ? (
-              <Spinner className="mt-0.5 h-3.5 w-3.5 text-accent-600" />
+              <Spinner className="mt-0.5 h-3.5 w-3.5 text-accentv" />
             ) : (
               <svg
                 viewBox="0 0 24 24"
-                className="mt-0.5 h-3.5 w-3.5 text-emerald-500"
+                className="mt-0.5 h-3.5 w-3.5 text-ok"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="3"
@@ -32,15 +32,15 @@ export default function ProgressTimeline({
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             )}
-            <span className="text-slate-700">{e.etapa}</span>
-            {e.detalhe && <span className="text-slate-400">{e.detalhe}</span>}
-            <span className="ml-auto text-[10px] text-slate-300">{e.ts}</span>
+            <span className="text-ink">{e.etapa}</span>
+            {e.detalhe && <span className="text-ink3">{e.detalhe}</span>}
+            <span className="ml-auto text-[10px] text-ink3">{e.ts}</span>
           </li>
         );
       })}
       {running && events.length === 0 && (
-        <li className="flex items-center gap-2 text-sm text-slate-500">
-          <Spinner className="h-3.5 w-3.5 text-accent-600" /> Iniciando…
+        <li className="flex items-center gap-2 text-sm text-ink2">
+          <Spinner className="h-3.5 w-3.5 text-accentv" /> Iniciando…
         </li>
       )}
     </ol>
