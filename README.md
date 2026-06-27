@@ -45,9 +45,17 @@ python -m venv .venv
 .venv\Scripts\activate            # Windows  (source .venv/bin/activate no Unix)
 pip install -r requirements.txt
 copy .env.example .env            # e preencha OPENAI_API_KEY (opcional)
-uvicorn main:app --reload         # http://127.0.0.1:8000
+uvicorn main:app --host 127.0.0.1 --port 8000   # ou .\run-dev.ps1
 ```
 Na primeira execução o banco `flowdesk.db` é criado e populado com o seed.
+
+> **Não use `--reload`.** O runtime regrava o script `.py` de cada projeto em
+> `back/storage/<id>/` a cada execução; com `--reload` o watcher reinicia o
+> servidor no meio da execução, matando o teste/publicação ("o servidor foi
+> reiniciado") e fazendo a ação não refletir na tela. No Python 3.11 não dá para
+> excluir `storage/` do watcher de forma confiável. Editou o backend? Reinicie o
+> processo (ou rode `.\run-dev.ps1`, que derruba o servidor antigo antes de subir
+> um limpo, evitando processos zumbis servindo código velho).
 
 ### Frontend
 ```bash
