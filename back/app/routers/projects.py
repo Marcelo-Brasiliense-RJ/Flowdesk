@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_admin
 from ..config import settings
+from ..services import ai_config
 from ..database import get_db
 from ..models import (
     ApiKey,
@@ -380,7 +381,7 @@ def auto_name(
 
         client = OpenAI(api_key=settings.openai_api_key)
         resp = client.chat.completions.create(
-            model=settings.openai_model,
+            model=ai_config.get_model(),
             messages=[
                 {"role": "system", "content": instr},
                 {"role": "user", "content": prompt[:1000]},

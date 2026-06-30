@@ -31,6 +31,7 @@ from app.runtime.scheduler import scheduler
 from app import metrics
 from app.routers import (
     admin,
+    ai,
     auth,
     builds,
     chat,
@@ -132,6 +133,7 @@ async def _count_requests(request, call_next):
 for module in (
     auth,
     admin,
+    ai,
     classify,
     projects,
     executions,

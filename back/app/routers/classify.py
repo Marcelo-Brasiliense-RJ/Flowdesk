@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..config import settings
+from ..services import ai_config
 from ..database import get_db
 from ..models import DataRow, DataTable, User
 from .projects import get_project
@@ -156,7 +157,7 @@ def classificar_grupos(project_id: int, req: SugestaoRequest,
             "conta_codigo vazio se não houver conta adequada (NUNCA invente código fora da lista)."
         )
         resp = client.chat.completions.create(
-            model=settings.openai_model,
+            model=ai_config.get_model(),
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             response_format={"type": "json_object"},

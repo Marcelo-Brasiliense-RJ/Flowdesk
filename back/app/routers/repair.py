@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..config import settings
+from ..services import ai_config
 from ..database import get_db
 from ..models import Execution, SourceFile, Stage, User
 from ..schemas import RepairApplyIn, RepairProposeIn, RepairProposeOut
@@ -96,7 +97,7 @@ def repair_propose(
 
         client = OpenAI(api_key=settings.openai_api_key)
         resp = client.chat.completions.create(
-            model=settings.openai_model,
+            model=ai_config.get_model(),
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0.1,

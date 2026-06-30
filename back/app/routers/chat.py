@@ -33,7 +33,7 @@ from ..models import (
     User,
 )
 from ..schemas import ChatMessageOut, ChatSendRequest, PendingActionOut
-from ..services import storage
+from ..services import ai_config, storage
 from .projects import get_project, slugify, unsafe_source_path
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -336,7 +336,7 @@ def chat_stream(
     build_intent = _is_build_intent(body.content)
 
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": ai_config.get_prompt("assistente", SYSTEM_PROMPT)},
         {"role": "system", "content": _project_context(db, project_id)},
     ]
     ctx_block = _attachment_context(project_id, body.attachments)
@@ -478,7 +478,7 @@ def _generate_build(messages: list[dict]):
 
         client = OpenAI(api_key=settings.openai_api_key)
         resp = client.chat.completions.create(
-            model=settings.openai_model,
+            model=ai_config.get_model(),
             messages=messages + [instr],
             response_format={"type": "json_object"},
             temperature=0.2,
@@ -501,7 +501,7 @@ def _generate(messages: list[dict], last_user: str):
 
             client = OpenAI(api_key=settings.openai_api_key)
             stream = client.chat.completions.create(
-                model=settings.openai_model, messages=messages, stream=True,
+                model=ai_config.get_model(), messages=messages, stream=True,
             )
             for event in stream:
                 delta = event.choices[0].delta.content if event.choices else None
