@@ -5,11 +5,12 @@ de IA separada, com prompt/modelo/temperatura lidos do grafo do builder (ai_conf
 """
 from __future__ import annotations
 
+import json
 import re
 
 from ..config import settings
 from ..services import ai_config
-from ..services.plan_schema import Plan, plan_is_complete
+from ..services.plan_schema import Plan, plan_is_complete, plan_missing_fields
 
 
 ROUTER_PROMPT = (
@@ -78,6 +79,57 @@ def route_intent(last_user: str, has_workflow: bool) -> str:
     except Exception:
         intent = ""
     return intent if intent in ("nova", "ajuste", "duvida") else "ajuste"
+
+
+PLANEJADOR_PROMPT = (
+    "Voce e o Planejador do FlowDesk. ANTES de qualquer codigo, conduza a "
+    "entrevista de descoberta no estilo grill-me: uma pergunta por vez, objetiva e "
+    "acolhedora, resolvendo cada ramo da arvore de decisao (fonte e formato dos "
+    "dados, significado das colunas, regra de negocio, contrato de saida, gatilho, "
+    "tratamento de erros). Sempre ofereca uma recomendacao, mas deixe o usuario "
+    "decidir; nunca assuma em silencio. Se a tarefa for contabil ou fiscal, faca "
+    "tambem as perguntas de perfil (regime, plano de contas, ERP destino). "
+    "Responda SOMENTE em JSON: "
+    '{"questions": [{"id": "...", "label": "...", "options": ["..."], "recommended": "..."}], '
+    '"plan": {<campos do plano preenchidos ATE AQUI: fonte{formato,descricao,colunas[]}, '
+    'regra_negocio, saida{formato,contrato,colunas[],destino_sistema}, gatilho, '
+    'tratamento_erros, contabil, notas>}, "contabil": <bool>, '
+    '"perfil_perguntas": [{"id": "...", "label": "...", "options": ["..."]}]}. '
+    "Devolva o plano COMPLETO acumulado a cada turno (nao so o delta). Nao escreva codigo."
+)
+
+
+def _deep_merge(base: dict, over: dict) -> dict:
+    out = dict(base or {})
+    for k, v in (over or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def run_planejador(messages: list[dict], plan: dict) -> dict:
+    """Conduz a entrevista e acumula o plano. Devolve perguntas, plano mesclado e
+    validado, campos criticos faltando, flag contabil e perguntas de perfil."""
+    raw = call_agent("planejador", PLANEJADOR_PROMPT, messages, json_mode=True)
+    try:
+        data = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    merged = _deep_merge(plan or {}, data.get("plan") or {})
+    try:
+        validated = Plan(**merged).model_dump()
+    except Exception:
+        validated = merged
+    missing = plan_missing_fields(Plan(**validated)) if isinstance(validated, dict) else []
+    return {
+        "questions": data.get("questions") or [],
+        "plan": validated,
+        "missing": missing,
+        "contabil": bool(data.get("contabil")),
+        "profile_questions": data.get("perfil_perguntas") or [],
+    }
 
 
 def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> str:
