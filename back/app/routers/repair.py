@@ -59,6 +59,17 @@ def _stage_source(db: Session, project_id: int, stage: Stage) -> SourceFile | No
     )
 
 
+def _plan_profile_context(plan: dict, profile: dict) -> str:
+    """Bloco de contexto com o plano selado e o perfil contábil, para a correção
+    respeitar o contrato original. Vazio quando não há plano nem perfil."""
+    parts = []
+    if plan:
+        parts.append("PLANO SELADO (contrato original):\n" + json.dumps(plan, ensure_ascii=False, indent=2))
+    if profile:
+        parts.append("PERFIL CONTÁBIL:\n" + json.dumps(profile, ensure_ascii=False, indent=2))
+    return "\n\n".join(parts)
+
+
 @router.post(
     "/projects/{project_id}/stages/{stage_id}/repair/propose",
     response_model=RepairProposeOut,
@@ -70,7 +81,7 @@ def repair_propose(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
     if not settings.ai_enabled:
         raise HTTPException(status_code=400, detail="IA indisponível para reparo.")
     stage = _script_stage(db, project_id, stage_id)
@@ -87,6 +98,9 @@ def repair_propose(
     messages = [{"role": "system", "content": _REPAIR_INSTR}]
     if ctx:
         messages.append({"role": "system", "content": ctx})
+    pp_ctx = _plan_profile_context(project.plan, project.accounting_profile)
+    if pp_ctx:
+        messages.append({"role": "system", "content": pp_ctx})
     user_msg = f"CÓDIGO ATUAL:\n\n{code[:6000]}\n\nERRO:\n\n{stderr[:3000]}"
     if body.hint and body.hint.strip():
         user_msg += f"\n\nDICA DO USUÁRIO: {body.hint.strip()}"
