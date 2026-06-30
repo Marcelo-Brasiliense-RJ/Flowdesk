@@ -136,6 +136,47 @@ def run_planejador(messages: list[dict], plan: dict) -> dict:
     }
 
 
+CONSTRUTOR_PROMPT = (
+    "Você é o Construtor do FlowDesk, especialista em Python. A partir do PLANO "
+    "selado (não da conversa), escreva TODOS os scripts da automação, completos e "
+    "funcionais. É PROIBIDO placeholder, esqueleto, TODO ou função vazia: implemente "
+    "de verdade a leitura, a transformação e a escrita do resultado. Use o SDK do "
+    "FlowDesk (get_file() para a entrada, output_path('nome.xlsx') para a saída, "
+    "set_output({...}) com a chave 'resumo' e 'arquivo_resultado' quando gerar "
+    "arquivo). Use pandas 2.x (NUNCA df.append; use pd.concat) e NUNCA omita a linha "
+    "que grava o arquivo. Para PDF/imagem use extract_document; para tabelas em PDF "
+    "use pdfplumber pela posição das palavras. Só use require_env quando o plano "
+    "indicar integração externa real (e-mail/API). Quando o plano for contábil, "
+    "respeite o perfil contábil fornecido (plano de contas, regime, layout do ERP "
+    "destino). Responda SOMENTE em JSON: {\"message\": \"explicação curta e amigável, "
+    "em português simples, do que a automação faz\", \"actions\": [{\"kind\": "
+    "\"create_file|edit_file|create_stage|require_env\", ...}]}. Inclua SEMPRE ao "
+    "menos um create_file com o script Python completo."
+)
+
+
+def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
+    """Gera o código a partir do PLANO selado (e do perfil contábil quando aplicável).
+    Devolve {message, actions} no formato que chat._apply_action consome."""
+    blocks = [
+        "PLANO SELADO (contrato a implementar):\n"
+        + json.dumps(plan or {}, ensure_ascii=False, indent=2)
+    ]
+    if (plan or {}).get("contabil") and profile:
+        blocks.append(
+            "PERFIL CONTÁBIL DO PROJETO:\n" + json.dumps(profile, ensure_ascii=False, indent=2)
+        )
+    if project_context:
+        blocks.append(project_context)
+    messages = [{"role": "user", "content": "\n\n".join(blocks)}]
+    raw = call_agent("construtor", CONSTRUTOR_PROMPT, messages, json_mode=True)
+    try:
+        data = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    return {"message": data.get("message") or "", "actions": data.get("actions") or []}
+
+
 def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> str:
     """FSM pura de fases. As transições building, naming, done são feitas
     pelos call-sites (Construtor, Nomeador), não aqui."""
