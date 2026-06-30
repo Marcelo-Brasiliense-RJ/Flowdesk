@@ -15,7 +15,7 @@ def test_nova_enters_planning():
 
 def test_planning_seals_only_when_complete_and_confirmed():
     assert next_phase("planning", "nova", Plan(), True) == "planning"      # incompleto
-    assert next_phase("planning", "nova", FULL, False) == "planning"       # nao confirmado
+    assert next_phase("planning", "nova", FULL, False) == "planning"       # não confirmado
     assert next_phase("planning", "nova", FULL, True) == "building"        # sela
 
 
