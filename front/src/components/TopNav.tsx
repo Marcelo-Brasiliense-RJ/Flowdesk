@@ -6,6 +6,7 @@ const LINKS = [
   ["/chat", "Chat"],
   ["/", "Automações"],
   ["/dashboard", "Dashboard"],
+  ["/agents", "Agentes"],
 ];
 
 export default function TopNav() {

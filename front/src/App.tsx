@@ -16,6 +16,7 @@ import ProjectSettings from "./pages/ProjectSettings";
 import PublishedApp from "./pages/PublishedApp";
 import Manage from "./pages/Manage";
 import Admin from "./pages/Admin";
+import Agents from "./pages/Agents";
 import ProjectChat from "./pages/ProjectChat";
 import type { ReactNode } from "react";
 
@@ -66,6 +67,7 @@ export default function App() {
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/manage" element={<Protected><Manage /></Protected>} />
       <Route path="/admin" element={<Protected><Admin /></Protected>} />
+      <Route path="/agents" element={<Protected><Agents /></Protected>} />
       <Route path="/chat" element={<Protected><Chat /></Protected>} />
       <Route path="/projects/:id/assistente" element={<Protected><Wizard /></Protected>} />
       <Route path="/projects/:id/chat" element={<Protected><ProjectChat /></Protected>} />
