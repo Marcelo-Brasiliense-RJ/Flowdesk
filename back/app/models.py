@@ -96,9 +96,9 @@ class Project(Base):
     # orquestração de agentes (Fase 2): estado da máquina + artefatos
     # phase: "" (não iniciado) | planning | building | naming | done
     phase: Mapped[str] = mapped_column(String(20), default="")
-    # plano selado (contrato Planejador -> Construtor) — schema em services/plan_schema.Plan
+    # plano selado (contrato Planejador -> Construtor), schema em services/plan_schema.Plan
     plan: Mapped[dict] = mapped_column(JSON, default=dict)
-    # perfil contábil/fiscal do projeto — schema em services/plan_schema.AccountingProfile
+    # perfil contábil/fiscal do projeto, schema em services/plan_schema.AccountingProfile
     accounting_profile: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
