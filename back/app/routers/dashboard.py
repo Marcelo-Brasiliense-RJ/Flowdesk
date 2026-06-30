@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -121,4 +121,52 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         "recent_errors": recent_errors,
         "recent_executions": recent,
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+
+
+@router.get("/projects/{project_id}/stats")
+def project_stats(
+    project_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Métricas reais de um projeto (execuções, taxa de sucesso, tempo médio,
+    erros nos últimos 7 dias). Alimenta o card 'Métricas' do Assistente."""
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.org_id == user.org_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado")
+
+    pq = db.query(Execution).filter(Execution.project_id == project_id)
+    total = pq.count()
+    by_status = dict(
+        pq.with_entities(Execution.status, func.count())
+        .group_by(Execution.status).all()
+    )
+    success = by_status.get("success", 0)
+    error = by_status.get("error", 0)
+    finished = success + error
+    success_rate = round(success / finished * 100, 1) if finished else 0.0
+
+    durs = (
+        pq.filter(Execution.finished_at.isnot(None))
+        .with_entities(Execution.started_at, Execution.finished_at).all()
+    )
+    avg_seconds = round(
+        sum((f - s).total_seconds() for s, f in durs) / len(durs), 1
+    ) if durs else 0.0
+
+    cutoff = dt.datetime.utcnow() - dt.timedelta(days=7)
+    errors_7d = pq.filter(
+        Execution.status == "error", Execution.started_at >= cutoff
+    ).count()
+
+    return {
+        "executions": total,
+        "success_rate": success_rate,
+        "avg_seconds": avg_seconds,
+        "errors_7d": errors_7d,
     }

@@ -234,6 +234,7 @@ export default function Wizard() {
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState("");
   const [dismissedDirty, setDismissedDirty] = useState(false);
+  const [stats, setStats] = useState<ProjStats | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -271,6 +272,11 @@ export default function Wizard() {
       .get<ChatMessage[]>(`/api/projects/${projectId}/chat`)
       .then(setMessages)
       .catch(() => setMessages([]));
+    // métricas reais do projeto para o card "Métricas" do aside
+    api
+      .get<ProjStats>(`/api/projects/${projectId}/stats`)
+      .then(setStats)
+      .catch(() => setStats(null));
   }, [projectId]);
 
   async function buildFlow() {
@@ -302,7 +308,7 @@ export default function Wizard() {
 
   return (
     <ProjectLayout project={project}>
-      <div className="mx-auto max-w-3xl px-6 py-8 lg:px-8 lg:py-10">
+      <div className="mx-auto max-w-6xl px-6 py-8 lg:px-8 lg:py-10">
         {project.wizard_dirty && !dismissedDirty && (
           <div
             className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-2.5 text-sm"
@@ -335,37 +341,76 @@ export default function Wizard() {
               Histórico da conversa que originou esta automação.
             </p>
           </div>
-          <button onClick={() => goChat()} className="btn-outline shrink-0 py-1.5 text-sm">
-            Continuar no chat →
-          </button>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <button onClick={() => goChat()} className="btn-outline py-1.5 text-sm">
+              Continuar no chat →
+            </button>
+            {built && project.status === "live" && project.subdomain && (
+              <a
+                href={`/app/${project.subdomain}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-primary py-1.5 text-sm"
+              >
+                Usar
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M7 17L17 7M9 7h8v8" />
+                </svg>
+              </a>
+            )}
+          </div>
         </div>
 
-        <div className="mt-6 space-y-6">
-          {/* Card Smart Chat — histórico que originou a automação (colapsável) */}
-          <ChatCard
-            messages={messages}
-            open={chatOpen}
-            built={built}
-            onToggle={() => setChatOpen((v) => !v)}
-            onContinue={goChat}
-          />
+        {built ? (
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+            {/* Coluna principal: chat + montagem + teste */}
+            <div className="min-w-0 space-y-6">
+              <ChatCard
+                messages={messages}
+                open={chatOpen}
+                built={built}
+                onToggle={() => setChatOpen((v) => !v)}
+                onContinue={goChat}
+              />
+              <StepProgress step={STEPS.length} plan={null} />
+              {build?.stage_ids?.script ? (
+                <TestPanel
+                  projectId={projectId}
+                  scriptStageId={build.stage_ids.script}
+                  state={state}
+                />
+              ) : (
+                <div
+                  className="card flex items-center gap-2 p-5 text-sm text-ink3"
+                  style={{ borderColor: "var(--accent)" }}
+                >
+                  <Spinner className="h-4 w-4" /> Preparando o teste…
+                </div>
+              )}
+            </div>
 
-          {/* Montagem da automação */}
-          <StepProgress step={built ? STEPS.length : 0} plan={null} />
-
-          {/* Montada → revisão e teste; senão → leva ao Smart Chat */}
-          {built ? (
-            <ReviewStep
+            {/* Aside: sobre esta automação */}
+            <AboutAside
               projectId={projectId}
-              projectName={project.name}
-              projectDescription={project.description}
+              project={project}
               state={state}
-              building={building}
               build={build}
+              building={building}
               buildError={buildError}
               onRebuild={buildFlow}
+              stats={stats}
             />
-          ) : (
+          </div>
+        ) : (
+          <div className="mt-6 space-y-6">
+            <ChatCard
+              messages={messages}
+              open={chatOpen}
+              built={built}
+              onToggle={() => setChatOpen((v) => !v)}
+              onContinue={goChat}
+            />
+            <StepProgress step={0} plan={null} />
             <div className="card p-6 text-center">
               <h2 className="text-base font-bold text-ink">
                 Esta automação ainda não foi montada
@@ -388,10 +433,130 @@ export default function Wizard() {
                 </Link>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </ProjectLayout>
+  );
+}
+
+/* ---------- Aside "Sobre esta automação" (Pedido) ---------- */
+interface ProjStats {
+  executions: number;
+  success_rate: number;
+  avg_seconds: number;
+  errors_7d: number;
+}
+
+function AboutAside({
+  projectId,
+  project,
+  state,
+  build,
+  building,
+  buildError,
+  onRebuild,
+  stats,
+}: {
+  projectId: number;
+  project: Project;
+  state: WizardState;
+  build: BuildResult | null;
+  building: boolean;
+  buildError: string;
+  onRebuild: () => void;
+  stats: ProjStats | null;
+}) {
+  const descUtil =
+    project.description?.trim() === "Criado pelo Chat" ? "" : project.description?.trim();
+  const faz = state.process?.description?.trim() || descUtil || project.name?.trim() || "—";
+  const num = (n: number) => n.toLocaleString("pt-BR");
+
+  return (
+    <aside className="space-y-3 lg:sticky lg:top-6">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-ink3">
+        Sobre esta automação
+      </div>
+
+      {/* O que esta automação faz */}
+      <div className="card bg-surface-2 p-4">
+        <div className="mb-2 flex items-start justify-between gap-2.5">
+          <h3 className="text-sm font-bold text-ink">O que esta automação faz</h3>
+          <button
+            onClick={onRebuild}
+            disabled={building}
+            className="shrink-0 text-xs text-ink3 hover:text-accentv disabled:opacity-50"
+          >
+            {building ? "Montando…" : "Montar de novo"}
+          </button>
+        </div>
+        {buildError ? (
+          <p className="text-sm text-err">{buildError}</p>
+        ) : (
+          <AutomationDescription projectId={projectId} initial={build?.explanation || ""} />
+        )}
+      </div>
+
+      {/* Resumo em palavras */}
+      <div className="card bg-surface-2 p-4">
+        <div className="mb-3 text-[11px] font-bold uppercase tracking-wide text-ink3">
+          Resumo em palavras
+        </div>
+        <div className="space-y-3">
+          <SummaryRow icon="⏱" term="Começa" desc={capitalize(triggerText(state.trigger?.kind))} />
+          <SummaryRow
+            icon="📄"
+            term="Recebe"
+            desc={capitalize(inputText(state.input?.kind, state.input?.fields?.length ?? 0))}
+          />
+          <SummaryRow icon="⇄" term="Faz" desc={faz} />
+          <SummaryRow icon="⬇" term="Entrega" desc={capitalize(outputText(state.output?.kind))} />
+        </div>
+      </div>
+
+      {/* Métricas (dados reais do projeto) */}
+      <div className="card bg-surface-2 p-4">
+        <div className="mb-3 text-[11px] font-bold uppercase tracking-wide text-ink3">Métricas</div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Metric value={stats ? num(stats.executions) : "—"} label="execuções" />
+          <Metric
+            value={stats ? `${stats.success_rate}%` : "—"}
+            label="taxa de sucesso"
+            color="var(--accent)"
+          />
+          <Metric value={stats ? `${stats.avg_seconds}s` : "—"} label="tempo médio" />
+          <Metric value={stats ? num(stats.errors_7d) : "—"} label="erros (7 dias)" />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function SummaryRow({ icon, term, desc }: { icon: string; term: string; desc: string }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs"
+        style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <div className="text-[10.5px] font-bold uppercase tracking-wide text-ink3">{term}</div>
+        <div className="mt-0.5 text-sm leading-snug text-ink">{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ value, label, color = "var(--text)" }: { value: string; label: string; color?: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-3">
+      <div className="text-lg font-extrabold tracking-tight" style={{ color }}>
+        {value}
+      </div>
+      <div className="mt-0.5 text-[11px] text-ink3">{label}</div>
+    </div>
   );
 }
 
