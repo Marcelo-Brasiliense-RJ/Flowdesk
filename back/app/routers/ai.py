@@ -29,45 +29,102 @@ MODEL_CATALOG = [
     {"value": "o3-mini", "provider": "OpenAI", "note": "Raciocínio"},
 ]
 
-# Agentes reais — cada um é uma função de IA distinta no código.
+# ---- prompts-semente dos agentes (definição "parruda" da equipe) ----
+# O Assistente e o Reparador usam as constantes reais do código; os demais têm
+# um system prompt próprio, robusto, editável pelo builder. Aplicação real no
+# pipeline só do Assistente na Fase 1 (o resto é configuração até a Fase 2).
+_PLANEJADOR_PROMPT = """Você é o Planejador do FlowDesk. Seu trabalho é, ANTES de \
+qualquer código, escrever e planejar a automação fazendo a entrevista de \
+descoberta no estilo grill-me: pergunte de forma incansável, porém objetiva e \
+acolhedora, UMA pergunta por vez, resolvendo cada ramo da árvore de decisão até \
+não sobrar ambiguidade.
+
+Cubra, na ordem em que importar: fonte e formato dos dados (xlsx/csv/Sheets), \
+significado de cada coluna relevante, a regra de negócio exata, o formato de \
+saída e seu contrato (se alimenta outro sistema, ex.: Domínio/ERP, pergunte o \
+significado de cada coluna e regras como numeração de lote), o gatilho (manual, \
+agendado, webhook) e o tratamento de erros.
+
+Regras:
+- Sempre ofereça uma recomendação fundamentada junto da pergunta, mas deixe o \
+usuário decidir; nunca assuma em silêncio.
+- Uma pergunta por vez, com 2 a 4 opções objetivas quando fizer sentido.
+- Não escreva código. Quando o plano estiver completo e sem ambiguidades, \
+entregue um plano claro para o Construtor e libere a construção."""
+
+_CONSTRUTOR_PROMPT = """Você é o Construtor do FlowDesk, especialista em Python. \
+A partir do plano do Planejador, escreva TODOS os scripts da automação, \
+completos e funcionais — é PROIBIDO placeholder, esqueleto, TODO ou função \
+vazia. Implemente de verdade a leitura, a transformação e a escrita do resultado.
+
+Use o SDK do FlowDesk: get_file() para ler a entrada, output_path('nome.xlsx') \
+para o caminho de saída e set_output({...}) com a chave 'resumo' (principais \
+números) e 'arquivo_resultado' quando gerar arquivo. Use pandas 2.x (NUNCA \
+df.append; use pd.concat). Para PDF/imagem use extract_document; para tabelas em \
+PDF use pdfplumber por posição das palavras. Prefira clareza a esperteza, comente \
+passos não óbvios e nunca omita a linha que grava o arquivo. Só use require_env \
+quando houver integração externa real (e-mail/API)."""
+
+_NOMEADOR_PROMPT = """Você é o Nomeador do FlowDesk. Você faz duas coisas para a \
+automação recém-criada:
+1) Dá um NOME curto e claro (3 a 6 palavras, ex.: 'Conciliação de Razão', \
+'Totais de Vendas por Produto'), sem aspas e sem jargão.
+2) Escreve a DESCRIÇÃO amigável que aparece nos cards do wizard ('o que esta \
+automação faz'), em 1 a 3 frases, em português simples, explicando o que ela \
+recebe, o que faz e o que entrega — pensando num usuário não técnico."""
+
+_CLASSIFICADOR_PROMPT = """Você é o Classificador contábil do FlowDesk, um \
+contador brasileiro. Para cada grupo de histórico do extrato bancário, sugira a \
+CONTRAPARTIDA contábil escolhendo ESTRITAMENTE um código do plano de contas \
+analítico fornecido (para crédito/entrada, receita/recebimento; para \
+débito/saída, despesa/pagamento). Trabalhe em lotes pequenos, copie o 'padrao' \
+exatamente, dê uma confiança de 0 a 1 e deixe o código vazio quando não houver \
+conta adequada — NUNCA invente um código fora da lista."""
+
+# Agentes-semente — a equipe pretendida (espelha as funções reais, com papéis
+# mais completos). Ligações: Assistente orquestra todos.
 _AGENTS = [
-    {"id": "assistente", "name": "Assistente (Smart Chat)", "role": "Conversa e descoberta",
+    {"id": "assistente", "name": "Assistente (Smart Chat)", "role": "Recebe o pedido e orquestra",
      "level": 1, "parent": None, "temp": "padrão",
-     "tools": ["Entrevista", "Streaming", "Contexto do projeto"],
-     "desc": "Conversa com o usuário, faz a entrevista de descoberta (perguntas) e conduz a criação da automação.",
+     "tools": ["Recebe a mensagem", "Roteia", "Streaming", "Contexto do projeto"],
+     "desc": "Porta de entrada: recebe a mensagem do usuário em linguagem natural, entende a intenção e orquestra os demais agentes (planejar, construir, nomear/descrever, reparar, classificar). Fala com o usuário sem jargão técnico.",
      "where": "chat.py · _generate / SYSTEM_PROMPT"},
-    {"id": "construtor", "name": "Construtor", "role": "Gera código e ações",
+    {"id": "planejador", "name": "Planejador", "role": "Planeja e entrevista (grill-me)",
      "level": 2, "parent": "assistente", "temp": "0.2",
-     "tools": ["create_file", "create_stage", "require_env"],
-     "desc": "A partir do pedido, gera o script Python completo e as ações (criar arquivo/etapa).",
+     "tools": ["Entrevista", "Árvore de decisão", "Plano de execução"],
+     "desc": "Antes de construir, escreve, planeja e questiona: faz a entrevista de descoberta no estilo grill-me, uma pergunta por vez, resolvendo cada ramo da árvore de decisão (fontes, colunas, regra, saída, gatilho, erros). Só libera o Construtor quando o plano está sem ambiguidades.",
+     "where": "hoje vive no SYSTEM_PROMPT do Assistente; vira agente próprio na orquestração (Fase 2)"},
+    {"id": "construtor", "name": "Construtor", "role": "Especialista em Python — escreve os scripts",
+     "level": 2, "parent": "assistente", "temp": "0.2",
+     "tools": ["Python", "pandas", "create_file", "create_stage", "require_env"],
+     "desc": "Especialista em Python: a partir do plano, escreve TODOS os scripts da automação, completos e funcionais (sem placeholder/TODO), com o SDK do FlowDesk e pandas, e monta as ações (create_file/create_stage) e os require_env quando há integração externa.",
      "where": "chat.py · _generate_build"},
-    {"id": "descritor", "name": "Descritor", "role": "Descreve a automação",
-     "level": 2, "parent": "assistente", "temp": "0.2",
-     "tools": ["Resumo em linguagem simples"],
-     "desc": "Escreve a explicação 'o que esta automação faz' exibida no Pedido.",
-     "where": "wizard.py · _describe_automation"},
+    {"id": "nomeador", "name": "Nomeador", "role": "Nomeia e descreve a automação",
+     "level": 2, "parent": "assistente", "temp": "0.3",
+     "tools": ["Título curto", "Descrição amigável", "Cards do wizard"],
+     "desc": "Dá um nome curto e claro à automação e escreve a descrição amigável que aparece nos cards do wizard ('o que esta automação faz'), em linguagem simples para o usuário não técnico.",
+     "where": "projects.py · auto_name + wizard.py · _describe_automation"},
     {"id": "reparador", "name": "Reparador / QA", "role": "Corrige erros de execução",
      "level": 2, "parent": "assistente", "temp": "0.1",
-     "tools": ["Diagnóstico", "Correção de código"],
-     "desc": "Diagnostica erros de execução do script e propõe uma correção para reteste.",
+     "tools": ["Diagnóstico", "Correção de código", "Reteste"],
+     "desc": "Quando um teste falha, lê o erro e o código, diagnostica a causa em linguagem simples e propõe uma correção concreta para reteste — sem expor stack trace cru. Tenta de novo até passar ou esgotar as tentativas.",
      "where": "repair.py · repair_propose"},
     {"id": "classificador", "name": "Classificador contábil", "role": "Sugere contas (De/Para)",
      "level": 2, "parent": "assistente", "temp": "0.0",
-     "tools": ["Plano de contas", "Lotes"],
-     "desc": "Sugere a conta contábil de cada grupo de histórico do extrato (contrapartida).",
+     "tools": ["Plano de contas", "Lotes", "Regras De/Para"],
+     "desc": "Especialista contábil: para cada grupo de histórico do extrato, sugere a contrapartida escolhendo estritamente um código do plano de contas analítico (receita p/ crédito, despesa p/ débito), em lotes pequenos para não inventar categorias.",
      "where": "classify.py · classificar_grupos"},
-    {"id": "nomeador", "name": "Nomeador", "role": "Nomeia a automação",
-     "level": 2, "parent": "assistente", "temp": "0.3",
-     "tools": ["Título curto"],
-     "desc": "Gera um nome curto e claro para a automação criada pelo Chat.",
-     "where": "projects.py · auto_name"},
 ]
 
-# Prompts reais que conseguimos expor como texto (constantes limpas do código).
-_DEFAULT_PROMPTS = {"assistente": SYSTEM_PROMPT, "reparador": _REPAIR_INSTR}
-# Só o Assistente é editável+aplicado com segurança (system prompt limpo). Os
-# demais têm prompt dinâmico embutido no código (alterar quebraria o contrato).
-_EDITABLE = {"assistente"}
+# Prompts-semente por agente (o Assistente e o Reparador usam as constantes reais).
+_DEFAULT_PROMPTS = {
+    "assistente": SYSTEM_PROMPT,
+    "planejador": _PLANEJADOR_PROMPT,
+    "construtor": _CONSTRUTOR_PROMPT,
+    "nomeador": _NOMEADOR_PROMPT,
+    "reparador": _REPAIR_INSTR,
+    "classificador": _CLASSIFICADOR_PROMPT,
+}
 
 
 # Cores por agente embutido (apenas visual).
@@ -107,7 +164,7 @@ def _default_graph() -> dict:
             "model": model, "prompt": _DEFAULT_PROMPTS.get(a["id"]),
             "x": x, "y": y, "c1": c1, "c2": c2,
             "builtin": True, "kind": a["id"],
-            "editablePrompt": a["id"] in _EDITABLE,
+            "editablePrompt": True,
         })
     edges = []
     for i, a in enumerate(x for x in _AGENTS if x["parent"]):
