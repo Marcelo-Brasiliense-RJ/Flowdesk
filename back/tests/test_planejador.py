@@ -5,7 +5,7 @@ from app.routers import orchestrator
 
 def test_planejador_merges_plan_and_reports_missing(monkeypatch):
     fake = json.dumps({
-        "questions": [{"id": "saida", "label": "Qual o formato de saida?",
+        "questions": [{"id": "saida", "label": "Qual o formato de saída?",
                        "options": ["Excel", "CSV"], "recommended": "Excel"}],
         "plan": {"fonte": {"formato": "xlsx"}, "regra_negocio": "somar por cliente"},
         "contabil": False,
@@ -21,7 +21,7 @@ def test_planejador_merges_plan_and_reports_missing(monkeypatch):
 
 
 def test_planejador_deep_merges_over_existing_plan(monkeypatch):
-    # plano atual ja tem fonte.colunas; o retorno so adiciona fonte.formato -> nao pode apagar colunas
+    # plano atual já tem fonte.colunas; o retorno só adiciona fonte.formato -> não pode apagar colunas
     fake = json.dumps({"questions": [], "plan": {"fonte": {"formato": "csv"}}, "contabil": False})
     monkeypatch.setattr(orchestrator, "call_agent", lambda *a, **k: fake)
     atual = {"fonte": {"colunas": [{"nome": "valor", "significado": "R$"}]}, "gatilho": "manual"}
@@ -32,7 +32,7 @@ def test_planejador_deep_merges_over_existing_plan(monkeypatch):
 
 
 def test_planejador_handles_bad_json(monkeypatch):
-    monkeypatch.setattr(orchestrator, "call_agent", lambda *a, **k: "isto nao e json")
+    monkeypatch.setattr(orchestrator, "call_agent", lambda *a, **k: "isto não é json")
     out = orchestrator.run_planejador([{"role": "user", "content": "x"}], {})
     assert out["questions"] == []
     assert isinstance(out["missing"], list)

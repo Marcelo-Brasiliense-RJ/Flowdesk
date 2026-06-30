@@ -118,11 +118,15 @@ def run_planejador(messages: list[dict], plan: dict) -> dict:
     except (json.JSONDecodeError, TypeError):
         data = {}
     merged = _deep_merge(plan or {}, data.get("plan") or {})
+    # saída do modelo é fronteira de confiança: se vier com tipo errado num campo,
+    # Plan(**merged) lança. Instanciamos uma vez e caímos para um Plan vazio em vez
+    # de propagar a exceção (o modelo devolve o plano completo a cada turno).
     try:
-        validated = Plan(**merged).model_dump()
+        plan_obj = Plan(**merged)
     except Exception:
-        validated = merged
-    missing = plan_missing_fields(Plan(**validated)) if isinstance(validated, dict) else []
+        plan_obj = Plan()
+    validated = plan_obj.model_dump()
+    missing = plan_missing_fields(plan_obj)
     return {
         "questions": data.get("questions") or [],
         "plan": validated,
