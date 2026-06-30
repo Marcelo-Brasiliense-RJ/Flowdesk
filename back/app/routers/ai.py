@@ -58,7 +58,7 @@ entregue um plano claro para o Construtor e libere a construção."""
 
 _CONSTRUTOR_PROMPT = """Você é o Construtor do FlowDesk, especialista em Python. \
 A partir do plano do Planejador, escreva TODOS os scripts da automação, \
-completos e funcionais — é PROIBIDO placeholder, esqueleto, TODO ou função \
+completos e funcionais, é PROIBIDO placeholder, esqueleto, TODO ou função \
 vazia. Implemente de verdade a leitura, a transformação e a escrita do resultado.
 
 Use o SDK do FlowDesk: get_file() para ler a entrada, output_path('nome.xlsx') \
@@ -75,7 +75,7 @@ automação recém-criada:
 'Totais de Vendas por Produto'), sem aspas e sem jargão.
 2) Escreve a DESCRIÇÃO amigável que aparece nos cards do wizard ('o que esta \
 automação faz'), em 1 a 3 frases, em português simples, explicando o que ela \
-recebe, o que faz e o que entrega — pensando num usuário não técnico."""
+recebe, o que faz e o que entrega, pensando num usuário não técnico."""
 
 _CLASSIFICADOR_PROMPT = """Você é o Classificador contábil do FlowDesk, um \
 contador brasileiro. Para cada grupo de histórico do extrato bancário, sugira a \
@@ -83,9 +83,9 @@ CONTRAPARTIDA contábil escolhendo ESTRITAMENTE um código do plano de contas \
 analítico fornecido (para crédito/entrada, receita/recebimento; para \
 débito/saída, despesa/pagamento). Trabalhe em lotes pequenos, copie o 'padrao' \
 exatamente, dê uma confiança de 0 a 1 e deixe o código vazio quando não houver \
-conta adequada — NUNCA invente um código fora da lista."""
+conta adequada, NUNCA invente um código fora da lista."""
 
-# Agentes-semente — a equipe pretendida (espelha as funções reais, com papéis
+# Agentes-semente, a equipe pretendida (espelha as funções reais, com papéis
 # mais completos). Ligações: Assistente orquestra todos.
 _AGENTS = [
     {"id": "assistente", "name": "Assistente (Smart Chat)", "role": "Recebe o pedido e orquestra",
@@ -97,21 +97,21 @@ _AGENTS = [
      "level": 2, "parent": "assistente", "temp": "0.2",
      "tools": ["Entrevista", "Árvore de decisão", "Plano de execução"],
      "desc": "Antes de construir, escreve, planeja e questiona: faz a entrevista de descoberta no estilo grill-me, uma pergunta por vez, resolvendo cada ramo da árvore de decisão (fontes, colunas, regra, saída, gatilho, erros). Só libera o Construtor quando o plano está sem ambiguidades.",
-     "where": "hoje vive no SYSTEM_PROMPT do Assistente; vira agente próprio na orquestração (Fase 2)"},
-    {"id": "construtor", "name": "Construtor", "role": "Especialista em Python — escreve os scripts",
+     "where": "orchestrator.py · run_planejador"},
+    {"id": "construtor", "name": "Construtor", "role": "Especialista em Python, escreve os scripts",
      "level": 2, "parent": "assistente", "temp": "0.2",
      "tools": ["Python", "pandas", "create_file", "create_stage", "require_env"],
      "desc": "Especialista em Python: a partir do plano, escreve TODOS os scripts da automação, completos e funcionais (sem placeholder/TODO), com o SDK do FlowDesk e pandas, e monta as ações (create_file/create_stage) e os require_env quando há integração externa.",
-     "where": "chat.py · _generate_build"},
+     "where": "orchestrator.py · run_construtor"},
     {"id": "nomeador", "name": "Nomeador", "role": "Nomeia e descreve a automação",
      "level": 2, "parent": "assistente", "temp": "0.3",
      "tools": ["Título curto", "Descrição amigável", "Cards do wizard"],
      "desc": "Dá um nome curto e claro à automação e escreve a descrição amigável que aparece nos cards do wizard ('o que esta automação faz'), em linguagem simples para o usuário não técnico.",
-     "where": "projects.py · auto_name + wizard.py · _describe_automation"},
+     "where": "orchestrator.py · run_nomeador"},
     {"id": "reparador", "name": "Reparador / QA", "role": "Corrige erros de execução",
      "level": 2, "parent": "assistente", "temp": "0.1",
      "tools": ["Diagnóstico", "Correção de código", "Reteste"],
-     "desc": "Quando um teste falha, lê o erro e o código, diagnostica a causa em linguagem simples e propõe uma correção concreta para reteste — sem expor stack trace cru. Tenta de novo até passar ou esgotar as tentativas.",
+     "desc": "Quando um teste falha, lê o erro e o código, diagnostica a causa em linguagem simples e propõe uma correção concreta para reteste, sem expor stack trace cru. Tenta de novo até passar ou esgotar as tentativas.",
      "where": "repair.py · repair_propose"},
     {"id": "classificador", "name": "Classificador contábil", "role": "Sugere contas (De/Para)",
      "level": 2, "parent": "assistente", "temp": "0.0",

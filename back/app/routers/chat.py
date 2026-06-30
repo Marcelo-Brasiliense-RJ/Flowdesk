@@ -200,6 +200,30 @@ def _project_context(db: Session, project_id: int) -> str:
     return "\n".join(lines)
 
 
+def _format_sources(files) -> str:
+    """Formata o código atual do projeto para o contexto do Construtor (ajustes).
+    Pula diretórios e arquivos vazios; trunca conteúdos longos."""
+    parts = []
+    for f in files:
+        if getattr(f, "is_dir", False):
+            continue
+        content = f.content or ""
+        if not content.strip():
+            continue
+        parts.append(f"### {f.path}\n{content[:4000]}")
+    if not parts:
+        return ""
+    return (
+        "CÓDIGO ATUAL DO PROJETO (para AJUSTAR, edite estes arquivos com edit_file; "
+        "não recrie do zero):\n\n" + "\n\n".join(parts)
+    )
+
+
+def _source_context(db: Session, project_id: int) -> str:
+    files = db.query(SourceFile).filter(SourceFile.project_id == project_id).all()
+    return _format_sources(files)
+
+
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
@@ -349,11 +373,15 @@ def chat_stream(
 
         intent = route_intent(body.content, has_workflow)
         user_confirmed = _is_build_intent(body.content)
+        _orch_ctx = _project_context(db, project_id)
+        _src_ctx = _source_context(db, project_id)
+        if _src_ctx:
+            _orch_ctx = _orch_ctx + "\n\n" + _src_ctx
         turn = orchestrate_turn(
             phase=cur_phase, plan=cur_plan, profile=cur_profile, intent=intent,
             user_confirmed=user_confirmed,
             history=[{"role": m.role, "content": m.content} for m in history[-20:]],
-            project_context=_project_context(db, project_id),
+            project_context=_orch_ctx,
         )
 
     # mensagens do caminho "answer" (dúvida / sem IA): igual ao fluxo anterior
