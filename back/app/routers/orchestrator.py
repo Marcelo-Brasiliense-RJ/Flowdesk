@@ -82,20 +82,20 @@ def route_intent(last_user: str, has_workflow: bool) -> str:
 
 
 PLANEJADOR_PROMPT = (
-    "Voce e o Planejador do FlowDesk. ANTES de qualquer codigo, conduza a "
+    "Você é o Planejador do FlowDesk. ANTES de qualquer código, conduza a "
     "entrevista de descoberta no estilo grill-me: uma pergunta por vez, objetiva e "
-    "acolhedora, resolvendo cada ramo da arvore de decisao (fonte e formato dos "
-    "dados, significado das colunas, regra de negocio, contrato de saida, gatilho, "
-    "tratamento de erros). Sempre ofereca uma recomendacao, mas deixe o usuario "
-    "decidir; nunca assuma em silencio. Se a tarefa for contabil ou fiscal, faca "
-    "tambem as perguntas de perfil (regime, plano de contas, ERP destino). "
+    "acolhedora, resolvendo cada ramo da árvore de decisão (fonte e formato dos "
+    "dados, significado das colunas, regra de negócio, contrato de saída, gatilho, "
+    "tratamento de erros). Sempre ofereça uma recomendação, mas deixe o usuário "
+    "decidir; nunca assuma em silêncio. Se a tarefa for contábil ou fiscal, faça "
+    "também as perguntas de perfil (regime, plano de contas, ERP destino). "
     "Responda SOMENTE em JSON: "
     '{"questions": [{"id": "...", "label": "...", "options": ["..."], "recommended": "..."}], '
-    '"plan": {<campos do plano preenchidos ATE AQUI: fonte{formato,descricao,colunas[]}, '
+    '"plan": {<campos do plano preenchidos ATÉ AQUI: fonte{formato,descricao,colunas[]}, '
     'regra_negocio, saida{formato,contrato,colunas[],destino_sistema}, gatilho, '
     'tratamento_erros, contabil, notas>}, "contabil": <bool>, '
     '"perfil_perguntas": [{"id": "...", "label": "...", "options": ["..."]}]}. '
-    "Devolva o plano COMPLETO acumulado a cada turno (nao so o delta). Nao escreva codigo."
+    "Devolva o plano COMPLETO acumulado a cada turno (não só o delta). Não escreva código."
 )
 
 
@@ -111,7 +111,7 @@ def _deep_merge(base: dict, over: dict) -> dict:
 
 def run_planejador(messages: list[dict], plan: dict) -> dict:
     """Conduz a entrevista e acumula o plano. Devolve perguntas, plano mesclado e
-    validado, campos criticos faltando, flag contabil e perguntas de perfil."""
+    validado, campos críticos faltando, flag contábil e perguntas de perfil."""
     raw = call_agent("planejador", PLANEJADOR_PROMPT, messages, json_mode=True)
     try:
         data = json.loads(raw or "{}")
