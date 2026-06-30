@@ -9,6 +9,7 @@ import re
 
 from ..config import settings
 from ..services import ai_config
+from ..services.plan_schema import Plan, plan_is_complete
 
 
 ROUTER_PROMPT = (
@@ -77,3 +78,17 @@ def route_intent(last_user: str, has_workflow: bool) -> str:
     except Exception:
         intent = ""
     return intent if intent in ("nova", "ajuste", "duvida") else "ajuste"
+
+
+def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> str:
+    """FSM pura de fases. As transições building, naming, done são feitas
+    pelos call-sites (Construtor, Nomeador), não aqui."""
+    if intent == "duvida":
+        return current
+    if intent == "ajuste":
+        return "building"
+    if intent == "nova" and current in ("", "done", "naming"):
+        return "planning"
+    if current == "planning":
+        return "building" if (plan_is_complete(plan) and user_confirmed) else "planning"
+    return current
