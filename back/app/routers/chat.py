@@ -333,8 +333,30 @@ def chat_stream(
         .order_by(ChatMessage.created_at)
         .all()
     )
-    build_intent = _is_build_intent(body.content)
 
+    # estado de orquestração do projeto (Fase 2)
+    project = db.get(Project, project_id)
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    has_workflow = any(s.type in ("script", "agent") for s in stages)
+    cur_phase = (project.phase if project else "") or ""
+    cur_plan = (project.plan if project else {}) or {}
+    cur_profile = (project.accounting_profile if project else {}) or {}
+
+    # orquestra só com IA ligada; sem IA, cai no caminho mock (_generate)
+    turn = {"mode": "answer"}
+    if settings.ai_enabled:
+        from .orchestrator import orchestrate_turn, route_intent
+
+        intent = route_intent(body.content, has_workflow)
+        user_confirmed = _is_build_intent(body.content)
+        turn = orchestrate_turn(
+            phase=cur_phase, plan=cur_plan, profile=cur_profile, intent=intent,
+            user_confirmed=user_confirmed,
+            history=[{"role": m.role, "content": m.content} for m in history[-20:]],
+            project_context=_project_context(db, project_id),
+        )
+
+    # mensagens do caminho "answer" (dúvida / sem IA): igual ao fluxo anterior
     messages = [
         {"role": "system", "content": ai_config.get_prompt("assistente", SYSTEM_PROMPT)},
         {"role": "system", "content": _project_context(db, project_id)},
@@ -342,68 +364,63 @@ def chat_stream(
     ctx_block = _attachment_context(project_id, body.attachments)
     if ctx_block:
         messages.append({"role": "system", "content": ctx_block})
-    if build_intent:
-        messages.append(
-            {
-                "role": "system",
-                "content": (
-                    "O usuário pediu para CONSTRUIR AGORA. NÃO faça mais perguntas "
-                    "(sem 'questions'). Gere imediatamente as 'actions': use "
-                    "'require_env' para cada segredo/credencial e 'create_file'/"
-                    "'create_stage' com o código pronto. Assuma padrões razoáveis "
-                    "para o que faltar."
-                ),
-            }
-        )
-    # sliding window: só as últimas mensagens p/ não estourar o contexto/custo
     messages += [{"role": m.role, "content": m.content} for m in history[-20:]]
 
     def event_stream():
-        if build_intent:
-            # turno de construção: chamada estruturada (JSON) que SEMPRE traz ações
-            clean_text, actions, suggested_name = _generate_build(messages)
-            questions = []
-            full_text = clean_text
-            for word in re.findall(r"\S+\s*", clean_text):
-                yield f"data: {json.dumps({'type': 'token', 'text': word})}\n\n"
-        else:
+        if turn.get("mode") == "answer":
             full_text = ""
             for chunk in _generate(messages, body.content):
                 full_text += chunk
                 yield f"data: {json.dumps({'type': 'token', 'text': chunk})}\n\n"
             clean_text, questions, actions = _parse_actions(full_text)
-            suggested_name = ""
             for qq in questions:
                 if not qq.get("label"):
                     qq["label"] = qq.get("question") or qq.get("text") or ""
-            # fallback: model wrote discovery as prose list -> make it interactive
             if not questions and not actions:
                 clean_text, questions = _parse_prose_questions(clean_text)
             questions = questions[:6]
+            new_phase = None
+            plan_for_review = None
+        else:
+            clean_text = turn.get("text") or ""
+            questions = (turn.get("questions") or [])[:6]
+            actions = turn.get("actions") or []
+            new_phase = turn.get("phase")
+            plan_for_review = turn.get("plan_for_review")
+            full_text = clean_text
+            for word in re.findall(r"\S+\s*", clean_text):
+                yield f"data: {json.dumps({'type': 'token', 'text': word})}\n\n"
 
-        # drop nonsensical require_env asking for file paths (platform handles I/O)
+        # filtros de ação (iguais ao fluxo anterior)
         actions = [a for a in actions if not _is_pathlike_env(a)]
-        # require_env só com integração externa; sem isso, é alucinação -> descarta
         convo = body.content + " " + " ".join(m.content for m in history)
         if not _INTEGRATION_INTENT.search(convo):
             actions = [a for a in actions if a.get("kind") != "require_env"]
         if questions:
             actions = []
 
-        # persist in a fresh session (generator runs outside request scope)
         s = SessionLocal()
         try:
-            # batiza projetos criados pelo Chat com o nome amigável sugerido pela IA
-            # (em vez do prompt cru virar nome)
-            if suggested_name and len(suggested_name.strip()) >= 3:
+            if turn.get("mode") != "answer":
+                from .orchestrator import name_is_placeholder
+
                 proj = s.get(Project, project_id)
-                if proj is not None and (proj.description or "").strip() == "Criado pelo Chat":
-                    proj.name = suggested_name.strip()[:80]
-                    proj.description = ""
+                if proj is not None:
+                    if new_phase:
+                        proj.phase = new_phase
+                    proj.plan = turn.get("plan") or {}
+                    proj.accounting_profile = turn.get("profile") or {}
+                    sug_name = (turn.get("suggested_name") or "").strip()
+                    sug_desc = (turn.get("suggested_desc") or "").strip()
+                    if sug_name and name_is_placeholder(proj.name, proj.description):
+                        proj.name = sug_name[:80]
+                        proj.description = sug_desc[:240]
                     s.commit()
+
             assistant = ChatMessage(
                 project_id=project_id, role="assistant", content=clean_text,
-                meta={"questions": questions}, tokens=_estimate_tokens(full_text),
+                meta={"questions": questions, "phase": new_phase, "plan": plan_for_review},
+                tokens=_estimate_tokens(full_text),
             )
             s.add(assistant)
             s.commit()
@@ -424,7 +441,8 @@ def chat_stream(
             s.close()
 
         yield "data: " + json.dumps(
-            {"type": "done", "questions": questions, "actions": created, "context": usage}
+            {"type": "done", "questions": questions, "actions": created,
+             "context": usage, "phase": new_phase, "plan": plan_for_review}
         ) + "\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
