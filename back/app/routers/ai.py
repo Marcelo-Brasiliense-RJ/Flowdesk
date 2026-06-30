@@ -9,7 +9,6 @@ código (dinâmico) e aparecem como somente leitura, com modelo/temperatura reai
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ..auth import get_current_user
 from ..config import settings
@@ -71,12 +70,49 @@ _DEFAULT_PROMPTS = {"assistente": SYSTEM_PROMPT, "reparador": _REPAIR_INSTR}
 _EDITABLE = {"assistente"}
 
 
-class ModelBody(BaseModel):
-    model: str
+# Cores por agente embutido (apenas visual).
+_COLORS = {
+    "assistente": ["#155489", "#18b1a8"],
+    "construtor": ["#0f8f88", "#2dd4c4"],
+    "descritor": ["#1f6fb2", "#4a80c2"],
+    "reparador": ["#7c3aed", "#a78bfa"],
+    "classificador": ["#c98a00", "#e0b15a"],
+    "nomeador": ["#155489", "#4a80c2"],
+}
+
+# Layout do canvas do builder (px).
+_CANVAS_W = 760
 
 
-class PromptBody(BaseModel):
-    prompt: str
+def _default_graph() -> dict:
+    """Grafo-semente: os 6 agentes reais, com posições e cores, e as ligações
+    de fluxo reais (Assistente → especialistas). É o que aparece antes de o
+    usuário customizar pelo builder."""
+    model = ai_config.get_model()
+    specialists = [a for a in _AGENTS if a["level"] != 1]
+    n = len(specialists)
+    left, right = 110, _CANVAS_W - 110
+    agents = []
+    for a in _AGENTS:
+        c1, c2 = _COLORS.get(a["id"], ["#155489", "#18b1a8"])
+        if a["level"] == 1:
+            x, y = _CANVAS_W // 2, 70
+        else:
+            i = specialists.index(a)
+            x = _CANVAS_W // 2 if n <= 1 else round(left + (right - left) * i / (n - 1))
+            y = 320
+        agents.append({
+            "id": a["id"], "name": a["name"], "role": a["role"], "level": a["level"],
+            "desc": a["desc"], "tools": list(a["tools"]), "temp": a["temp"], "where": a["where"],
+            "model": model, "prompt": _DEFAULT_PROMPTS.get(a["id"]),
+            "x": x, "y": y, "c1": c1, "c2": c2,
+            "builtin": True, "kind": a["id"],
+            "editablePrompt": a["id"] in _EDITABLE,
+        })
+    edges = []
+    for i, a in enumerate(x for x in _AGENTS if x["parent"]):
+        edges.append({"id": f"e{i}", "from": a["parent"], "to": a["id"]})
+    return {"agents": agents, "edges": edges}
 
 
 def _require_admin(user: User) -> None:
@@ -87,51 +123,35 @@ def _require_admin(user: User) -> None:
 
 @router.get("/agents")
 def list_agents(user: User = Depends(get_current_user)):
-    model = ai_config.get_model()
-    agents = []
-    for a in _AGENTS:
-        default_prompt = _DEFAULT_PROMPTS.get(a["id"])
-        editable = a["id"] in _EDITABLE
-        prompt = ai_config.get_prompt(a["id"], default_prompt) if default_prompt is not None else None
-        agents.append({
-            **a,
-            "model": model,
-            "editable": editable,
-            "prompt": prompt,
-            "prompt_overridden": bool(editable and default_prompt is not None and prompt != default_prompt),
-        })
-    edges = [{"from": a["parent"], "to": a["id"]} for a in _AGENTS if a["parent"]]
+    graph = ai_config.get_graph() or _default_graph()
     return {
-        "agents": agents,
-        "edges": edges,
-        "model": model,
+        "agents": graph.get("agents", []),
+        "edges": graph.get("edges", []),
+        "model": ai_config.get_model(),
         "model_default": settings.openai_model,
         "model_catalog": MODEL_CATALOG,
         "ai_enabled": settings.ai_enabled,
+        "custom": ai_config.get_graph() is not None,
+        # Fase 1: aplicado de verdade no pipeline fixo. Agentes/ligações extras
+        # ficam salvos como configuração até o motor de orquestração (Fase 2).
+        "applied": {"assistant_prompt": True, "shared_model": True, "orchestration": False},
     }
 
 
-@router.put("/model")
-def update_model(body: ModelBody, user: User = Depends(get_current_user)):
+@router.put("/graph")
+def save_graph(body: dict, user: User = Depends(get_current_user)):
     _require_admin(user)
-    ai_config.set_model(body.model)
-    return {"model": ai_config.get_model()}
-
-
-@router.put("/agents/{agent_id}/prompt")
-def update_agent_prompt(agent_id: str, body: PromptBody, user: User = Depends(get_current_user)):
-    _require_admin(user)
-    if agent_id not in _EDITABLE:
-        raise HTTPException(
-            status_code=400,
-            detail="Este agente tem o prompt definido no código (somente leitura).",
-        )
-    ai_config.set_prompt(agent_id, body.prompt)
+    agents = body.get("agents")
+    if not isinstance(agents, list) or not agents:
+        raise HTTPException(status_code=400, detail="Grafo inválido: 'agents' é obrigatório.")
+    edges = body.get("edges")
+    ai_config.set_graph({"agents": agents, "edges": edges if isinstance(edges, list) else []})
     return {"ok": True}
 
 
-@router.delete("/agents/{agent_id}/prompt")
-def reset_agent_prompt(agent_id: str, user: User = Depends(get_current_user)):
+@router.delete("/graph")
+def reset_graph(user: User = Depends(get_current_user)):
+    """Restaura o grafo-semente (os 6 agentes reais)."""
     _require_admin(user)
-    ai_config.clear_prompt(agent_id)
+    ai_config.clear_graph()
     return {"ok": True}

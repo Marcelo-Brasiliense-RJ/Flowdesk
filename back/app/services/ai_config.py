@@ -32,8 +32,26 @@ def _save(data: dict) -> None:
         _PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _graph_agent(agent_id: str) -> dict | None:
+    """Agente do grafo salvo (builder), se existir."""
+    g = _load().get("graph")
+    if not isinstance(g, dict):
+        return None
+    for a in g.get("agents") or []:
+        if isinstance(a, dict) and a.get("id") == agent_id:
+            return a
+    return None
+
+
 def get_model() -> str:
-    """Modelo efetivo: override salvo ou o default do servidor (env)."""
+    """Modelo efetivo (compartilhado pelo pipeline fixo).
+
+    Fonte, em ordem: modelo do nó 'assistente' no grafo do builder → override
+    simples salvo → default do servidor (env).
+    """
+    a = _graph_agent("assistente")
+    if a and isinstance(a.get("model"), str) and a["model"].strip():
+        return a["model"].strip()
     return (_load().get("model") or "").strip() or settings.openai_model
 
 
@@ -44,9 +62,34 @@ def set_model(model: str) -> None:
 
 
 def get_prompt(agent_id: str, default: str) -> str:
-    """System prompt efetivo de um agente: override salvo ou o default do código."""
+    """System prompt efetivo de um agente.
+
+    Fonte, em ordem: prompt do agente no grafo do builder → override simples
+    salvo → default do código.
+    """
+    a = _graph_agent(agent_id)
+    if a and isinstance(a.get("prompt"), str) and a["prompt"].strip():
+        return a["prompt"]
     val = (_load().get("prompts") or {}).get(agent_id)
     return val if isinstance(val, str) and val.strip() else default
+
+
+def get_graph() -> dict | None:
+    """Grafo de agentes salvo pelo builder (None se ainda não há override)."""
+    g = _load().get("graph")
+    return g if isinstance(g, dict) else None
+
+
+def set_graph(graph: dict) -> None:
+    data = _load()
+    data["graph"] = graph
+    _save(data)
+
+
+def clear_graph() -> None:
+    data = _load()
+    data.pop("graph", None)
+    _save(data)
 
 
 def set_prompt(agent_id: str, prompt: str) -> None:
