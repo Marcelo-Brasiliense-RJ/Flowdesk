@@ -177,6 +177,40 @@ def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
     return {"message": data.get("message") or "", "actions": data.get("actions") or []}
 
 
+NOMEADOR_PROMPT = (
+    "Você é o Nomeador do FlowDesk. A partir do plano e do código da automação "
+    "recém-criada, faça duas coisas: 1) um NOME curto e claro, de 3 a 6 palavras, "
+    "estilo título, sem aspas e sem jargão (ex.: 'Conciliação de Razão', 'Totais de "
+    "Vendas por Produto'); 2) uma DESCRIÇÃO amigável em 1 a 3 frases, em português "
+    "simples, dizendo o que a automação recebe, o que faz e o que entrega, pensando "
+    "num usuário não técnico. Responda SOMENTE em JSON: "
+    '{"name": "...", "description": "..."}.'
+)
+
+_PLACEHOLDER_DESC = "Criado pelo Chat"
+
+
+def run_nomeador(plan: dict, code: str) -> dict:
+    """Gera nome curto e descrição amigável da automação. A gravação no projeto
+    (respeitando nome definido pelo usuário) é feita na fiação, via name_is_placeholder."""
+    blocks = [
+        "PLANO:\n" + json.dumps(plan or {}, ensure_ascii=False, indent=2),
+        "CÓDIGO:\n" + (code or "")[:4000],
+    ]
+    raw = call_agent("nomeador", NOMEADOR_PROMPT, [{"role": "user", "content": "\n\n".join(blocks)}], json_mode=True)
+    try:
+        data = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    return {"name": (data.get("name") or "").strip(), "description": (data.get("description") or "").strip()}
+
+
+def name_is_placeholder(name: str, description: str) -> bool:
+    """True quando é seguro o Nomeador sobrescrever nome/descrição (nunca sobrescreve
+    um nome definido de propósito pelo usuário)."""
+    return (description or "").strip() == _PLACEHOLDER_DESC or len((name or "").strip()) < 3
+
+
 def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> str:
     """FSM pura de fases. As transições building, naming, done são feitas
     pelos call-sites (Construtor, Nomeador), não aqui."""
