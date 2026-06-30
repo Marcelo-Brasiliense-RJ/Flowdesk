@@ -9,7 +9,7 @@ def test_ensure_orchestration_columns_adds_and_is_idempotent(tmp_path):
         c.execute(sa.text("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT)"))
     with eng.begin() as c:
         ensure_orchestration_columns(c, "sqlite")
-        ensure_orchestration_columns(c, "sqlite")   # idempotente, nao pode quebrar
+        ensure_orchestration_columns(c, "sqlite")   # idempotente, não pode quebrar
     with eng.begin() as c:
         cols = {r[1] for r in c.execute(sa.text("PRAGMA table_info(projects)"))}
     assert {"phase", "plan", "accounting_profile"} <= cols

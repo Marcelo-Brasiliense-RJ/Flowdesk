@@ -36,7 +36,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 # Colunas de orquestração (Fase 2) adicionadas a bancos já existentes.
-# SQLite nao cria colunas novas via create_all; seguimos o mesmo padrao de
+# SQLite não cria colunas novas via create_all; seguimos o mesmo padrão de
 # micro-migração do lifespan (ver back/main.py). Idempotente.
 _ORCH_COLUMNS = {
     "phase": "VARCHAR(20) NOT NULL DEFAULT ''",
