@@ -93,6 +93,13 @@ class Project(Base):
     # sinaliza edição no modo avançado, então o rascunho pode estar defasado.
     wizard_state: Mapped[dict] = mapped_column(JSON, default=dict)
     wizard_dirty: Mapped[bool] = mapped_column(Boolean, default=False)
+    # orquestração de agentes (Fase 2): estado da máquina + artefatos
+    # phase: "" (não iniciado) | planning | building | naming | done
+    phase: Mapped[str] = mapped_column(String(20), default="")
+    # plano selado (contrato Planejador -> Construtor) — schema em services/plan_schema.Plan
+    plan: Mapped[dict] = mapped_column(JSON, default=dict)
+    # perfil contábil/fiscal do projeto — schema em services/plan_schema.AccountingProfile
+    accounting_profile: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow

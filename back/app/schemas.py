@@ -138,6 +138,9 @@ class ProjectOut(ORMModel):
     allowed_domain: str
     wizard_state: dict = {}
     wizard_dirty: bool = False
+    phase: str = ""
+    plan: dict = {}
+    accounting_profile: dict = {}
     created_at: dt.datetime
     updated_at: dt.datetime
     owner_name: Optional[str] = None
