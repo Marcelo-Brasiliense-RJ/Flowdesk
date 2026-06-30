@@ -260,3 +260,49 @@ def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> s
     if current == "planning":
         return "building" if (plan_is_complete(plan) and user_confirmed) else "planning"
     return current
+
+
+def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
+                     user_confirmed: bool, history: list[dict], project_context: str) -> dict:
+    """Dispatch determinístico de um turno do chat. Decide a próxima fase e roda o
+    agente da vez. mode='answer' significa: responda normalmente, sem orquestrar."""
+    try:
+        plan_obj = Plan(**(plan or {}))
+    except Exception:
+        plan_obj = Plan()
+    new_phase = next_phase(phase or "", intent, plan_obj, user_confirmed)
+
+    if intent == "duvida":
+        return {"mode": "answer", "phase": phase or "", "plan": plan or {}, "profile": profile or {}}
+
+    if new_phase == "planning":
+        pj = run_planejador(history, plan or {})
+        questions = list(pj.get("questions") or []) + list(pj.get("profile_questions") or [])
+        return {
+            "mode": "planning", "text": "", "questions": questions, "actions": [],
+            "phase": "planning", "plan": pj.get("plan") or {}, "profile": profile or {},
+            "missing": pj.get("missing") or [],
+        }
+
+    if new_phase == "building":
+        plan2 = plan or {}
+        profile2 = profile or {}
+        if plan2.get("contabil"):
+            en = enrich_accounting(plan2, profile2)
+            plan2, profile2 = en["plan"], en["profile"]
+        cons = run_construtor(plan2, profile2, project_context)
+        actions = cons.get("actions") or []
+        code = next(
+            (a.get("content", "") for a in actions
+             if a.get("kind") in ("create_file", "edit_file") and (a.get("path") or "").endswith(".py")),
+            "",
+        )
+        nm = run_nomeador(plan2, code)
+        return {
+            "mode": "building", "text": cons.get("message") or "", "questions": [],
+            "actions": actions, "phase": "done", "plan": plan2, "profile": profile2,
+            "suggested_name": nm.get("name") or "", "suggested_desc": nm.get("description") or "",
+            "plan_for_review": plan2,
+        }
+
+    return {"mode": "answer", "phase": phase or "", "plan": plan or {}, "profile": profile or {}}
