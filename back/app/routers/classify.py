@@ -107,6 +107,17 @@ class ContaIn(BaseModel):
     nome: str
 
 
+def _perfil_contas(profile: dict) -> list[ContaIn]:
+    """Contas analíticas do perfil contábil do projeto (fallback quando o request
+    não traz a lista de contas)."""
+    out: list[ContaIn] = []
+    for c in (profile or {}).get("plano_de_contas", []) or []:
+        codigo = str((c or {}).get("codigo", "")).strip()
+        if codigo:
+            out.append(ContaIn(codigo=codigo, nome=str(c.get("nome", "")).strip()))
+    return out
+
+
 class SugestaoRequest(BaseModel):
     grupos: list[GrupoIn]
     contas: list[ContaIn]
@@ -116,14 +127,15 @@ class SugestaoRequest(BaseModel):
 def classificar_grupos(project_id: int, req: SugestaoRequest,
                        db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Sugere conta contábil por grupo de histórico. Payload mínimo para a IA."""
-    get_project(db, project_id, user)
+    project = get_project(db, project_id, user)
+    contas = req.contas or _perfil_contas(project.accounting_profile)
     if not req.grupos:
         return {"sugestoes": []}
     if not settings.ai_enabled:
         # modo simulado: heurística por palavra no nome da conta
         sugestoes = []
         for g in req.grupos:
-            alvo = next((c for c in req.contas
+            alvo = next((c for c in contas
                          if any(w in c.nome.upper() for w in g.padrao.split()[:2] if len(w) > 4)), None)
             sugestoes.append({"padrao": g.padrao,
                               "conta_codigo": alvo.codigo if alvo else "",
@@ -132,8 +144,8 @@ def classificar_grupos(project_id: int, req: SugestaoRequest,
 
     from openai import OpenAI
     client = OpenAI(api_key=settings.openai_api_key)
-    contas_txt = "\n".join(f"{c.codigo} = {c.nome}" for c in req.contas[:400])
-    validos = {c.codigo for c in req.contas}
+    contas_txt = "\n".join(f"{c.codigo} = {c.nome}" for c in contas[:400])
+    validos = {c.codigo for c in contas}
     sugestoes: list[dict] = []
     # lotes pequenos: medido empiricamente, acima de ~10 grupos por chamada o
     # gpt-4o-mini deixa de copiar o campo "padrao" literalmente e devolve

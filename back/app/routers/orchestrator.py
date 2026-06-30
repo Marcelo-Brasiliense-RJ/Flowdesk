@@ -211,6 +211,43 @@ def name_is_placeholder(name: str, description: str) -> bool:
     return (description or "").strip() == _PLACEHOLDER_DESC or len((name or "").strip()) < 3
 
 
+CLASSIFICADOR_PROMPT = (
+    "Você é o cérebro contábil e fiscal do FlowDesk, um contador brasileiro. Dado o "
+    "plano de uma automação contábil e o perfil contábil do projeto (regime, plano de "
+    "contas, ERP destino), enriqueça o plano com o contexto que o Construtor precisa "
+    "respeitar: layout do ERP destino (ex.: regras de importação do Domínio como "
+    "numeração de lote), formato de contas e histórico, e regras fiscais aplicáveis. "
+    "Proponha atualizações de perfil quando descobrir algo, mas NUNCA confirme o "
+    "regime sozinho. Responda SOMENTE em JSON: {\"plan_patch\": {<campos do plano a "
+    "mesclar>}, \"perfil_updates\": {<campos do perfil a propor>}, \"avisos_fiscais\": "
+    "[\"...\"]}."
+)
+
+
+def enrich_accounting(plan: dict, profile: dict) -> dict:
+    """Cérebro contábil em tempo de design: enriquece o plano e propõe atualizações
+    de perfil quando a tarefa é contábil. Nunca auto-confirma o perfil."""
+    if not (plan or {}).get("contabil"):
+        return {"plan": plan, "profile": profile, "avisos": []}
+    blocks = [
+        "PLANO:\n" + json.dumps(plan or {}, ensure_ascii=False, indent=2),
+        "PERFIL CONTÁBIL ATUAL:\n" + json.dumps(profile or {}, ensure_ascii=False, indent=2),
+    ]
+    raw = call_agent("classificador", CLASSIFICADOR_PROMPT,
+                     [{"role": "user", "content": "\n\n".join(blocks)}], json_mode=True)
+    try:
+        data = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    perfil_updates = dict(data.get("perfil_updates") or {})
+    perfil_updates.pop("confirmado", None)   # o modelo nunca auto-confirma
+    return {
+        "plan": _deep_merge(plan or {}, data.get("plan_patch") or {}),
+        "profile": _deep_merge(profile or {}, perfil_updates),
+        "avisos": data.get("avisos_fiscais") or [],
+    }
+
+
 def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> str:
     """FSM pura de fases. As transições building, naming, done são feitas
     pelos call-sites (Construtor, Nomeador), não aqui."""
