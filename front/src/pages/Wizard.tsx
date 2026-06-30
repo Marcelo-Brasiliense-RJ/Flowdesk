@@ -90,7 +90,9 @@ function StepProgress({ step, plan }: { step: number; plan: AnalyzePlan | null }
             className="h-1.5 w-1.5 rounded-full"
             style={{ background: "var(--accent)", animation: "pulse 1.4s infinite" }}
           />
-          {step >= STEPS.length - 1 ? "Pronta para testar" : "Em montagem"}
+          {step >= STEPS.length - 1
+            ? "Revisão final"
+            : `Passo ${step + 1} de ${STEPS.length} · em andamento`}
         </span>
       </div>
       <div className="relative flex items-start justify-between">
@@ -363,8 +365,8 @@ export default function Wizard() {
 
         {built ? (
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
-            {/* Coluna principal: chat + montagem + teste */}
-            <div className="min-w-0 space-y-6">
+            {/* Coluna principal: chat → teste → montagem (ordem do design v3) */}
+            <div className="min-w-0 space-y-7">
               <ChatCard
                 messages={messages}
                 open={chatOpen}
@@ -372,7 +374,6 @@ export default function Wizard() {
                 onToggle={() => setChatOpen((v) => !v)}
                 onContinue={goChat}
               />
-              <StepProgress step={STEPS.length} plan={null} />
               {build?.stage_ids?.script ? (
                 <TestPanel
                   projectId={projectId}
@@ -387,6 +388,7 @@ export default function Wizard() {
                   <Spinner className="h-4 w-4" /> Preparando o teste…
                 </div>
               )}
+              <StepProgress step={STEPS.length - 1} plan={null} />
             </div>
 
             {/* Aside: sobre esta automação */}
