@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { api, getToken } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type {
+  ChatMessage,
   ClassificacaoReviewData,
   Execution,
   InputKind,
@@ -16,6 +17,7 @@ import type {
   WizardState,
 } from "../lib/types";
 import { Logo, Spinner, StageIcon, STAGE_META } from "../components/ui";
+import ProjectLayout from "../components/ProjectLayout";
 import OcrReview from "../components/OcrReview";
 import ProgressTimeline from "../components/ProgressTimeline";
 import ClassificacaoReview from "../components/ClassificacaoReview";
@@ -220,27 +222,18 @@ function deriveBuiltState(ws: WizardState, stages: Stage[]): WizardState {
 export default function Wizard() {
   const { id } = useParams();
   const projectId = Number(id);
+  const nav = useNavigate();
   const { user } = useAuth();
   const canManage = !!(user?.is_admin || user?.is_dev);
   const [project, setProject] = useState<Project | null>(null);
-  // step -1 = tela "Descreva"; 0..4 = trilha
-  const [step, setStep] = useState(-1);
   const [state, setState] = useState<WizardState>({});
-  const [plan, setPlan] = useState<AnalyzePlan | null>(null);
-
-  const [prompt, setPrompt] = useState("");
-  const [sampleFile, setSampleFile] = useState("");
-  const [sampleName, setSampleName] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState("");
-
-  const [building, setBuilding] = useState(false);
   const [build, setBuild] = useState<BuildResult | null>(null);
+  const [built, setBuilt] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatOpen, setChatOpen] = useState(true);
+  const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState("");
   const [dismissedDirty, setDismissedDirty] = useState(false);
-
-  const reduce = useReducedMotion();
-  const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     Promise.all([
@@ -250,27 +243,13 @@ export default function Wizard() {
       setProject(p);
       const ws = (p.wizard_state || {}) as WizardState;
       const scriptStage = stages.find((s) => s.type === "script" || s.type === "agent");
-      // o fluxo pode ter sido montado pelo assistente (_built) OU pelo Chat/modo
-      // avançado (sem _built). Reconhecer pela presença real de nós evita reabrir
-      // a tela inicial como se a automação não existisse.
-      const alreadyBuilt = (ws as any)._built || !!scriptStage;
+      // a automação está montada quando há _built (assistente) OU um nó de script
+      // real (criado pelo Chat / modo avançado).
+      const alreadyBuilt = !!(ws as any)._built || !!scriptStage;
+      setBuilt(alreadyBuilt);
       if (!alreadyBuilt) return;
       const derived = deriveBuiltState(ws, stages);
       setState(derived);
-      // fluxo criado pelo Chat: o "o que faz" vem do pedido original da conversa,
-      // não de um texto genérico tipo "Criado pelo Chat"
-      if (!derived.process?.description?.trim()) {
-        api
-          .get<{ role: string; content: string }[]>(`/api/projects/${projectId}/chat`)
-          .then((msgs) => {
-            const first = msgs.find((m) => m.role === "user")?.content || "";
-            const pedido = first.split("[Arquivos anexados:")[0].trim();
-            if (pedido) {
-              setState((s) => ({ ...s, process: { description: pedido.slice(0, 240) } }));
-            }
-          })
-          .catch(() => {});
-      }
       const ids = ((ws as any)._stage_ids || {}) as BuildResult["stage_ids"];
       const inputForm = stages.find((s) => s.type === "form" && s.config?.mode === "input");
       const resultForm = stages.find((s) => s.type === "form" && s.config?.mode === "result");
@@ -286,66 +265,13 @@ export default function Wizard() {
         },
         ai_enabled: false,
       });
-      setStep(4);
     });
+    // histórico da conversa que originou a automação (somente leitura no Pedido)
+    api
+      .get<ChatMessage[]>(`/api/projects/${projectId}/chat`)
+      .then(setMessages)
+      .catch(() => setMessages([]));
   }, [projectId]);
-
-  async function persist(next: WizardState, stepIdx: number) {
-    setState(next);
-    await api.put(`/api/projects/${projectId}/wizard`, {
-      state: { ...next, step: stepIdx },
-      dirty: false,
-    });
-  }
-
-  async function uploadSample(file: File) {
-    const fd = new FormData();
-    fd.append("path", "uploads");
-    fd.append("file", file);
-    const r = await api.postForm<{ name: string }>(`/api/projects/${projectId}/fs/upload`, fd);
-    setSampleFile(`uploads/${r.name}`);
-    setSampleName(r.name);
-    return `uploads/${r.name}`;
-  }
-
-  async function analyze() {
-    if (!prompt.trim() && !sampleFile) return;
-    setAnalyzing(true);
-    setAnalyzeError("");
-    try {
-      const p = await api.post<AnalyzePlan>(`/api/projects/${projectId}/wizard/analyze`, {
-        prompt: prompt.trim(),
-        sample_file: sampleFile || null,
-      });
-      setPlan(p);
-      const next: WizardState = {
-        trigger: { kind: (p.trigger?.kind as TriggerKind) || "manual" },
-        input: {
-          kind: (p.input?.kind as InputKind) || "file",
-          fields: p.input?.fields || [],
-          sample_file: sampleFile || undefined,
-        },
-        process: { description: p.process?.description || prompt.trim() },
-        output: { kind: (p.output?.kind as OutputKind) || "download" },
-      };
-      const dims: [keyof AnalyzePlan, number][] = [
-        ["trigger", 0], ["input", 1], ["process", 2], ["output", 3],
-      ];
-      const gap = dims.find(([k]) => !(p[k] as DimPlan)?.confident);
-      const target = gap ? gap[1] : 4;
-      await persist(next, target);
-      setStep(target);
-      if (target === 4) buildFlow();
-    } catch (e: any) {
-      setAnalyzeError(e?.message || "Não consegui analisar o pedido. Tente de novo.");
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  function patch(partial: Partial<WizardState>) {
-    setState((s) => ({ ...s, ...partial }));
-  }
 
   async function buildFlow() {
     setBuilding(true);
@@ -360,456 +286,279 @@ export default function Wizard() {
     }
   }
 
-  async function handleContinue() {
-    const next = step + 1;
-    await persist(state, next);
-    setStep(next);
-    if (next === 4) buildFlow();
+  /** Leva ao Smart Chat do projeto (criação/ajuste), opcionalmente com um rascunho. */
+  function goChat(draft?: string) {
+    nav(`/projects/${projectId}/chat`, draft ? { state: { draft } } : undefined);
   }
 
   if (!project)
     return (
-      <div className="flex h-full items-center justify-center text-accentv">
-        <Spinner className="h-8 w-8" />
-      </div>
+      <ProjectLayout project={null}>
+        <div className="flex h-full items-center justify-center text-accentv">
+          <Spinner className="h-8 w-8" />
+        </div>
+      </ProjectLayout>
     );
 
-  const canAdvance =
-    (step === 0 && !!state.trigger?.kind) ||
-    (step === 1 && !!state.input?.kind) ||
-    (step === 2 && !!state.process?.description?.trim()) ||
-    (step === 3 && !!state.output?.kind);
-
-  const renderStep = () => {
-    switch (step) {
-      case 0:
-        return <TriggerStep state={state} patch={patch} plan={plan?.trigger} />;
-      case 1:
-        return <InputStep state={state} patch={patch} plan={plan?.input} />;
-      case 2:
-        return <ProcessStep state={state} patch={patch} plan={plan?.process} />;
-      case 3:
-        return <OutputStep state={state} patch={patch} plan={plan?.output} />;
-      case 4:
-        return (
-          <ReviewStep
-            projectId={projectId}
-            projectName={project.name}
-            projectDescription={project.description}
-            state={state}
-            building={building}
-            build={build}
-            buildError={buildError}
-            onRebuild={buildFlow}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
-    <div className="flex h-full flex-col" style={{ background: "var(--bg)" }}>
-      <header className="glass flex items-center justify-between border-b border-line px-4 py-2">
-        <div className="flex items-center gap-2">
-          <Link to="/" className="shrink-0">
-            <Logo />
-          </Link>
-          <span className="text-ink3">/</span>
-          <span className="font-semibold text-ink">{project.name}</span>
-          <span className="badge" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>Assistente</span>
-        </div>
-        {canManage && (
-          <Link
-            to={`/projects/${projectId}/editor`}
-            className="text-xs text-ink3 transition hover:text-accentv"
-            title="Editar o código e o fluxo diretamente"
+    <ProjectLayout project={project}>
+      <div className="mx-auto max-w-3xl px-6 py-8 lg:px-8 lg:py-10">
+        {project.wizard_dirty && !dismissedDirty && (
+          <div
+            className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-2.5 text-sm"
+            style={{ borderColor: "var(--warn2-soft)", background: "var(--warn2-soft)" }}
           >
-            Modo avançado →
-          </Link>
-        )}
-      </header>
-
-      {project.wizard_dirty && !dismissedDirty && (
-        <div
-          className="flex flex-wrap items-center gap-3 border-b px-6 py-2.5 text-sm"
-          style={{ borderColor: "var(--warn2-soft)", background: "var(--warn2-soft)" }}
-        >
-          <span style={{ color: "var(--warn2)" }}>
-            Esta automação foi ajustada manualmente no modo avançado. Editar pelo
-            assistente pode sobrescrever esses ajustes.
-          </span>
-          <button onClick={() => setDismissedDirty(true)} className="btn-outline py-1 text-xs">
-            Continuar mesmo assim
-          </button>
-          {canManage && (
-            <Link
-              to={`/projects/${projectId}/editor`}
-              className="text-xs font-medium hover:underline"
-              style={{ color: "var(--warn2)" }}
-            >
-              Abrir no modo avançado
-            </Link>
-          )}
-        </div>
-      )}
-
-      {step === -1 ? (
-        <div className="min-h-0 flex-1 overflow-auto p-8">
-          <div className="mx-auto max-w-2xl">
-            <DescribeStep
-              prompt={prompt}
-              setPrompt={setPrompt}
-              sampleName={sampleName}
-              onUpload={uploadSample}
-              onAnalyze={analyze}
-              analyzing={analyzing}
-              error={analyzeError}
-              taRef={taRef}
-            />
+            <span style={{ color: "var(--warn2)" }}>
+              Esta automação foi ajustada manualmente no modo avançado. Continuar pelo
+              assistente pode sobrescrever esses ajustes.
+            </span>
+            <button onClick={() => setDismissedDirty(true)} className="btn-outline py-1 text-xs">
+              Continuar mesmo assim
+            </button>
+            {canManage && (
+              <Link
+                to={`/projects/${projectId}/editor`}
+                className="text-xs font-medium hover:underline"
+                style={{ color: "var(--warn2)" }}
+              >
+                Abrir no modo avançado
+              </Link>
+            )}
           </div>
+        )}
+
+        {/* Cabeçalho: Pedido */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-ink">Pedido</h1>
+            <p className="mt-1 text-sm text-ink2">
+              Histórico da conversa que originou esta automação.
+            </p>
+          </div>
+          <button onClick={() => goChat()} className="btn-outline shrink-0 py-1.5 text-sm">
+            Continuar no chat →
+          </button>
         </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto p-6 lg:p-10" style={{ background: "var(--bg)" }}>
-          <div className={`mx-auto ${step === 4 ? "max-w-5xl" : "max-w-3xl"}`}>
-            <StepProgress step={step} plan={plan} />
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                initial={reduce ? false : { opacity: 0, x: 24 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={reduce ? undefined : { opacity: 0, x: -24 }}
-                transition={{ type: "spring", stiffness: 320, damping: 30 }}
-              >
-                {renderStep()}
-              </motion.div>
-            </AnimatePresence>
-            <div className="mt-8 flex items-center justify-between">
-              <button
-                onClick={() => setStep(step - 1)}
-                disabled={step === 0}
-                className="btn-outline py-1.5 text-sm disabled:opacity-40"
-              >
-                ← Voltar
-              </button>
-              <span className="text-xs text-ink3">Etapa {step + 1} de {STEPS.length}</span>
-              {step < STEPS.length - 1 ? (
-                <button
-                  onClick={handleContinue}
-                  disabled={!canAdvance}
-                  className="btn-primary py-1.5 text-sm disabled:opacity-40"
-                >
-                  {step === 3 ? "Montar e revisar" : "Continuar"}
+
+        <div className="mt-6 space-y-6">
+          {/* Card Smart Chat — histórico que originou a automação (colapsável) */}
+          <ChatCard
+            messages={messages}
+            open={chatOpen}
+            built={built}
+            onToggle={() => setChatOpen((v) => !v)}
+            onContinue={goChat}
+          />
+
+          {/* Montagem da automação */}
+          <StepProgress step={built ? STEPS.length : 0} plan={null} />
+
+          {/* Montada → revisão e teste; senão → leva ao Smart Chat */}
+          {built ? (
+            <ReviewStep
+              projectId={projectId}
+              projectName={project.name}
+              projectDescription={project.description}
+              state={state}
+              building={building}
+              build={build}
+              buildError={buildError}
+              onRebuild={buildFlow}
+            />
+          ) : (
+            <div className="card p-6 text-center">
+              <h2 className="text-base font-bold text-ink">
+                Esta automação ainda não foi montada
+              </h2>
+              <p className="mx-auto mt-1.5 max-w-md text-sm text-ink2">
+                Descreva o que você quer no Smart Chat. A IA faz algumas perguntas e monta a
+                automação com você. Aqui você acompanha o pedido e testa o resultado.
+              </p>
+              <div className="mt-4">
+                <button onClick={() => goChat()} className="btn-primary">
+                  Ir para o Smart Chat →
                 </button>
-              ) : (
-                <span className="w-24" />
+              </div>
+              {canManage && (
+                <Link
+                  to={`/projects/${projectId}/editor`}
+                  className="mt-3 inline-block text-xs text-ink3 transition hover:text-accentv"
+                >
+                  ou abra direto no modo avançado →
+                </Link>
               )}
             </div>
-          </div>
+          )}
         </div>
+      </div>
+    </ProjectLayout>
+  );
+}
+
+/* ---------- Card Smart Chat (histórico colapsável do Pedido) ---------- */
+/** Separa o texto da mensagem dos anexos embutidos no formato
+ * "[Arquivos anexados: a, b]" usado pelo SmartChat. */
+function stripAttachments(content: string): { text: string; files: string[] } {
+  const m = content.match(/\[Arquivos anexados:\s*([^\]]+)\]/);
+  const files = m ? m[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const text = content.replace(/\n*\[Arquivos anexados:[^\]]*\]/, "").trim();
+  return { text, files };
+}
+
+function ChatCard({
+  messages,
+  open,
+  built,
+  onToggle,
+  onContinue,
+}: {
+  messages: ChatMessage[];
+  open: boolean;
+  built: boolean;
+  onToggle: () => void;
+  onContinue: (draft?: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  return (
+    <div className="card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="glass flex w-full items-center gap-2.5 px-4 py-3 text-left"
+        style={{ borderBottom: open ? "1px solid var(--border)" : "0" }}
+      >
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10.5px] font-bold text-white"
+          style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))" }}
+        >
+          FD
+        </span>
+        <span className="text-sm font-bold text-ink">Smart Chat</span>
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+          style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--accent)" }} />
+          {built ? "concluído" : "em andamento"}
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-ink3">
+          {open ? "Recolher" : "Expandir"}
+          <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .25s" }}
+            aria-hidden
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="flex flex-col gap-3.5 p-4">
+            {messages.length === 0 ? (
+              <p className="text-sm text-ink3">
+                Ainda não há conversa para esta automação. Use o Smart Chat para descrever o
+                que você quer automatizar.
+              </p>
+            ) : (
+              messages.map((m) => {
+                const { text, files } = stripAttachments(m.content);
+                if (m.role === "user") {
+                  return (
+                    <div key={m.id} className="flex flex-col items-end gap-1.5">
+                      <div
+                        className="max-w-[82%] whitespace-pre-wrap rounded-2xl rounded-tr-md px-3.5 py-2.5 text-sm leading-relaxed shadow-token"
+                        style={{ background: "var(--user-bubble)", color: "var(--user-text)" }}
+                      >
+                        {text}
+                      </div>
+                      {files.length > 0 && (
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {files.map((f) => (
+                            <span
+                              key={f}
+                              className="badge"
+                              style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                            >
+                              📎 {f.split(/[\\/]/).pop()}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={m.id} className="flex items-start gap-2.5">
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10.5px] font-bold text-white"
+                      style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))" }}
+                    >
+                      FD
+                    </span>
+                    <div className="max-w-[82%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-line bg-surface-2 px-3.5 py-2.5 text-sm leading-relaxed text-ink">
+                      {text}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="border-t border-line p-3">
+            <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface-2 py-1.5 pl-4 pr-1.5">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && draft.trim()) onContinue(draft.trim());
+                }}
+                placeholder="Pedir um ajuste neste pedido…"
+                className="flex-1 border-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink3"
+              />
+              <button
+                type="button"
+                onClick={() => onContinue(draft.trim() || undefined)}
+                title="Continuar no chat"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+                style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))" }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 19V5M6 11l6-6 6 6" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-/* ---------- Tela 1: Descreva ---------- */
-
-const heroVariants: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
-};
-const heroItem: Variants = {
-  hidden: { opacity: 0, y: 14 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 320, damping: 26 } },
-};
-
-function DescribeStep({
-  prompt, setPrompt, sampleName, onUpload, onAnalyze, analyzing, error, taRef,
-}: {
-  prompt: string;
-  setPrompt: (v: string) => void;
-  sampleName: string;
-  onUpload: (f: File) => Promise<string>;
-  onAnalyze: () => void;
-  analyzing: boolean;
-  error: string;
-  taRef: React.RefObject<HTMLTextAreaElement>;
-}) {
-  return (
-    <motion.div variants={heroVariants} initial="hidden" animate="show" className="pt-4">
-      <motion.h1 variants={heroItem} className="text-center text-2xl font-bold text-ink">
-        O que você quer automatizar?
-      </motion.h1>
-      <motion.p variants={heroItem} className="mx-auto mt-2 max-w-lg text-center text-sm text-ink2">
-        Descreva em português, com o máximo de detalhe, e anexe um exemplo. Eu leio o seu
-        pedido e só pergunto o que realmente faltar.
-      </motion.p>
-
-      <motion.div
-        variants={heroItem}
-        className="card mt-6 p-4"
-      >
-        <textarea
-          ref={taRef}
-          autoFocus
-          rows={4}
-          className="input resize-none border-0 text-base focus:ring-0"
-          placeholder="Ex: tenho uma planilha de vendas com as colunas produto e valor; quero o total geral e o total por produto, gerando uma planilha de saída."
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onAnalyze();
-          }}
-        />
-        <div className="mt-3 flex items-center justify-between">
-          <label className="btn-outline cursor-pointer py-1.5 text-sm">
-            📎 {sampleName ? sampleName : "Anexar exemplo"}
-            <input
-              type="file"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onUpload(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
-          <motion.button
-            onClick={onAnalyze}
-            disabled={analyzing || (!prompt.trim() && !sampleName)}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.96 }}
-            className="btn-primary disabled:opacity-40"
-          >
-            {analyzing ? "Analisando…" : "Analisar pedido →"}
-          </motion.button>
-        </div>
-      </motion.div>
-
-      <AnimatePresence>
-        {analyzing && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="mt-4 flex items-center justify-center gap-2 text-sm text-ink2"
-          >
-            <Spinner className="h-4 w-4" /> Lendo seu pedido e montando as etapas…
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {error && <p className="mt-3 text-center text-sm text-err">{error}</p>}
-      <motion.p variants={heroItem} className="mt-3 text-center text-xs text-ink3">
-        Dica: Ctrl/Cmd + Enter para analisar.
-      </motion.p>
-    </motion.div>
-  );
-}
-
-/* ---------- Componentes de etapa ---------- */
-
-interface StepProps {
-  state: WizardState;
-  patch: (partial: Partial<WizardState>) => void;
-  plan?: DimPlan;
-}
+/* ---------- helpers compartilhados com a Revisão ---------- */
 
 function StepTitle({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="mb-4">
       <h1 className="text-xl font-bold text-ink">{title}</h1>
       <p className="mt-1 text-sm text-ink2">{hint}</p>
-    </div>
-  );
-}
-
-function ConfidentBanner({ text }: { text: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
-      style={{ borderColor: "var(--ok-soft)", background: "var(--ok-soft)", color: "var(--ok)" }}
-    >
-      <span className="mt-0.5 font-semibold">Entendi do seu pedido:</span>
-      <span>{text}. Pode ajustar abaixo se quiser.</span>
-    </motion.div>
-  );
-}
-
-function QuestionBanner({ text }: { text: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mb-4 rounded-lg border px-3 py-2 text-sm font-medium"
-      style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)", color: "var(--accent)" }}
-    >
-      {text}
-    </motion.div>
-  );
-}
-
-function ChoiceCard({
-  active, title, desc, onClick,
-}: {
-  active: boolean;
-  title: string;
-  desc: string;
-  onClick: () => void;
-}) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
-      className="w-full rounded-xl border p-4 text-left transition"
-      style={
-        active
-          ? { borderColor: "var(--accent)", background: "var(--accent-soft)" }
-          : { borderColor: "var(--border)", background: "var(--surface)" }
-      }
-    >
-      <div className="font-medium text-ink">{title}</div>
-      <div className="mt-0.5 text-sm text-ink2">{desc}</div>
-    </motion.button>
-  );
-}
-
-function TriggerStep({ state, patch, plan }: StepProps) {
-  const kind = state.trigger?.kind;
-  const set = (k: TriggerKind) => patch({ trigger: { ...state.trigger, kind: k } });
-  return (
-    <div>
-      <StepTitle title="Como essa automação começa?" hint="Escolha o que dispara a execução." />
-      {plan?.confident ? (
-        <ConfidentBanner text={triggerText(kind)} />
-      ) : plan?.question ? (
-        <QuestionBanner text={plan.question} />
-      ) : null}
-      <div className="space-y-3">
-        <ChoiceCard active={kind === "manual"} title="Eu mesmo executo"
-          desc="A pessoa abre a automação e roda na hora, preenchendo o que for preciso."
-          onClick={() => set("manual")} />
-        <ChoiceCard active={kind === "schedule"} title="Em um horário"
-          desc="Roda sozinha de forma agendada, por exemplo a cada X horas ou todo dia."
-          onClick={() => set("schedule")} />
-        <ChoiceCard active={kind === "webhook"} title="Quando chega algo de fora"
-          desc="Dispara ao receber uma requisição de outro sistema (webhook)."
-          onClick={() => set("webhook")} />
-      </div>
-      {kind === "schedule" && (
-        <div className="mt-4 flex items-center gap-2 rounded-lg bg-surface p-3 text-sm">
-          <span className="text-ink2">A cada</span>
-          <input type="number" min={1} value={state.trigger?.every ?? 1}
-            onChange={(e) => patch({ trigger: { kind: "schedule", every: Math.max(1, Number(e.target.value)), unit: state.trigger?.unit ?? "hours" } })}
-            className="input w-20" />
-          <select value={state.trigger?.unit ?? "hours"}
-            onChange={(e) => patch({ trigger: { kind: "schedule", every: state.trigger?.every ?? 1, unit: e.target.value as "hours" | "days" } })}
-            className="input w-32">
-            <option value="hours">hora(s)</option>
-            <option value="days">dia(s)</option>
-          </select>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function InputStep({ state, patch, plan }: StepProps) {
-  const kind = state.input?.kind;
-  const fields = state.input?.fields ?? [];
-  const set = (k: InputKind) => patch({ input: { ...state.input, kind: k } });
-  function addField() {
-    patch({ input: { kind: "fields", fields: [...fields, { label: "", type: "text" }] } });
-  }
-  function updateField(i: number, partial: Partial<WizardField>) {
-    patch({ input: { kind: "fields", fields: fields.map((f, idx) => (idx === i ? { ...f, ...partial } : f)) } });
-  }
-  function removeField(i: number) {
-    patch({ input: { kind: "fields", fields: fields.filter((_, idx) => idx !== i) } });
-  }
-  return (
-    <div>
-      <StepTitle title="O que essa automação recebe?" hint="Define a entrada de dados que será processada." />
-      {plan?.confident ? (
-        <ConfidentBanner text={inputText(kind, fields.length)} />
-      ) : plan?.question ? (
-        <QuestionBanner text={plan.question} />
-      ) : null}
-      <div className="space-y-3">
-        <ChoiceCard active={kind === "file"} title="Um arquivo"
-          desc="Uma planilha, CSV ou PDF. Você poderá subir um exemplo na hora de testar."
-          onClick={() => set("file")} />
-        <ChoiceCard active={kind === "fields"} title="Alguns campos digitados"
-          desc="A pessoa preenche campos simples antes de rodar." onClick={() => set("fields")} />
-        <ChoiceCard active={kind === "none"} title="Nada" desc="A automação não precisa de entrada."
-          onClick={() => set("none")} />
-      </div>
-      {kind === "fields" && (
-        <div className="mt-4 space-y-2 rounded-lg bg-surface p-3">
-          {fields.length === 0 && <p className="text-sm text-ink3">Nenhum campo ainda.</p>}
-          {fields.map((f, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input className="input flex-1" placeholder="Rótulo do campo (ex: CNPJ)"
-                value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} />
-              <select className="input w-32" value={f.type}
-                onChange={(e) => updateField(i, { type: e.target.value as WizardField["type"] })}>
-                <option value="text">texto</option>
-                <option value="number">número</option>
-                <option value="date">data</option>
-                <option value="select">lista</option>
-              </select>
-              <button type="button" onClick={() => removeField(i)} className="px-2 text-ink3 hover:text-err">×</button>
-            </div>
-          ))}
-          <button type="button" onClick={addField} className="btn-outline py-1 text-xs">+ Adicionar campo</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProcessStep({ state, patch, plan }: StepProps) {
-  return (
-    <div>
-      <StepTitle title="O que fazer com isso?" hint="Descreva o que a automação deve fazer. A IA monta o passo a passo." />
-      {plan?.confident ? (
-        <ConfidentBanner text="o que você descreveu no pedido" />
-      ) : plan?.question ? (
-        <QuestionBanner text={plan.question} />
-      ) : null}
-      <textarea
-        className="input min-h-[160px] resize-y"
-        placeholder="Ex: remover linhas duplicadas pela coluna Valor; somar por CNPJ e gerar um resumo."
-        value={state.process?.description ?? ""}
-        onChange={(e) => patch({ process: { description: e.target.value } })}
-      />
-      <p className="mt-2 text-xs text-ink3">
-        Ao continuar, a IA monta a automação e mostra uma explicação. Nada é publicado sem você testar antes.
-      </p>
-    </div>
-  );
-}
-
-function OutputStep({ state, patch, plan }: StepProps) {
-  const kind = state.output?.kind;
-  const set = (k: OutputKind) => patch({ output: { kind: k } });
-  return (
-    <div>
-      <StepTitle title="O que você recebe de volta?" hint="Define o resultado entregue ao final." />
-      {plan?.confident ? (
-        <ConfidentBanner text={outputText(kind)} />
-      ) : plan?.question ? (
-        <QuestionBanner text={plan.question} />
-      ) : null}
-      <div className="space-y-3">
-        <ChoiceCard active={kind === "download"} title="Arquivo para baixar"
-          desc="Gera um arquivo (ex: Excel) com o resultado para download." onClick={() => set("download")} />
-        <ChoiceCard active={kind === "summary"} title="Resumo na tela"
-          desc="Mostra um resumo do que foi processado, sem arquivo." onClick={() => set("summary")} />
-      </div>
     </div>
   );
 }

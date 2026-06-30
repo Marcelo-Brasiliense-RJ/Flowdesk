@@ -5,6 +5,7 @@ import type { Project } from "../lib/types";
 import { Logo, StatusBadge } from "./ui";
 
 const NAV = [
+  ["assistente", "Assistente", "✦"],
   ["editor", "Editor", "✎"],
   ["workflow", "Workflow", "⌗"],
   ["builds", "Versões", "⎘"],

@@ -52,18 +52,20 @@ vi.mock("../components/ClassificacaoReview", () => ({ default: () => null }));
 
 import Wizard from "./Wizard";
 
-describe("Wizard (Assistente)", () => {
-  it("renderiza a tela 'Descreva' com o visual do novo design", async () => {
+describe("Wizard (Assistente / Pedido)", () => {
+  it("renderiza a visão 'Pedido' do novo design dentro do layout do projeto", async () => {
     renderScreen(<Wizard />, {
       route: "/projects/1/assistente",
       path: "/projects/:id/assistente",
     });
 
-    // cabeçalho: nome do projeto + badge Assistente
+    // sidebar do projeto: nome + item "Assistente"
     expect(await screen.findByText("Conciliação de Razão")).toBeInTheDocument();
     expect(screen.getByText("Assistente")).toBeInTheDocument();
-    // hero da tela inicial (passo -1) preservada
-    expect(screen.getByText("O que você quer automatizar?")).toBeInTheDocument();
-    expect(screen.getByText("Analisar pedido →")).toBeInTheDocument();
+    // cabeçalho "Pedido" + atalho para o chat
+    expect(screen.getByRole("heading", { name: "Pedido" })).toBeInTheDocument();
+    expect(screen.getByText(/Continuar no chat/)).toBeInTheDocument();
+    // sem nós de script (stages vazio) → CTA leva ao Smart Chat
+    expect(screen.getByText("Esta automação ainda não foi montada")).toBeInTheDocument();
   });
 });

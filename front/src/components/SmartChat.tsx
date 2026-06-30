@@ -10,11 +10,14 @@ export default function SmartChat({
   projectId,
   onApplied,
   autoStart,
+  initialInput,
   centered = false,
 }: {
   projectId: number;
   onApplied: () => void;
   autoStart?: { content: string; files: File[] };
+  /** Texto inicial no campo de mensagem (não envia automaticamente). */
+  initialInput?: string;
   /** Quando true, centraliza mensagens e input numa coluna de leitura (tela cheia). */
   centered?: boolean;
 }) {
@@ -24,7 +27,7 @@ export default function SmartChat({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState<PendingAction[]>([]);
   const [streaming, setStreaming] = useState("");
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialInput ?? "");
   const [busy, setBusy] = useState(false);
   const [ctx, setCtx] = useState({ percent: 0, ai_enabled: false });
   const [attached, setAttached] = useState<File[]>([]);
