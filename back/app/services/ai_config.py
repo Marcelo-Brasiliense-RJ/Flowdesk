@@ -106,3 +106,21 @@ def clear_prompt(agent_id: str) -> None:
     prompts.pop(agent_id, None)
     data["prompts"] = prompts
     _save(data)
+
+
+def get_temp(agent_id: str, default: float = 0.2) -> float:
+    """Temperatura efetiva do agente (lida do grafo; 'padrão'/inválido -> default)."""
+    a = _graph_agent(agent_id)
+    raw = (a or {}).get("temp")
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def get_agent_model(agent_id: str) -> str:
+    """Modelo efetivo do agente: modelo do nó no grafo -> modelo compartilhado."""
+    a = _graph_agent(agent_id)
+    if a and isinstance(a.get("model"), str) and a["model"].strip():
+        return a["model"].strip()
+    return get_model()
