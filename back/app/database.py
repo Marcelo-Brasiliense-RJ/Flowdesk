@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import DB_PATH, settings
@@ -33,3 +33,26 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+# Colunas de orquestração (Fase 2) adicionadas a bancos já existentes.
+# SQLite nao cria colunas novas via create_all; seguimos o mesmo padrao de
+# micro-migração do lifespan (ver back/main.py). Idempotente.
+_ORCH_COLUMNS = {
+    "phase": "VARCHAR(20) NOT NULL DEFAULT ''",
+    "plan": "TEXT NOT NULL DEFAULT '{}'",
+    "accounting_profile": "TEXT NOT NULL DEFAULT '{}'",
+}
+
+
+def ensure_orchestration_columns(conn, dialect: str) -> None:
+    """Adiciona phase/plan/accounting_profile a projects se faltarem. Recebe uma
+    connection já aberta. Idempotente em SQLite (PRAGMA) e Postgres (IF NOT EXISTS)."""
+    if dialect == "sqlite":
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)"))}
+        for name, ddl in _ORCH_COLUMNS.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE projects ADD COLUMN {name} {ddl}"))
+    else:
+        for name, ddl in _ORCH_COLUMNS.items():
+            conn.execute(text(f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {name} {ddl}"))

@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, ensure_orchestration_columns
 from app.runtime.runner import runtime
 from app.runtime.scheduler import scheduler
 from app import metrics
@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
             conn.execute(
                 text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_by_id INTEGER")
             )
+        ensure_orchestration_columns(conn, engine.dialect.name)
         # ceifador de zumbis: execuções queued/running de processos anteriores
         # nunca vão terminar; marca como erro para não poluir métricas e monitor.
         conn.execute(
