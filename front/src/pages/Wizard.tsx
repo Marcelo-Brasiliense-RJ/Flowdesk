@@ -629,7 +629,7 @@ function ChatCard({
 
       {open && (
         <>
-          <div className="flex flex-col gap-3.5 p-4">
+          <div className="flex max-h-[340px] flex-col gap-3.5 overflow-y-auto overflow-x-hidden p-4">
             {messages.length === 0 ? (
               <p className="text-sm text-ink3">
                 Ainda não há conversa para esta automação. Use o Smart Chat para descrever o
@@ -1326,34 +1326,47 @@ function TestPanel({
   }
 
   return (
-    <div className="card overflow-hidden border-2 shadow-token" style={{ borderColor: "var(--accent)" }}>
-      <div className="flex items-center gap-3 border-b border-line px-5 py-3.5" style={{ background: "var(--accent-soft)" }}>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-token-sm" style={{ background: "var(--accent)" }}>
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M6 4l14 8-14 8V4z" />
+    <div className="overflow-hidden rounded-2xl border" style={{ borderColor: "var(--accent)", background: "var(--accent-soft)" }}>
+      <div className="p-5 sm:p-[22px]">
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+          style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))", boxShadow: "0 8px 18px -10px var(--accent-glow)" }}
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+            <path d="M7 4l13 8-13 8z" />
           </svg>
         </span>
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-accentv">Próximo passo</div>
-          <h3 className="text-base font-bold text-ink">Testar com dados de exemplo</h3>
+        <div className="min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-wider text-accentv">Próximo passo</div>
+          <h3 className="mt-0.5 text-base font-extrabold tracking-tight text-ink">Testar com dados de exemplo</h3>
         </div>
       </div>
-      <div className="p-5">
       <p className="text-sm text-ink2">
         Rode a automação de verdade antes de publicar. Publicar só fica disponível após um teste bem-sucedido.
       </p>
 
       {inputKind === "file" && (
-        <div className="mt-3 flex items-center gap-2 text-sm">
-          <label className="btn-outline cursor-pointer py-1.5 text-xs">
-            {sampleName ? `Trocar arquivo (${sampleName})` : "Subir arquivo de exemplo"}
+        <div className="mt-3.5 flex items-center gap-2.5 text-sm">
+          <label className="btn-outline shrink-0 cursor-pointer py-2 text-xs" style={{ background: "var(--surface)" }}>
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9 17a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" />
+            </svg>
+            {sampleName ? "Trocar arquivo" : "Subir arquivo de exemplo"}
             <input type="file" className="hidden" onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) uploadSample(f);
               e.target.value = "";
             }} />
           </label>
-          {sampleName && <span className="text-ok">✓ {sampleName}</span>}
+          {sampleName && (
+            <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-accentv">
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              {sampleName}
+            </span>
+          )}
         </div>
       )}
       {inputKind === "fields" && (
@@ -1370,7 +1383,7 @@ function TestPanel({
 
       <motion.button onClick={() => runTest()} disabled={testing || needsSample}
         whileTap={{ scale: 0.97 }}
-        className="btn-accent mt-4 w-full justify-center py-2.5 text-sm font-semibold shadow-sm disabled:opacity-50 sm:w-auto sm:px-6"
+        className="btn-primary mt-3.5 justify-center py-2.5 text-sm font-semibold disabled:opacity-50"
         title={needsSample ? "Suba um arquivo de exemplo primeiro" : ""}>
         {testing ? (
           <>
@@ -1378,8 +1391,8 @@ function TestPanel({
           </>
         ) : (
           <>
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M6 4l14 8-14 8V4z" />
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+              <path d="M7 4l13 8-13 8z" />
             </svg>
             Testar agora
           </>
