@@ -29,6 +29,10 @@ MODEL_CATALOG = [
     {"value": "o3-mini", "provider": "OpenAI", "note": "Raciocínio"},
 ]
 
+# Estado real de aplicação no pipeline (após a Fase 2, o motor de orquestração
+# lê prompt/modelo/temperatura do grafo e roda os agentes encadeados).
+APPLIED = {"assistant_prompt": True, "shared_model": True, "orchestration": True}
+
 # ---- prompts-semente dos agentes (definição "parruda" da equipe) ----
 # O Assistente e o Reparador usam as constantes reais do código; os demais têm
 # um system prompt próprio, robusto, editável pelo builder. Aplicação real no
@@ -131,7 +135,7 @@ _DEFAULT_PROMPTS = {
 _COLORS = {
     "assistente": ["#155489", "#18b1a8"],
     "construtor": ["#0f8f88", "#2dd4c4"],
-    "descritor": ["#1f6fb2", "#4a80c2"],
+    "planejador": ["#1f6fb2", "#4a80c2"],
     "reparador": ["#7c3aed", "#a78bfa"],
     "classificador": ["#c98a00", "#e0b15a"],
     "nomeador": ["#155489", "#4a80c2"],
@@ -191,7 +195,7 @@ def list_agents(user: User = Depends(get_current_user)):
         "custom": ai_config.get_graph() is not None,
         # Fase 1: aplicado de verdade no pipeline fixo. Agentes/ligações extras
         # ficam salvos como configuração até o motor de orquestração (Fase 2).
-        "applied": {"assistant_prompt": True, "shared_model": True, "orchestration": False},
+        "applied": APPLIED,
     }
 
 
