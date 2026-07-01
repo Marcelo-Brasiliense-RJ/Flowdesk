@@ -14,6 +14,7 @@ from ..auth import get_current_user
 from ..config import settings
 from ..models import User
 from ..services import ai_config
+from ..services.treinador import TREINADOR_PROMPT
 from .chat import SYSTEM_PROMPT
 from .orchestrator import PLANEJADOR_PROMPT, CONSTRUTOR_PROMPT, NOMEADOR_PROMPT, CLASSIFICADOR_PROMPT
 from .repair import _REPAIR_INSTR
@@ -67,6 +68,11 @@ _AGENTS = [
      "tools": ["Plano de contas", "Lotes", "Regras De/Para"],
      "desc": "Especialista contábil: para cada grupo de histórico do extrato, sugere a contrapartida escolhendo estritamente um código do plano de contas analítico (receita p/ crédito, despesa p/ débito), em lotes pequenos para não inventar categorias.",
      "where": "classify.py · classificar_grupos"},
+    {"id": "treinador", "name": "Treinador", "role": "Aprende do validado e melhora os agentes",
+     "level": 3, "parent": None, "temp": "0.2",
+     "tools": ["Colhe exemplos", "Anonimiza", "Destila prompt", "Propõe melhorias"],
+     "desc": "Camada de auto-evolução: colhe automações publicadas e validadas, guarda o plano anonimizado e o código como exemplos, e propõe melhorias de prompt para os agentes de build. Nunca roda no fluxo de execução/publish, só no ciclo de treino.",
+     "where": "services/treinador.py"},
 ]
 
 # Prompts-semente por agente. O board mostra os prompts REAIS que o orquestrador
@@ -79,6 +85,7 @@ _DEFAULT_PROMPTS = {
     "nomeador": NOMEADOR_PROMPT,
     "reparador": _REPAIR_INSTR,
     "classificador": CLASSIFICADOR_PROMPT,
+    "treinador": TREINADOR_PROMPT,
 }
 
 
@@ -90,6 +97,7 @@ _COLORS = {
     "reparador": ["#7c3aed", "#a78bfa"],
     "classificador": ["#c98a00", "#e0b15a"],
     "nomeador": ["#155489", "#4a80c2"],
+    "treinador": ["#0d9488", "#5eead4"],
 }
 
 # Layout do canvas do builder (px).
