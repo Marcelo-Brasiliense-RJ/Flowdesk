@@ -70,6 +70,70 @@ def _plan_profile_context(plan: dict, profile: dict) -> str:
     return "\n\n".join(parts)
 
 
+def _execution_context(execu) -> str:
+    """Bloco com o ERRO (stderr) e o RESULTADO (output_data) da execução. Em falso
+    sucesso não há stderr, então o resultado é o único sinal do que ficou errado."""
+    parts = []
+    stderr = (getattr(execu, "stderr", "") or "").strip()
+    if stderr:
+        parts.append("ERRO (stderr):\n" + stderr[:3000])
+    output = getattr(execu, "output_data", None) or {}
+    if output:
+        resumo = output.get("resumo")
+        if isinstance(resumo, str) and resumo.strip():
+            parts.append("RESUMO DO RESULTADO:\n" + resumo[:1500])
+        outras = {k: v for k, v in output.items() if k not in ("resumo",) and not str(k).startswith("_")}
+        if outras:
+            parts.append("SAÍDA (chaves):\n" + json.dumps(outras, ensure_ascii=False, default=str)[:1500])
+    return "\n\n".join(parts)
+
+
+def run_repair(db: Session, project, stage: Stage, execution_id: str, hint: str | None) -> RepairProposeOut:
+    """Núcleo do reparador: monta o contexto (código + execução + plano + anexos),
+    chama a IA e devolve a proposta. Reusado pelo endpoint /repair/propose e pelo
+    fluxo de reporte no chat."""
+    row = _stage_source(db, project.id, stage)
+    code = row.content if row else ""
+
+    execu = db.get(Execution, execution_id)
+    if execu is not None and execu.project_id != project.id:
+        execu = None
+    exec_ctx = _execution_context(execu) if execu is not None else ""
+    input_data = (execu.input_data if execu else {}) or {}
+
+    paths = [v for v in input_data.values() if isinstance(v, str) and v]
+    ctx = _attachment_context(project.id, paths) if paths else ""
+
+    messages = [{"role": "system", "content": _REPAIR_INSTR}]
+    if ctx:
+        messages.append({"role": "system", "content": ctx})
+    pp_ctx = _plan_profile_context(project.plan, project.accounting_profile)
+    if pp_ctx:
+        messages.append({"role": "system", "content": pp_ctx})
+    user_msg = f"CÓDIGO ATUAL:\n\n{code[:6000]}\n\n{exec_ctx}"
+    if hint and hint.strip():
+        user_msg += f"\n\nO QUE O USUÁRIO DIZ QUE ESTÁ ERRADO: {hint.strip()}"
+    messages.append({"role": "user", "content": user_msg})
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    resp = client.chat.completions.create(
+        model=ai_config.get_model(),
+        messages=messages,
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+    data = json.loads(resp.choices[0].message.content or "{}")
+    fixed = (data.get("fixed_code") or "").strip()
+    return RepairProposeOut(
+        diagnosis=(data.get("diagnosis") or "").strip(),
+        change_summary=(data.get("change_summary") or "").strip(),
+        fixed_code=fixed,
+        has_changes=bool(fixed) and fixed != (code or "").strip(),
+    )
+
+
 @router.post(
     "/projects/{project_id}/stages/{stage_id}/repair/propose",
     response_model=RepairProposeOut,
@@ -85,49 +149,10 @@ def repair_propose(
     if not settings.ai_enabled:
         raise HTTPException(status_code=400, detail="IA indisponível para reparo.")
     stage = _script_stage(db, project_id, stage_id)
-    row = _stage_source(db, project_id, stage)
-    code = row.content if row else ""
-
-    execu = db.get(Execution, body.execution_id)
-    stderr = (execu.stderr if execu and execu.project_id == project_id else "") or ""
-    input_data = (execu.input_data if execu else {}) or {}
-
-    paths = [v for v in input_data.values() if isinstance(v, str) and v]
-    ctx = _attachment_context(project_id, paths) if paths else ""
-
-    messages = [{"role": "system", "content": _REPAIR_INSTR}]
-    if ctx:
-        messages.append({"role": "system", "content": ctx})
-    pp_ctx = _plan_profile_context(project.plan, project.accounting_profile)
-    if pp_ctx:
-        messages.append({"role": "system", "content": pp_ctx})
-    user_msg = f"CÓDIGO ATUAL:\n\n{code[:6000]}\n\nERRO:\n\n{stderr[:3000]}"
-    if body.hint and body.hint.strip():
-        user_msg += f"\n\nDICA DO USUÁRIO: {body.hint.strip()}"
-    messages.append({"role": "user", "content": user_msg})
-
     try:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=ai_config.get_model(),
-            messages=messages,
-            response_format={"type": "json_object"},
-            temperature=0.1,
-        )
-        data = json.loads(resp.choices[0].message.content or "{}")
+        return run_repair(db, project, stage, body.execution_id, body.hint)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Falha ao consultar a IA: {exc}")
-
-    fixed = (data.get("fixed_code") or "").strip()
-    has_changes = bool(fixed) and fixed != (code or "").strip()
-    return RepairProposeOut(
-        diagnosis=(data.get("diagnosis") or "").strip(),
-        change_summary=(data.get("change_summary") or "").strip(),
-        fixed_code=fixed,
-        has_changes=has_changes,
-    )
 
 
 @router.post("/projects/{project_id}/stages/{stage_id}/repair/apply")
