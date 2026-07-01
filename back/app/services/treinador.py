@@ -56,6 +56,40 @@ def _repairs() -> list[dict]:
     return _load(_repairs_path()).get("items", [])
 
 
+def is_validated(db, project_id: int) -> bool:
+    """Publicada E estável: status live, e entre as últimas 5 execuções há pelo menos
+    um sucesso e nenhum erro. É o sinal de 'boa o suficiente para virar exemplo'."""
+    from ..models import Execution, Project
+
+    project = db.get(Project, project_id)
+    if project is None or project.status != "live":
+        return False
+    recent = (
+        db.query(Execution)
+        .filter(Execution.project_id == project_id)
+        .order_by(Execution.started_at.desc())
+        .limit(5)
+        .all()
+    )
+    statuses = [e.status for e in recent]
+    return ("success" in statuses) and ("error" not in statuses)
+
+
+def _source_fingerprint(db, project_id: int) -> str:
+    """sha1 do código atual do projeto. Muda quando o código muda -> re-colhe uma
+    versão validada nova; igual -> dedup (não re-anonimiza a cada execução)."""
+    from ..models import SourceFile
+
+    files = (
+        db.query(SourceFile)
+        .filter(SourceFile.project_id == project_id)
+        .order_by(SourceFile.path)
+        .all()
+    )
+    blob = "\n".join(f"{f.path}\x00{f.content or ''}" for f in files if not f.is_dir)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
+
+
 TREINADOR_PROMPT = (
     "Você é o Treinador do FlowDesk. Seu trabalho é analisar automações que foram "
     "publicadas e validadas (rodaram em produção sem erro) e os ajustes feitos até "
