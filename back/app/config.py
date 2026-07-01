@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    openai_model_codegen: str = "gpt-5.3-codex"
+    openai_model_strong: str = "gpt-4.1"
     script_python: str = ""
     frontend_origin: str = "http://localhost:5173"
     # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).

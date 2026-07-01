@@ -20,6 +20,14 @@ _PATH = STORAGE_DIR / "ai_config.json"
 _lock = threading.Lock()
 
 
+def _agent_model_defaults() -> dict:
+    return {
+        "construtor": settings.openai_model_codegen,
+        "reparador": settings.openai_model_strong,
+        "treinador": settings.openai_model_strong,
+    }
+
+
 def _load() -> dict:
     try:
         return json.loads(_PATH.read_text(encoding="utf-8"))
@@ -141,8 +149,11 @@ def get_temp(agent_id: str, default: float = 0.2) -> float:
 
 
 def get_agent_model(agent_id: str) -> str:
-    """Modelo efetivo do agente: modelo do nó no grafo -> modelo compartilhado."""
+    """Modelo efetivo do agente: modelo do nó no grafo -> default por agente -> modelo compartilhado."""
     a = _graph_agent(agent_id)
     if a and isinstance(a.get("model"), str) and a["model"].strip():
         return a["model"].strip()
+    d = _agent_model_defaults().get(agent_id)
+    if d:
+        return d
     return get_model()
