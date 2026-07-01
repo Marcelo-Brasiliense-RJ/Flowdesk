@@ -36,23 +36,46 @@ def get_db() -> Generator[Session, None, None]:
 
 
 # Colunas de orquestração (Fase 2) adicionadas a bancos já existentes.
-# SQLite não cria colunas novas via create_all; seguimos o mesmo padrão de
-# micro-migração do lifespan (ver back/main.py). Idempotente.
-_ORCH_COLUMNS = {
+# SQLite: o tipo JSON genérico do SQLAlchemy mapeia para TEXT (com processor de
+# serialização), então TEXT é o tipo correto lá. Postgres: as colunas JSON precisam
+# ser JSONB (o psycopg devolve JSONB já desserializado como dict; uma coluna TEXT
+# vazaria a string crua '{}' para o schema, que espera dict).
+_ORCH_COLUMNS_SQLITE = {
     "phase": "VARCHAR(20) NOT NULL DEFAULT ''",
     "plan": "TEXT NOT NULL DEFAULT '{}'",
     "accounting_profile": "TEXT NOT NULL DEFAULT '{}'",
 }
+_ORCH_COLUMNS_PG = {
+    "phase": "VARCHAR(20) NOT NULL DEFAULT ''",
+    "plan": "JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "accounting_profile": "JSONB NOT NULL DEFAULT '{}'::jsonb",
+}
+_JSON_COLS = ("plan", "accounting_profile")
 
 
 def ensure_orchestration_columns(conn, dialect: str) -> None:
-    """Adiciona phase/plan/accounting_profile a projects se faltarem. Recebe uma
-    connection já aberta. Idempotente em SQLite (PRAGMA) e Postgres (IF NOT EXISTS)."""
+    """Adiciona phase/plan/accounting_profile a projects se faltarem, e no Postgres
+    corrige colunas JSON que uma versão anterior criou como TEXT (auto-heal para
+    JSONB). Recebe uma connection já aberta. Idempotente."""
     if dialect == "sqlite":
         existing = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)"))}
-        for name, ddl in _ORCH_COLUMNS.items():
+        for name, ddl in _ORCH_COLUMNS_SQLITE.items():
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE projects ADD COLUMN {name} {ddl}"))
-    else:
-        for name, ddl in _ORCH_COLUMNS.items():
-            conn.execute(text(f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {name} {ddl}"))
+        return
+    # Postgres e compatíveis
+    for name, ddl in _ORCH_COLUMNS_PG.items():
+        conn.execute(text(f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {name} {ddl}"))
+    # auto-heal: colunas JSON criadas como TEXT por uma versão anterior viram JSONB.
+    # Guardado por data_type, então roda uma vez só; depois é no-op.
+    for col in _JSON_COLS:
+        dt = conn.execute(
+            text(
+                "select data_type from information_schema.columns "
+                "where table_name = 'projects' and column_name = :c"
+            ),
+            {"c": col},
+        ).scalar()
+        if dt and dt.lower() == "text":
+            conn.execute(text(f"ALTER TABLE projects ALTER COLUMN {col} TYPE jsonb USING {col}::jsonb"))
+            conn.execute(text(f"ALTER TABLE projects ALTER COLUMN {col} SET DEFAULT '{{}}'::jsonb"))
