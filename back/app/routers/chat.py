@@ -751,13 +751,42 @@ def reject_action(
     return {"ok": True, "status": "rejected"}
 
 
+def _count_input_files(code: str) -> int:
+    """Quantos arquivos de entrada o script usa, para montar N campos de arquivo no
+    Form de entrada. get_file()/get_file(0) conta como 1; usar get_file(1) implica 2,
+    e assim por diante. Teto de seguranca de 5 para nao explodir com codigo estranho."""
+    indices: set[int] = set()
+    if re.search(r"get_file\(", code or ""):
+        indices.add(0)
+    for m in re.finditer(r"get_file\(\s*(\d+)\s*\)", code or ""):
+        indices.add(int(m.group(1)))
+    return min(max(indices) + 1, 5) if indices else 1
+
+
+def _input_file_fields(n: int) -> list[dict]:
+    """Campos de arquivo do Form de entrada. Um so campo mantem o nome 'arquivo'
+    (compatibilidade); dois ou mais viram 'arquivo1', 'arquivo2'..., na ordem que o
+    get_file(i) espera."""
+    if n <= 1:
+        return [{"name": "arquivo", "label": "Arquivo", "type": "file"}]
+    return [{"name": f"arquivo{i + 1}", "label": f"Arquivo {i + 1}", "type": "file"} for i in range(n)]
+
+
 def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) -> None:
     """Garante Form(entrada) -> Script -> Form(resultado) para um script gerado,
     quando o projeto ainda não tem nenhum nó executável. Sem isso, o Chat entrega
-    só o código e nada roda pela interface."""
+    só o código e nada roda pela interface. O Form de entrada ganha tantos campos de
+    arquivo quantos o script usa (get_file(0), get_file(1), ...)."""
     stages = db.query(Stage).filter(Stage.project_id == project_id).all()
     if any(s.type == "script" for s in stages):
         return False  # já existe workflow; não duplica
+
+    src = (
+        db.query(SourceFile)
+        .filter(SourceFile.project_id == project_id, SourceFile.path == script_path)
+        .first()
+    )
+    fields = _input_file_fields(_count_input_files(src.content if src else ""))
 
     used = {s.key for s in stages}
 
@@ -775,7 +804,7 @@ def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) ->
             "title": "Enviar arquivo",
             "mode": "input",
             "submit_label": "Executar",
-            "fields": [{"name": "arquivo", "label": "Arquivo", "type": "file"}],
+            "fields": fields,
         },
         pos_x=40, pos_y=120,
     )
