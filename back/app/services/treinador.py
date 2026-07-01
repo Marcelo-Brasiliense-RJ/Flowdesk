@@ -13,6 +13,7 @@ import json
 import threading
 
 from ..config import STORAGE_DIR
+from ..database import SessionLocal
 
 _DIR = STORAGE_DIR / "treinador"
 _lock = threading.Lock()
@@ -154,3 +155,85 @@ TREINADOR_PROMPT = (
     "Não invente regras não sustentadas pelos exemplos. Responda SOMENTE em JSON "
     '{"proposed_prompt": "...", "rationale": "1 a 3 frases do que muda e por quê"}.'
 )
+
+
+def anonymize_plan(plan: dict) -> dict | None:
+    """Anonimiza o plano via agente Treinador. Retorna None se a IA falhar ou
+    devolver algo inválido (nesse caso NÃO se grava exemplo, nunca vaza dado cru)."""
+    from ..config import settings
+    if not settings.ai_enabled:
+        return None
+    from ..routers.orchestrator import call_agent
+
+    raw = call_agent(
+        "treinador", TREINADOR_PROMPT,
+        [{"role": "user", "content": "TAREFA: ANONIMIZAR\nPLANO:\n"
+          + json.dumps(plan or {}, ensure_ascii=False)}],
+        json_mode=True,
+    )
+    try:
+        data = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return None
+    # o modelo pode devolver o plano direto ou aninhado em "plan"
+    result = data.get("plan") if isinstance(data.get("plan"), dict) else data
+    return result if isinstance(result, dict) and result else None
+
+
+def _entry_code(db, project_id: int) -> str:
+    """Conteúdo do maior .py do projeto (o script principal da automação)."""
+    from ..models import SourceFile
+
+    pys = [
+        f for f in db.query(SourceFile).filter(SourceFile.project_id == project_id).all()
+        if f.path.endswith(".py") and not f.is_dir and (f.content or "").strip()
+    ]
+    if not pys:
+        return ""
+    return max(pys, key=lambda f: len(f.content or "")).content
+
+
+def harvest_project(project_id: int) -> bool:
+    """Best-effort: se o projeto está validado e ainda não foi colhido nesta versão
+    de código, anonimiza o plano e grava um exemplo. NUNCA lança (é chamado por hook
+    fora do caminho crítico). Retorna True se gravou um exemplo novo."""
+    try:
+        db = SessionLocal()
+    except Exception:
+        return False
+    try:
+        if not is_validated(db, project_id):
+            return False
+        from ..models import Project
+
+        project = db.get(Project, project_id)
+        fp = _source_fingerprint(db, project_id)
+        if any(ex.get("fingerprint") == fp for ex in _examples()):
+            return False  # dedup: mesma versão já colhida
+        code = _entry_code(db, project_id)
+        if not code:
+            return False
+        anon = anonymize_plan((project.plan if project else {}) or {})
+        if anon is None:
+            return False  # anonimização falhou -> não grava (confidencialidade)
+        data = _load(_examples_path())
+        items = data.get("items", [])
+        items.append({"plan": anon, "code": code, "fingerprint": fp, "project_id": project_id})
+        _save(_examples_path(), {"items": items})
+        # sinaliza que há exemplos novos para a destilação por limiar (Task 8)
+        _bump_new_examples()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _bump_new_examples() -> None:
+    """Contador de exemplos novos desde a última destilação (limiar da Task 8)."""
+    meta = _load(_meta_path())
+    meta["new_examples"] = int(meta.get("new_examples", 0)) + 1
+    _save(_meta_path(), meta)

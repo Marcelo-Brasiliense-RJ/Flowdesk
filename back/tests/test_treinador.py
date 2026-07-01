@@ -172,3 +172,40 @@ def test_examples_context_empty_when_no_match(monkeypatch, tmp_path):
     monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
     treinador._save(treinador._examples_path(), {"items": []})
     assert treinador.examples_context({"contabil": False}) == ""
+
+
+def test_harvest_skips_when_not_validated(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    db = _mem_db()
+    p = _proj(db, status="draft")  # não validado
+    monkeypatch.setattr(treinador, "SessionLocal", lambda: db)
+    assert treinador.harvest_project(p.id) is False
+    assert treinador._examples() == []
+
+
+def test_harvest_stores_once_then_dedups(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    db = _mem_db()
+    p = _proj(db, status="live")
+    _exec(db, p.id, "success", 1)
+    db.add(SourceFile(project_id=p.id, path="processar.py", content="print(1)"))
+    p.plan = {"contabil": False, "fonte": {"formato": "xlsx"},
+              "saida": {"formato": "xlsx"}, "regra_negocio": "somar colunas"}
+    db.flush()
+    monkeypatch.setattr(treinador, "SessionLocal", lambda: db)
+    # anonimização mockada (sem IA de verdade nos testes)
+    monkeypatch.setattr(treinador, "anonymize_plan", lambda plan: plan)
+    assert treinador.harvest_project(p.id) is True
+    assert len(treinador._examples()) == 1
+    # segunda chamada com o mesmo código: dedup, não grava de novo
+    assert treinador.harvest_project(p.id) is False
+    assert len(treinador._examples()) == 1
+
+
+def test_harvest_never_raises(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(treinador, "SessionLocal", _boom)
+    # best-effort: engole tudo, retorna False
+    assert treinador.harvest_project(1) is False
