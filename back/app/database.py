@@ -77,5 +77,8 @@ def ensure_orchestration_columns(conn, dialect: str) -> None:
             {"c": col},
         ).scalar()
         if dt and dt.lower() == "text":
+            # dropar o DEFAULT texto ANTES de mudar o tipo: o Postgres nao converte
+            # o default '{}' (texto) para jsonb automaticamente durante o ALTER TYPE.
+            conn.execute(text(f"ALTER TABLE projects ALTER COLUMN {col} DROP DEFAULT"))
             conn.execute(text(f"ALTER TABLE projects ALTER COLUMN {col} TYPE jsonb USING {col}::jsonb"))
             conn.execute(text(f"ALTER TABLE projects ALTER COLUMN {col} SET DEFAULT '{{}}'::jsonb"))
