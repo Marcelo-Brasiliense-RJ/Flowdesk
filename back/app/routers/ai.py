@@ -100,27 +100,48 @@ _COLORS = {
     "treinador": ["#0d9488", "#5eead4"],
 }
 
-# Layout do canvas do builder (px).
+# Layout do canvas do builder (px). Pipeline honesto + camada meta (Treinador).
 _CANVAS_W = 760
+
+# Posições fixas por agente (x, y). Pipeline no meio, apoio nas laterais,
+# Treinador na base como camada de aprendizado.
+_POS = {
+    "assistente":   (380, 60),
+    "planejador":   (150, 210),
+    "construtor":   (380, 210),
+    "nomeador":     (610, 210),
+    "classificador":(210, 330),
+    "reparador":    (560, 330),
+    "treinador":    (380, 450),
+}
+
+# Fluxo real (arestas visuais). kind="learn" => tracejada (camada meta).
+_FLOW_EDGES = [
+    ("assistente", "planejador"),     # roteia a intenção "nova" para a entrevista
+    ("planejador", "construtor"),     # plano selado -> código
+    ("construtor", "nomeador"),       # código -> nome/descrição
+    ("classificador", "construtor"),  # enriquece o plano contábil antes do build
+    ("reparador", "construtor"),      # laço de volta: conserta o código na falha
+]
+_LEARN_EDGES = [
+    ("treinador", "planejador"),
+    ("treinador", "construtor"),
+    ("treinador", "nomeador"),
+    ("treinador", "reparador"),
+    ("treinador", "classificador"),
+]
 
 
 def _default_graph() -> dict:
-    """Grafo-semente: os 6 agentes reais, com posições e cores, e as ligações
-    de fluxo reais (Assistente → especialistas). É o que aparece antes de o
-    usuário customizar pelo builder."""
+    """Grafo-semente: os 7 agentes reais num pipeline honesto (Assistente roteia →
+    Planejador → Construtor → Nomeador), com Classificador e Reparador como apoio e
+    o Treinador como camada meta (arestas tracejadas 'learn' para todos os de build).
+    É o que aparece antes de o usuário customizar pelo builder."""
     model = ai_config.get_model()
-    specialists = [a for a in _AGENTS if a["level"] != 1]
-    n = len(specialists)
-    left, right = 110, _CANVAS_W - 110
     agents = []
     for a in _AGENTS:
         c1, c2 = _COLORS.get(a["id"], ["#155489", "#18b1a8"])
-        if a["level"] == 1:
-            x, y = _CANVAS_W // 2, 70
-        else:
-            i = specialists.index(a)
-            x = _CANVAS_W // 2 if n <= 1 else round(left + (right - left) * i / (n - 1))
-            y = 320
+        x, y = _POS.get(a["id"], (_CANVAS_W // 2, 240))
         agents.append({
             "id": a["id"], "name": a["name"], "role": a["role"], "level": a["level"],
             "desc": a["desc"], "tools": list(a["tools"]), "temp": a["temp"], "where": a["where"],
@@ -129,9 +150,14 @@ def _default_graph() -> dict:
             "builtin": True, "kind": a["id"],
             "editablePrompt": True,
         })
+    known = {a["id"] for a in _AGENTS}
     edges = []
-    for i, a in enumerate(x for x in _AGENTS if x["parent"]):
-        edges.append({"id": f"e{i}", "from": a["parent"], "to": a["id"]})
+    for i, (frm, to) in enumerate(_FLOW_EDGES):
+        if frm in known and to in known:
+            edges.append({"id": f"f{i}", "from": frm, "to": to})
+    for i, (frm, to) in enumerate(_LEARN_EDGES):
+        if frm in known and to in known:
+            edges.append({"id": f"l{i}", "from": frm, "to": to, "kind": "learn"})
     return {"agents": agents, "edges": edges}
 
 

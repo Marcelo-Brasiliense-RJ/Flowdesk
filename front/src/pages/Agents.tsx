@@ -27,6 +27,7 @@ interface Edge {
   id: string;
   from: string;
   to: string;
+  kind?: string; // "learn" => tracejada (camada meta do Treinador)
 }
 interface AgentsData {
   agents: Agent[];
@@ -354,7 +355,7 @@ export default function Agents() {
                     const selected = selEdge?.id === e.id;
                     return (
                       <g key={e.id}>
-                        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? "var(--accent)" : "var(--border-strong)"} strokeWidth={selected ? 2.4 : 1.8} markerEnd={`url(#ag-arrow${selected ? "-sel" : ""})`} strokeLinecap="round" />
+                        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={selected ? "var(--accent)" : "var(--border-strong)"} strokeWidth={selected ? 2.4 : 1.8} strokeDasharray={e.kind === "learn" ? "5 5" : undefined} markerEnd={`url(#ag-arrow${selected ? "-sel" : ""})`} strokeLinecap="round" />
                         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="16" style={{ cursor: "pointer" }} onClick={() => setSel({ kind: "edge", id: e.id })} />
                       </g>
                     );
