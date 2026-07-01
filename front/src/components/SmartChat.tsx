@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { api, getToken } from "../lib/api";
 import { useDialog } from "./Dialog";
+import { ReportCard, type ExecutionReport } from "../pages/reportCard";
 import type { ChatMessage, PendingAction, Stage } from "../lib/types";
 
 export default function SmartChat({
@@ -34,6 +35,25 @@ export default function SmartChat({
   const [envDrafts, setEnvDrafts] = useState<Record<number, string>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartedFor = useRef<number | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [reportExecId, setReportExecId] = useState<string | null>(null);
+  const seededReportFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    const rep = searchParams.get("report");
+    if (rep && seededReportFor.current !== rep) {
+      seededReportFor.current = rep;
+      setReportExecId(rep);
+      api
+        .post(`/api/projects/${projectId}/chat/report`, { execution_id: rep })
+        .then(() => load())
+        .catch(() => {});
+      // limpa o param da URL para não refixar em reloads
+      searchParams.delete("report");
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, projectId]);
 
   async function load() {
     setMessages(await api.get<ChatMessage[]>(`/api/projects/${projectId}/chat`));
@@ -73,6 +93,27 @@ export default function SmartChat({
     attachmentsOverride?: string[],
     filesOverride?: File[]
   ) {
+    if (reportExecId) {
+      const desc = (textOverride ?? input).trim();
+      if (!desc || busy) return;
+      setInput("");
+      setBusy(true);
+      try {
+        setMessages((m) => [...m, { id: Date.now(), role: "user", content: desc, meta: {}, tokens: 0, created_at: "" }]);
+        await api.post(`/api/projects/${projectId}/chat/report-repair`, {
+          execution_id: reportExecId,
+          message: desc,
+        });
+        setReportExecId(null);
+        await load();
+        onApplied();
+      } catch (e: any) {
+        setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", content: `Erro: ${e.message}`, meta: {}, tokens: 0, created_at: "" }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const base = textOverride ?? input;
     const extra = attachmentsOverride ?? [];
     const files = filesOverride ?? (textOverride ? [] : attached);
@@ -239,7 +280,12 @@ export default function SmartChat({
           )}
           <AnimatePresence initial={false}>
             {messages.map((m) => (
-              <Bubble key={m.id} message={m} />
+              <div key={m.id} className="space-y-2">
+                {m.meta?.execution_report && (
+                  <ReportCard report={m.meta.execution_report as ExecutionReport} />
+                )}
+                <Bubble message={m} />
+              </div>
             ))}
           </AnimatePresence>
           {streaming && (
@@ -403,7 +449,7 @@ export default function SmartChat({
           <textarea
             className="input min-h-[42px] resize-none"
             rows={1}
-            placeholder="Descreva o que automatizar..."
+            placeholder={reportExecId ? "Descreva o que ficou errado neste resultado..." : "Descreva o que automatizar..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
