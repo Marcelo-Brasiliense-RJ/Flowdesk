@@ -23,6 +23,7 @@ _EDIT_VERB = re.compile(
     r"\b(mud\w*|alter\w*|ajust\w*|troc\w*|corrig\w*|renome\w*|adicion\w*|remov\w*)\b", re.I
 )
 _QUESTION = re.compile(r"\?\s*$|^\s*(o que|como|por ?que|qual|quando|quem)\b", re.I)
+_REASONING_MODEL = re.compile(r"gpt-5|o3|o4|codex", re.I)
 
 
 def _client():
@@ -40,19 +41,27 @@ def call_agent(
 ) -> str:
     """Chama um agente lendo prompt/modelo/temperatura do grafo (ai_config).
 
-    Retorna o texto da resposta. Com settings.ai_enabled desligado, retorna ""
-    (cada call-site decide o comportamento de fallback/mock)."""
+    Modelos de raciocínio/codex (gpt-5*, o3*, o4*, *codex) usam a Responses API
+    (sem temperature; o JSON é garantido pelo próprio prompt do agente, que já pede
+    'SOMENTE em JSON'). Os demais seguem em chat.completions, inalterado.
+    Com settings.ai_enabled desligado, retorna ""."""
     if not settings.ai_enabled:
         return ""
     prompt = ai_config.get_prompt(agent_id, default_prompt)
+    model = ai_config.get_agent_model(agent_id)
+    full = [{"role": "system", "content": prompt}, *messages]
+    client = _client()
+    if _REASONING_MODEL.search(model):
+        resp = client.responses.create(model=model, input=full)
+        return resp.output_text or ""
     kw = {
-        "model": ai_config.get_agent_model(agent_id),
+        "model": model,
         "temperature": ai_config.get_temp(agent_id),
-        "messages": [{"role": "system", "content": prompt}, *messages],
+        "messages": full,
     }
     if json_mode:
         kw["response_format"] = {"type": "json_object"}
-    resp = _client().chat.completions.create(**kw)
+    resp = client.chat.completions.create(**kw)
     return resp.choices[0].message.content or ""
 
 
