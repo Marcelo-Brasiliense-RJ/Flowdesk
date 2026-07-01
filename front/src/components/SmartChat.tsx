@@ -231,7 +231,7 @@ export default function SmartChat({
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className={`${colCls} space-y-3`}>
-          {messages.length === 0 && (
+          {messages.length === 0 && !busy && !streaming && (
             <div className="rounded-2xl border border-line bg-surface-2 p-4 text-sm text-ink2">
               Descreva a automação que você quer criar. A IA fará perguntas e
               proporá ações que você aprova antes de aplicar.
