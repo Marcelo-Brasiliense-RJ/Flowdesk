@@ -138,3 +138,37 @@ def test_source_fingerprint_skips_dirs():
     fp_after = treinador._source_fingerprint(db, p.id)
 
     assert fp_before == fp_after
+
+
+def _example(contabil, fonte_fmt, saida_fmt, regra, code="x"):
+    return {
+        "plan": {
+            "contabil": contabil,
+            "fonte": {"formato": fonte_fmt},
+            "saida": {"formato": saida_fmt},
+            "regra_negocio": regra,
+        },
+        "code": code, "fingerprint": regra, "project_id": 1,
+    }
+
+
+def test_select_prefers_same_format_and_contabil(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    treinador._save(treinador._examples_path(), {"items": [
+        _example(True, "xlsx", "xlsx", "conciliação de razão contábil", code="A"),
+        _example(False, "csv", "pdf", "relatório de vendas mensal", code="B"),
+        _example(True, "xlsx", "xlsx", "aging de contas a receber", code="C"),
+    ]})
+    plan = {"contabil": True, "fonte": {"formato": "xlsx"},
+            "saida": {"formato": "xlsx"}, "regra_negocio": "conciliação de razão"}
+    picked = treinador.select_examples(plan, k=2)
+    assert len(picked) == 2
+    codes = {e["code"] for e in picked}
+    assert "B" not in codes  # nada em comum, score 0 -> fora
+    assert "A" in codes      # maior overlap de regra_negocio
+
+
+def test_examples_context_empty_when_no_match(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    treinador._save(treinador._examples_path(), {"items": []})
+    assert treinador.examples_context({"contabil": False}) == ""
