@@ -11,6 +11,7 @@ import re
 from ..config import settings
 from ..services import ai_config
 from ..services.plan_schema import Plan, plan_is_complete, plan_missing_fields
+from ..services.reference_code import reference_for_task, REF_LOW, REF_HIGH
 
 
 ROUTER_PROMPT = (
@@ -186,6 +187,18 @@ CONSTRUTOR_PROMPT = (
 )
 
 
+def _seed_primary_script(actions: list[dict], code: str) -> list[dict]:
+    """Força o conteúdo do script .py principal com o código de referência (semente
+    determinística). Se não houver .py nas actions, cria um."""
+    for a in actions:
+        if a.get("kind") in ("create_file", "edit_file") and (a.get("path") or "").endswith(".py"):
+            a["content"] = code
+            return actions
+    actions.append({"kind": "create_file", "title": "Criar script",
+                    "path": "automacao.py", "content": code})
+    return actions
+
+
 def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
     """Gera o código a partir do PLANO selado (e do perfil contábil quando aplicável).
     Devolve {message, actions} no formato que chat._apply_action consome."""
@@ -199,13 +212,24 @@ def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
         )
     if project_context:
         blocks.append(project_context)
+    ref = reference_for_task(
+        json.dumps(plan or {}, ensure_ascii=False) + " " + (project_context or "")
+    )
+    if ref and ref["score"] >= REF_LOW:
+        blocks.append(
+            "IMPLEMENTAÇÃO DE REFERÊNCIA PROVADA (adapte, não reescreva do zero):\n"
+            f"```python\n{ref['code']}\n```"
+        )
     messages = [{"role": "user", "content": "\n\n".join(blocks)}]
     raw = call_agent("construtor", CONSTRUTOR_PROMPT, messages, json_mode=True)
     try:
         data = json.loads(raw or "{}")
     except (json.JSONDecodeError, TypeError):
         data = {}
-    return {"message": data.get("message") or "", "actions": data.get("actions") or []}
+    actions = data.get("actions") or []
+    if ref and ref["score"] >= REF_HIGH:
+        actions = _seed_primary_script(actions, ref["code"])
+    return {"message": data.get("message") or "", "actions": actions}
 
 
 NOMEADOR_PROMPT = (
