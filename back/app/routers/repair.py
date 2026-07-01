@@ -101,7 +101,7 @@ def _execution_report_snapshot(execu) -> dict:
     output = (getattr(execu, "output_data", None) or {})
     stderr = (getattr(execu, "stderr", "") or "").strip()
     input_data = (getattr(execu, "input_data", None) or {})
-    files = [v.split("/")[-1] for v in input_data.values() if isinstance(v, str) and "/" in v]
+    files = [v.replace("\\", "/").split("/")[-1] for v in input_data.values() if isinstance(v, str) and ("/" in v or "\\" in v)]
     return {
         "execution_id": execu.id,
         "status": execu.status,

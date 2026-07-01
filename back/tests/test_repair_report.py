@@ -29,7 +29,7 @@ def test_snapshot_do_reporte():
         status = "success"
         stderr = ""
         output_data = {"resumo": "10 casados", "arquivo_resultado": "r.xlsx", "_oculto": 1}
-        input_data = {"arquivo1": "uploads/extrato.xlsx", "arquivo2": "uploads/razao.xlsx"}
+        input_data = {"arquivo1": "uploads/extrato.xlsx", "arquivo2": "C:\\tmp\\_uploads\\abc\\razao.xlsx"}
     snap = _execution_report_snapshot(E())
     assert snap["execution_id"] == "abc"
     assert snap["status"] == "success"
