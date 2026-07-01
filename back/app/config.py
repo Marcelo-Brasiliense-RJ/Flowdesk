@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,6 +10,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACK_DIR = Path(__file__).resolve().parent.parent
 STORAGE_DIR = BACK_DIR / "storage"
 DB_PATH = BACK_DIR / "flowdesk.db"
+# Código materializado para execução (script do projeto + flowdesk_sdk.py). Fica
+# FORA de BACK_DIR de propósito: o runtime regrava esses .py a cada execução e, se
+# ficassem sob back/, o `uvicorn --reload` (que observa o diretório de trabalho)
+# reiniciaria o servidor no meio da execução e mataria o teste. Os dados do projeto
+# (uploads, output, runs) continuam em STORAGE_DIR; só o código roda a partir daqui.
+RUNTIME_SRC_DIR = Path(tempfile.gettempdir()) / "flowdesk-runtime-src"
 
 
 class Settings(BaseSettings):
