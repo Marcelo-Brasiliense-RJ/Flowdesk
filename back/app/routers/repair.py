@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
+from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -139,11 +140,9 @@ def run_repair(db: Session, project, stage: Stage, execution_id: str, hint: str 
         user_msg += f"\n\nO QUE O USUÁRIO DIZ QUE ESTÁ ERRADO: {hint.strip()}"
     messages.append({"role": "user", "content": user_msg})
 
-    from openai import OpenAI
-
     client = OpenAI(api_key=settings.openai_api_key)
     resp = client.chat.completions.create(
-        model=ai_config.get_model(),
+        model=ai_config.get_agent_model("reparador"),
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
