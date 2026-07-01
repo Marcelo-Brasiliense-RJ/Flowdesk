@@ -13,9 +13,10 @@ from ..auth import get_current_user
 from ..config import settings
 from ..services import ai_config
 from ..database import get_db
-from ..models import ChatMessage, Execution, SourceFile, Stage, User
+from ..models import ChatMessage, Execution, PendingAction, SourceFile, Stage, User
 from ..schemas import (
     ChatMessageOut,
+    PendingActionOut,
     ReportRepairIn,
     ReportSeedIn,
     RepairApplyIn,
@@ -157,6 +158,13 @@ def run_repair(db: Session, project, stage: Stage, execution_id: str, hint: str 
     )
 
 
+def _repair_action_payload(entry_file: str, proposal: RepairProposeOut) -> dict | None:
+    """Payload da PendingAction de correção, ou None quando a IA não propôs mudança."""
+    if not proposal.has_changes:
+        return None
+    return {"path": entry_file, "content": proposal.fixed_code}
+
+
 @router.post(
     "/projects/{project_id}/stages/{stage_id}/repair/propose",
     response_model=RepairProposeOut,
@@ -221,3 +229,59 @@ def chat_report(
     db.commit()
     db.refresh(msg)
     return msg
+
+
+@router.post("/projects/{project_id}/chat/report-repair")
+def chat_report_repair(
+    project_id: int,
+    body: ReportRepairIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    project = get_project(db, project_id, user)
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=400, detail="IA indisponível para reparo.")
+    execu = db.get(Execution, body.execution_id)
+    if execu is None or execu.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Execução não encontrada")
+    stage = _script_stage(db, project_id, execu.stage_id)
+
+    db.add(ChatMessage(
+        project_id=project_id, role="user",
+        content=body.message, meta={"execution_id": body.execution_id}, tokens=0,
+    ))
+    try:
+        proposal = run_repair(db, project, stage, body.execution_id, body.message)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar a IA: {exc}")
+
+    texto = proposal.diagnosis
+    if proposal.change_summary:
+        texto = (texto + "\n\n" + proposal.change_summary).strip()
+    if not proposal.has_changes:
+        texto = (texto or "Não encontrei uma correção automática.") + (
+            "\n\nSe puder, detalhe melhor o que ficou errado no resultado."
+        )
+    assistant = ChatMessage(project_id=project_id, role="assistant", content=texto, meta={}, tokens=0)
+    db.add(assistant)
+
+    action = None
+    payload = _repair_action_payload(stage.entry_file, proposal)
+    if payload is not None:
+        action = PendingAction(
+            project_id=project_id,
+            kind="edit_file",
+            title="Correção da automação",
+            payload=payload,
+        )
+        db.add(action)
+    db.commit()
+    db.refresh(assistant)
+    out_action = None
+    if action is not None:
+        db.refresh(action)
+        out_action = PendingActionOut.model_validate(action).model_dump(mode="json")
+    return {
+        "message": ChatMessageOut.model_validate(assistant).model_dump(mode="json"),
+        "action": out_action,
+    }
