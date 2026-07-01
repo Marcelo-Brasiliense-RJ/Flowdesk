@@ -82,18 +82,30 @@ def route_intent(last_user: str, has_workflow: bool) -> str:
 
 
 PLANEJADOR_PROMPT = (
-    "Você é o Planejador do FlowDesk. ANTES de qualquer código, conduza a "
-    "entrevista de descoberta no estilo grill-me: uma pergunta por vez, objetiva e "
-    "acolhedora, resolvendo cada ramo da árvore de decisão (fonte e formato dos "
-    "dados, significado das colunas, regra de negócio, contrato de saída, gatilho, "
-    "tratamento de erros). Sempre ofereça uma recomendação, mas deixe o usuário "
-    "decidir; nunca assuma em silêncio. Se a tarefa for contábil ou fiscal, faça "
-    "também as perguntas de perfil (regime, plano de contas, ERP destino). "
+    "Você é o Planejador do FlowDesk. Seu trabalho é montar um PLANO de automação "
+    "conversando com o usuário, uma pergunta por vez, e só então liberar a "
+    "construção. Seja decidido, não burocrático.\n"
+    "LEIA o contexto dos arquivos anexados (colunas e amostras). NUNCA pergunte o que "
+    "já está visível ali: se as colunas aparecem, registre-as no plano (fonte.colunas) "
+    "e siga em frente. Só pergunte o que a informação disponível NÃO resolve: uma "
+    "regra de negócio ambígua, uma tolerância, o formato de saída quando não óbvio. "
+    "Uma pergunta por vez, com 2 a 4 opções e uma recomendação. Pergunte apenas o "
+    "essencial (idealmente 0 a 2 perguntas quando o pedido e os arquivos já são "
+    "claros). Só faça perguntas de perfil contábil (regime, plano de contas, ERP "
+    "destino) quando a tarefa REALMENTE for contábil/fiscal e isso mudar o resultado.\n"
+    "Preencha os campos críticos do plano assim que possível: fonte.formato, "
+    "regra_negocio, saida.formato, gatilho (assuma 'manual' se o usuário não indicar "
+    "outro). Quando esses quatro estiverem preenchidos, PARE a descoberta e faça UMA "
+    "única pergunta de confirmação, com id 'confirmar', label resumindo o que a "
+    "automação vai fazer e perguntando se pode montar, options ['Sim, pode montar', "
+    "'Quero ajustar algo'].\n"
     "Responda SOMENTE em JSON: "
-    '{"questions": [{"id": "...", "label": "...", "options": ["..."], "recommended": "..."}], '
-    '"plan": {<campos do plano preenchidos ATÉ AQUI: fonte{formato,descricao,colunas[]}, '
-    'regra_negocio, saida{formato,contrato,colunas[],destino_sistema}, gatilho, '
-    'tratamento_erros, contabil, notas>}, "contabil": <bool>, '
+    '{"message": "1 a 2 frases curtas e amigáveis narrando o que você entendeu e o '
+    'próximo passo (sempre preencha, nunca vazio)", '
+    '"questions": [{"id": "...", "label": "...", "options": ["..."], "recommended": "..."}], '
+    '"plan": {fonte:{formato,descricao,colunas:[{nome,significado}]}, regra_negocio, '
+    "saida:{formato,contrato,colunas:[],destino_sistema}, gatilho, tratamento_erros, "
+    'contabil, notas}, "contabil": <bool>, '
     '"perfil_perguntas": [{"id": "...", "label": "...", "options": ["..."]}]}. '
     "Devolva o plano COMPLETO acumulado a cada turno (não só o delta). Não escreva código."
 )
@@ -109,10 +121,13 @@ def _deep_merge(base: dict, over: dict) -> dict:
     return out
 
 
-def run_planejador(messages: list[dict], plan: dict) -> dict:
-    """Conduz a entrevista e acumula o plano. Devolve perguntas, plano mesclado e
-    validado, campos críticos faltando, flag contábil e perguntas de perfil."""
-    raw = call_agent("planejador", PLANEJADOR_PROMPT, messages, json_mode=True)
+def run_planejador(messages: list[dict], plan: dict, context: str = "") -> dict:
+    """Conduz a entrevista e acumula o plano. Recebe o contexto dos arquivos/projeto
+    (`context`) para que o Planejador leia as colunas reais em vez de perguntá-las.
+    Devolve mensagem, perguntas, plano mesclado e validado, campos críticos faltando,
+    flag contábil e perguntas de perfil."""
+    msgs = ([{"role": "system", "content": context}] if context else []) + list(messages)
+    raw = call_agent("planejador", PLANEJADOR_PROMPT, msgs, json_mode=True)
     try:
         data = json.loads(raw or "{}")
     except (json.JSONDecodeError, TypeError):
@@ -128,6 +143,7 @@ def run_planejador(messages: list[dict], plan: dict) -> dict:
     validated = plan_obj.model_dump()
     missing = plan_missing_fields(plan_obj)
     return {
+        "message": (data.get("message") or "").strip(),
         "questions": data.get("questions") or [],
         "plan": validated,
         "missing": missing,
@@ -262,6 +278,31 @@ def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> s
     return current
 
 
+def _build_turn(plan: dict, profile: dict, project_context: str) -> dict:
+    """Roda o Construtor (com enriquecimento contábil quando aplicável) e o Nomeador,
+    devolvendo o turno de construção. Reusado pelo build explícito e pela convergência
+    da entrevista."""
+    plan2 = plan or {}
+    profile2 = profile or {}
+    if plan2.get("contabil"):
+        en = enrich_accounting(plan2, profile2)
+        plan2, profile2 = en["plan"], en["profile"]
+    cons = run_construtor(plan2, profile2, project_context)
+    actions = cons.get("actions") or []
+    code = next(
+        (a.get("content", "") for a in actions
+         if a.get("kind") in ("create_file", "edit_file") and (a.get("path") or "").endswith(".py")),
+        "",
+    )
+    nm = run_nomeador(plan2, code)
+    return {
+        "mode": "building", "text": cons.get("message") or "", "questions": [],
+        "actions": actions, "phase": "done", "plan": plan2, "profile": profile2,
+        "suggested_name": nm.get("name") or "", "suggested_desc": nm.get("description") or "",
+        "plan_for_review": plan2,
+    }
+
+
 def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
                      user_confirmed: bool, history: list[dict], project_context: str) -> dict:
     """Dispatch determinístico de um turno do chat. Decide a próxima fase e roda o
@@ -276,33 +317,21 @@ def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
         return {"mode": "answer", "phase": phase or "", "plan": plan or {}, "profile": profile or {}}
 
     if new_phase == "planning":
-        pj = run_planejador(history, plan or {})
+        pj = run_planejador(history, plan or {}, project_context)
         questions = list(pj.get("questions") or []) + list(pj.get("profile_questions") or [])
+        pj_plan = pj.get("plan") or {}
+        # sela quando o usuário confirma E o plano (recém-atualizado neste turno) já
+        # está completo, mesmo que a completude só tenha ocorrido agora. Sem isso, a
+        # entrevista entraria em loop esperando um estado persistido que nunca chega.
+        if user_confirmed and not (pj.get("missing") or []):
+            return _build_turn(pj_plan, profile, project_context)
         return {
-            "mode": "planning", "text": "", "questions": questions, "actions": [],
-            "phase": "planning", "plan": pj.get("plan") or {}, "profile": profile or {},
+            "mode": "planning", "text": pj.get("message") or "", "questions": questions,
+            "actions": [], "phase": "planning", "plan": pj_plan, "profile": profile or {},
             "missing": pj.get("missing") or [],
         }
 
     if new_phase == "building":
-        plan2 = plan or {}
-        profile2 = profile or {}
-        if plan2.get("contabil"):
-            en = enrich_accounting(plan2, profile2)
-            plan2, profile2 = en["plan"], en["profile"]
-        cons = run_construtor(plan2, profile2, project_context)
-        actions = cons.get("actions") or []
-        code = next(
-            (a.get("content", "") for a in actions
-             if a.get("kind") in ("create_file", "edit_file") and (a.get("path") or "").endswith(".py")),
-            "",
-        )
-        nm = run_nomeador(plan2, code)
-        return {
-            "mode": "building", "text": cons.get("message") or "", "questions": [],
-            "actions": actions, "phase": "done", "plan": plan2, "profile": profile2,
-            "suggested_name": nm.get("name") or "", "suggested_desc": nm.get("description") or "",
-            "plan_for_review": plan2,
-        }
+        return _build_turn(plan or {}, profile, project_context)
 
     return {"mode": "answer", "phase": phase or "", "plan": plan or {}, "profile": profile or {}}

@@ -374,6 +374,11 @@ def chat_stream(
         intent = route_intent(body.content, has_workflow)
         user_confirmed = _is_build_intent(body.content)
         _orch_ctx = _project_context(db, project_id)
+        # colunas/amostras reais dos arquivos anexados: o Planejador precisa disso
+        # para ler as colunas em vez de perguntá-las (senão a entrevista fica genérica).
+        _att_ctx = _attachment_context(project_id, body.attachments)
+        if _att_ctx:
+            _orch_ctx = _orch_ctx + "\n\n" + _att_ctx
         _src_ctx = _source_context(db, project_id)
         if _src_ctx:
             _orch_ctx = _orch_ctx + "\n\n" + _src_ctx

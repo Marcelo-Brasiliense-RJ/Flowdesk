@@ -36,3 +36,19 @@ def test_planejador_handles_bad_json(monkeypatch):
     out = orchestrator.run_planejador([{"role": "user", "content": "x"}], {})
     assert out["questions"] == []
     assert isinstance(out["missing"], list)
+
+
+def test_planejador_recebe_contexto_e_devolve_message(monkeypatch):
+    captured = {}
+
+    def fake_call(agent_id, default, messages, **k):
+        captured["msgs"] = messages
+        return json.dumps({"message": "Li o extrato: 2 colunas.", "questions": [],
+                           "plan": {"fonte": {"formato": "xlsx"}}, "contabil": False})
+
+    monkeypatch.setattr(orchestrator, "call_agent", fake_call)
+    out = orchestrator.run_planejador([{"role": "user", "content": "x"}], {},
+                                      context="COLUNAS REAIS: Data, Valor, Histórico")
+    assert out["message"] == "Li o extrato: 2 colunas."
+    # o contexto dos arquivos entra como primeira mensagem, antes do histórico
+    assert any("COLUNAS REAIS" in m.get("content", "") for m in captured["msgs"])
