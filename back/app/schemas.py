@@ -126,6 +126,15 @@ class RepairApplyIn(BaseModel):
     code: str
 
 
+class ReportSeedIn(BaseModel):
+    execution_id: str
+
+
+class ReportRepairIn(BaseModel):
+    execution_id: str
+    message: str
+
+
 class ProjectOut(ORMModel):
     id: int
     name: str

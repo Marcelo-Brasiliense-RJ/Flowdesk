@@ -13,8 +13,15 @@ from ..auth import get_current_user
 from ..config import settings
 from ..services import ai_config
 from ..database import get_db
-from ..models import Execution, SourceFile, Stage, User
-from ..schemas import RepairApplyIn, RepairProposeIn, RepairProposeOut
+from ..models import ChatMessage, Execution, SourceFile, Stage, User
+from ..schemas import (
+    ChatMessageOut,
+    ReportRepairIn,
+    ReportSeedIn,
+    RepairApplyIn,
+    RepairProposeIn,
+    RepairProposeOut,
+)
 from .chat import _attachment_context
 from .projects import get_project
 
@@ -86,6 +93,22 @@ def _execution_context(execu) -> str:
         if outras:
             parts.append("SAÍDA (chaves):\n" + json.dumps(outras, ensure_ascii=False, default=str)[:1500])
     return "\n\n".join(parts)
+
+
+def _execution_report_snapshot(execu) -> dict:
+    """Resumo da execucao para fixar no chat (card). So nomes de arquivo, sem caminhos."""
+    output = (getattr(execu, "output_data", None) or {})
+    stderr = (getattr(execu, "stderr", "") or "").strip()
+    input_data = (getattr(execu, "input_data", None) or {})
+    files = [v.split("/")[-1] for v in input_data.values() if isinstance(v, str) and "/" in v]
+    return {
+        "execution_id": execu.id,
+        "status": execu.status,
+        "resumo": output.get("resumo") if isinstance(output.get("resumo"), str) else None,
+        "output_keys": [k for k in output.keys() if not str(k).startswith("_")],
+        "stderr_excerpt": stderr[:600] or None,
+        "input_files": files,
+    }
 
 
 def run_repair(db: Session, project, stage: Stage, execution_id: str, hint: str | None) -> RepairProposeOut:
@@ -174,3 +197,27 @@ def repair_apply(
         db.add(SourceFile(project_id=project_id, path=stage.entry_file, content=body.code))
     db.commit()
     return {"ok": True}
+
+
+@router.post("/projects/{project_id}/chat/report", response_model=ChatMessageOut)
+def chat_report(
+    project_id: int,
+    body: ReportSeedIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_project(db, project_id, user)
+    execu = db.get(Execution, body.execution_id)
+    if execu is None or execu.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Execução não encontrada")
+    msg = ChatMessage(
+        project_id=project_id,
+        role="assistant",
+        content="Vi o resultado desta execução. Me diga o que ficou errado que eu ajusto a automação.",
+        meta={"execution_report": _execution_report_snapshot(execu)},
+        tokens=0,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg

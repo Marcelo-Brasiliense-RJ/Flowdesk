@@ -1,4 +1,4 @@
-from app.routers.repair import _execution_context
+from app.routers.repair import _execution_context, _execution_report_snapshot
 
 
 class _Exec:
@@ -20,3 +20,18 @@ def test_contexto_em_falso_sucesso_sem_stderr():
     ex = _Exec(stderr="", output_data={"resumo": "0 casados"})
     ctx = _execution_context(ex)
     assert "0 casados" in ctx
+
+
+def test_snapshot_do_reporte():
+    class E:
+        id = "abc"
+        status = "success"
+        stderr = ""
+        output_data = {"resumo": "10 casados", "arquivo_resultado": "r.xlsx", "_oculto": 1}
+        input_data = {"arquivo1": "uploads/extrato.xlsx", "arquivo2": "uploads/razao.xlsx"}
+    snap = _execution_report_snapshot(E())
+    assert snap["execution_id"] == "abc"
+    assert snap["status"] == "success"
+    assert snap["resumo"] == "10 casados"
+    assert snap["input_files"] == ["extrato.xlsx", "razao.xlsx"]
+    assert "_oculto" not in snap["output_keys"]
