@@ -202,6 +202,38 @@ def test_harvest_stores_once_then_dedups(monkeypatch, tmp_path):
     assert len(treinador._examples()) == 1
 
 
+def test_harvest_does_not_store_when_anonymize_returns_none(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    db = _mem_db()
+    p = _proj(db, status="live")
+    _exec(db, p.id, "success", 1)
+    db.add(SourceFile(project_id=p.id, path="processar.py", content="print(1)"))
+    p.plan = {"contabil": False, "fonte": {"formato": "xlsx"},
+              "saida": {"formato": "xlsx"}, "regra_negocio": "somar colunas"}
+    db.flush()
+    monkeypatch.setattr(treinador, "SessionLocal", lambda: db)
+    # anonimização falhou (IA indisponível/resposta inválida) -> nada pode ser gravado
+    monkeypatch.setattr(treinador, "anonymize_plan", lambda plan: None)
+    assert treinador.harvest_project(p.id) is False
+    assert treinador._examples() == []
+
+
+def test_harvest_does_not_store_when_no_python_code(monkeypatch, tmp_path):
+    monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
+    db = _mem_db()
+    p = _proj(db, status="live")
+    _exec(db, p.id, "success", 1)
+    # sem arquivo .py com conteúdo: só um arquivo vazio
+    db.add(SourceFile(project_id=p.id, path="processar.py", content=""))
+    p.plan = {"contabil": False, "fonte": {"formato": "xlsx"},
+              "saida": {"formato": "xlsx"}, "regra_negocio": "somar colunas"}
+    db.flush()
+    monkeypatch.setattr(treinador, "SessionLocal", lambda: db)
+    monkeypatch.setattr(treinador, "anonymize_plan", lambda plan: plan)
+    assert treinador.harvest_project(p.id) is False
+    assert treinador._examples() == []
+
+
 def test_harvest_never_raises(monkeypatch, tmp_path):
     monkeypatch.setattr(treinador, "_DIR", tmp_path / "treinador")
     def _boom():
