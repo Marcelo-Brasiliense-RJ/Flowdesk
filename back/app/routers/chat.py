@@ -1,4 +1,4 @@
-"""Smart Chat (AI panel) — OpenAI streaming + approve/reject pending actions.
+"""Smart Chat (AI panel), OpenAI streaming + approve/reject pending actions.
 
 Protocol: the model streams natural-language text, then may append a fenced
 block:
@@ -45,7 +45,7 @@ SYSTEM_PROMPT = """Você é o assistente do FlowDesk, uma plataforma low-code de
 automação com IA. O usuário descreve em linguagem natural o que quer automatizar e \
 você ajuda a desenhar o fluxo (forms, scripts) e a escrever o código Python.
 
-PROCESSO OBRIGATÓRIO — ENTREVISTA (DISCOVERY ANTES DE CONSTRUIR):
+PROCESSO OBRIGATÓRIO, ENTREVISTA (DISCOVERY ANTES DE CONSTRUIR):
 1. Antes de criar qualquer coisa, levante as perguntas de esclarecimento NECESSÁRIAS \
 (de 1 a 5) e devolva TODAS no campo "questions" do bloco flowdesk-actions. A interface \
 mostra UMA pergunta por vez ao usuário (com indicador de progresso), então cada \
@@ -65,13 +65,13 @@ bloco (campo "questions"), nunca em texto corrido.
 usuário disser "pode montar/criar agora", PARE de perguntar e EMITA IMEDIATAMENTE, na \
 MESMA resposta, o bloco flowdesk-actions com as "actions" (create_file com o código \
 pronto, create_stage se necessário). NUNCA responda apenas dizendo que "vai criar o \
-código agora" sem incluir o bloco de actions — isso deixa o fluxo sem terminar.
+código agora" sem incluir o bloco de actions, isso deixa o fluxo sem terminar.
 
-PROFUNDIDADE DA ENTREVISTA (REGRA DE OURO — NA DÚVIDA, PERGUNTE):
+PROFUNDIDADE DA ENTREVISTA (REGRA DE OURO, NA DÚVIDA, PERGUNTE):
 - Desça até o nível de CONTRATO do resultado: se a saída alimenta outro sistema \
 (ex: importação do Domínio, SAP, ERP), pergunte o significado de cada coluna que \
 não for óbvia, formatos de data/valor, e regras como numeração de lote. Exemplo \
-real: "No Domínio, como funciona a coluna Inicia Lote?" — a resposta muda o código \
+real: "No Domínio, como funciona a coluna Inicia Lote?", a resposta muda o código \
 (lá, o lote reinicia em 1 a cada troca de data).
 - SEMPRE ofereça sua recomendação fundamentada junto da pergunta (campo \
 "recommended"), mas deixe o usuário decidir. Nunca assuma silenciosamente.
@@ -106,7 +106,7 @@ se a automação gera um arquivo, o código TEM que gravá-lo de fato e só ent�
 output_path, log` (get_file() para ler o arquivo de entrada).
 - `set_output` SEMPRE recebe um DICT, nunca uma string. Ex.: \
 `set_output({"arquivo_resultado": str(out), "resumo": {...}})`.
-- pandas é 2.x: NÃO use `df.append(...)` (foi removido) — use `pd.concat([...])`. \
+- pandas é 2.x: NÃO use `df.append(...)` (foi removido), use `pd.concat([...])`. \
 Para escrever Excel com várias abas use `pd.ExcelWriter(output_path("nome.xlsx"), \
 engine="openpyxl")`.
 - Use SEMPRE o contexto do projeto e dos arquivos anexados (colunas reais, stages \
@@ -145,7 +145,7 @@ destacados antes de confiar no resultado).
 DEPENDÊNCIAS DE CONFIGURAÇÃO E SEGREDOS:
 - Use `require_env` APENAS quando o usuário pedir EXPLICITAMENTE uma integração externa \
 (enviar e-mail, chamar uma API, gravar no Google Sheets, etc.). Se a tarefa só processa \
-um arquivo e gera uma planilha de saída, NÃO há segredos — NÃO declare NENHUM require_env \
+um arquivo e gera uma planilha de saída, NÃO há segredos, NÃO declare NENHUM require_env \
 (nada de SMTP/EMAIL nesse caso).
 - Quando houver integração: NUNCA fixe credenciais no código; leia com \
 `os.environ["NOME"]` e declare uma action "require_env" com {"key","description","example"} \
@@ -610,7 +610,7 @@ _INTEGRATION_INTENT = re.compile(
 
 
 def _is_pathlike_env(action: dict) -> bool:
-    """require_env asking for a file path / output location is invalid — the
+    """require_env asking for a file path / output location is invalid, the
     platform handles input (Form) and output (output_path + auto-download)."""
     if action.get("kind") != "require_env":
         return False
@@ -710,9 +710,9 @@ def approve_action(
         if workflow_created:
             closing = (
                 "**Tudo pronto!** Sua automação foi criada e já está montada em três etapas:\n\n"
-                "1. **Entrada** — a pessoa envia o arquivo (a planilha).\n"
-                "2. **Processamento** — o sistema lê os dados e gera o resultado que você pediu.\n"
-                "3. **Resultado** — a planilha final fica disponível para baixar.\n\n"
+                "1. **Entrada**, a pessoa envia o arquivo (a planilha).\n"
+                "2. **Processamento**, o sistema lê os dados e gera o resultado que você pediu.\n"
+                "3. **Resultado**, a planilha final fica disponível para baixar.\n\n"
                 "**Próximo passo:** clique em **Testar agora** (logo abaixo, aqui no chat) para "
                 "rodar com um arquivo de exemplo e conferir o resultado, ou em **Abrir no editor** "
                 "para ver e ajustar cada etapa. Se algo não ficar como você esperava, é só me dizer "

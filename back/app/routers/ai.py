@@ -15,6 +15,7 @@ from ..config import settings
 from ..models import User
 from ..services import ai_config
 from .chat import SYSTEM_PROMPT
+from .orchestrator import PLANEJADOR_PROMPT, CONSTRUTOR_PROMPT, NOMEADOR_PROMPT, CLASSIFICADOR_PROMPT
 from .repair import _REPAIR_INSTR
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -32,58 +33,6 @@ MODEL_CATALOG = [
 # Estado real de aplicação no pipeline (após a Fase 2, o motor de orquestração
 # lê prompt/modelo/temperatura do grafo e roda os agentes encadeados).
 APPLIED = {"assistant_prompt": True, "shared_model": True, "orchestration": True}
-
-# ---- prompts-semente dos agentes (definição "parruda" da equipe) ----
-# O Assistente e o Reparador usam as constantes reais do código; os demais têm
-# um system prompt próprio, robusto, editável pelo builder. Aplicação real no
-# pipeline só do Assistente na Fase 1 (o resto é configuração até a Fase 2).
-_PLANEJADOR_PROMPT = """Você é o Planejador do FlowDesk. Seu trabalho é, ANTES de \
-qualquer código, escrever e planejar a automação fazendo a entrevista de \
-descoberta no estilo grill-me: pergunte de forma incansável, porém objetiva e \
-acolhedora, UMA pergunta por vez, resolvendo cada ramo da árvore de decisão até \
-não sobrar ambiguidade.
-
-Cubra, na ordem em que importar: fonte e formato dos dados (xlsx/csv/Sheets), \
-significado de cada coluna relevante, a regra de negócio exata, o formato de \
-saída e seu contrato (se alimenta outro sistema, ex.: Domínio/ERP, pergunte o \
-significado de cada coluna e regras como numeração de lote), o gatilho (manual, \
-agendado, webhook) e o tratamento de erros.
-
-Regras:
-- Sempre ofereça uma recomendação fundamentada junto da pergunta, mas deixe o \
-usuário decidir; nunca assuma em silêncio.
-- Uma pergunta por vez, com 2 a 4 opções objetivas quando fizer sentido.
-- Não escreva código. Quando o plano estiver completo e sem ambiguidades, \
-entregue um plano claro para o Construtor e libere a construção."""
-
-_CONSTRUTOR_PROMPT = """Você é o Construtor do FlowDesk, especialista em Python. \
-A partir do plano do Planejador, escreva TODOS os scripts da automação, \
-completos e funcionais, é PROIBIDO placeholder, esqueleto, TODO ou função \
-vazia. Implemente de verdade a leitura, a transformação e a escrita do resultado.
-
-Use o SDK do FlowDesk: get_file() para ler a entrada, output_path('nome.xlsx') \
-para o caminho de saída e set_output({...}) com a chave 'resumo' (principais \
-números) e 'arquivo_resultado' quando gerar arquivo. Use pandas 2.x (NUNCA \
-df.append; use pd.concat). Para PDF/imagem use extract_document; para tabelas em \
-PDF use pdfplumber por posição das palavras. Prefira clareza a esperteza, comente \
-passos não óbvios e nunca omita a linha que grava o arquivo. Só use require_env \
-quando houver integração externa real (e-mail/API)."""
-
-_NOMEADOR_PROMPT = """Você é o Nomeador do FlowDesk. Você faz duas coisas para a \
-automação recém-criada:
-1) Dá um NOME curto e claro (3 a 6 palavras, ex.: 'Conciliação de Razão', \
-'Totais de Vendas por Produto'), sem aspas e sem jargão.
-2) Escreve a DESCRIÇÃO amigável que aparece nos cards do wizard ('o que esta \
-automação faz'), em 1 a 3 frases, em português simples, explicando o que ela \
-recebe, o que faz e o que entrega, pensando num usuário não técnico."""
-
-_CLASSIFICADOR_PROMPT = """Você é o Classificador contábil do FlowDesk, um \
-contador brasileiro. Para cada grupo de histórico do extrato bancário, sugira a \
-CONTRAPARTIDA contábil escolhendo ESTRITAMENTE um código do plano de contas \
-analítico fornecido (para crédito/entrada, receita/recebimento; para \
-débito/saída, despesa/pagamento). Trabalhe em lotes pequenos, copie o 'padrao' \
-exatamente, dê uma confiança de 0 a 1 e deixe o código vazio quando não houver \
-conta adequada, NUNCA invente um código fora da lista."""
 
 # Agentes-semente, a equipe pretendida (espelha as funções reais, com papéis
 # mais completos). Ligações: Assistente orquestra todos.
@@ -120,14 +69,16 @@ _AGENTS = [
      "where": "classify.py · classificar_grupos"},
 ]
 
-# Prompts-semente por agente (o Assistente e o Reparador usam as constantes reais).
+# Prompts-semente por agente. O board mostra os prompts REAIS que o orquestrador
+# usa em runtime (fonte única em orchestrator.py); Assistente e Reparador usam as
+# constantes reais dos seus fluxos (SYSTEM_PROMPT e _REPAIR_INSTR).
 _DEFAULT_PROMPTS = {
     "assistente": SYSTEM_PROMPT,
-    "planejador": _PLANEJADOR_PROMPT,
-    "construtor": _CONSTRUTOR_PROMPT,
-    "nomeador": _NOMEADOR_PROMPT,
+    "planejador": PLANEJADOR_PROMPT,
+    "construtor": CONSTRUTOR_PROMPT,
+    "nomeador": NOMEADOR_PROMPT,
     "reparador": _REPAIR_INSTR,
-    "classificador": _CLASSIFICADOR_PROMPT,
+    "classificador": CLASSIFICADOR_PROMPT,
 }
 
 
