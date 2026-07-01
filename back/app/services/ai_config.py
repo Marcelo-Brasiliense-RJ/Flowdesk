@@ -100,6 +100,28 @@ def set_prompt(agent_id: str, prompt: str) -> None:
     _save(data)
 
 
+def apply_prompt(agent_id: str, prompt: str) -> None:
+    """Aplica um system prompt na fonte que get_prompt REALMENTE lê.
+
+    get_prompt prioriza o prompt do nó no grafo salvo; então, se há grafo, o novo
+    prompt precisa ir para o nó (senão seria ignorado). Sem grafo, cai no override
+    simples. É assim que uma proposta aprovada do Treinador tem efeito de verdade.
+    """
+    data = _load()
+    g = data.get("graph")
+    if isinstance(g, dict):
+        for a in g.get("agents") or []:
+            if isinstance(a, dict) and a.get("id") == agent_id:
+                a["prompt"] = prompt
+                data["graph"] = g
+                _save(data)
+                return
+    prompts = dict(data.get("prompts") or {})
+    prompts[agent_id] = prompt
+    data["prompts"] = prompts
+    _save(data)
+
+
 def clear_prompt(agent_id: str) -> None:
     data = _load()
     prompts = dict(data.get("prompts") or {})
