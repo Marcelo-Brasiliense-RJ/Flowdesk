@@ -255,7 +255,7 @@ def localizar_plano():
 def main():
     entrada = get_input()
     progress("Lendo o extrato", "")
-    pdf = get_file("arquivo") or get_file()
+    pdf = get_file(0)
     if not pdf:
         set_output({"erro": "Envie o PDF do extrato bancário."})
         return
@@ -267,7 +267,7 @@ def main():
     if ext["linhas_inconsistentes"]:
         log(f"Atenção: {ext['linhas_inconsistentes']} linhas não batem com o saldo.")
 
-    plano_path = localizar_plano()
+    plano_path = get_file(1) or localizar_plano()
     if not plano_path:
         set_output({"erro": "Plano de contas não encontrado. Anexe o arquivo do "
                             "plano (xls/xlsx/csv) em uploads/ com 'contas' no nome."})
