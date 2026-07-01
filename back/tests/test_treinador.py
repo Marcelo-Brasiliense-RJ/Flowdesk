@@ -1,3 +1,9 @@
+import datetime as dt
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from app.models import Base, Execution, Organization, Project, SourceFile
 from app.services import treinador
 
 
@@ -11,12 +17,6 @@ def test_store_reads_empty_when_no_file(tmp_path, monkeypatch):
 def test_treinador_has_default_prompt():
     assert isinstance(treinador.TREINADOR_PROMPT, str)
     assert treinador.TREINADOR_PROMPT.strip()
-
-
-import datetime as dt
-from app.models import Base, Organization, Project, Execution
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
 
 def _mem_db():
@@ -69,3 +69,72 @@ def test_not_validated_without_any_success():
     db = _mem_db()
     p = _proj(db, status="live")
     assert treinador.is_validated(db, p.id) is False
+
+
+def test_validated_ignores_error_beyond_last_5():
+    db = _mem_db()
+    p = _proj(db, status="live")
+    # erro mais antigo (fora da janela das 5 mais recentes)
+    _exec(db, p.id, "error", 60)
+    # 5 sucessos mais recentes
+    for minutes_ago in (5, 4, 3, 2, 1):
+        _exec(db, p.id, "success", minutes_ago)
+    assert treinador.is_validated(db, p.id) is True
+
+
+def _file(db, pid, path, content, is_dir=False):
+    f = SourceFile(project_id=pid, path=path, content=content, is_dir=is_dir)
+    db.add(f); db.flush()
+    return f
+
+
+def test_source_fingerprint_is_order_independent():
+    db1 = _mem_db()
+    p1 = _proj(db1, status="live")
+    _file(db1, p1.id, "a.py", "print(1)")
+    _file(db1, p1.id, "b.py", "print(2)")
+
+    db2 = _mem_db()
+    p2 = _proj(db2, status="live")
+    # mesmo conjunto, ordem de insercao invertida
+    _file(db2, p2.id, "b.py", "print(2)")
+    _file(db2, p2.id, "a.py", "print(1)")
+
+    fp1 = treinador._source_fingerprint(db1, p1.id)
+    fp2 = treinador._source_fingerprint(db2, p2.id)
+    assert fp1 == fp2
+
+
+def test_source_fingerprint_is_sha1_hex():
+    db = _mem_db()
+    p = _proj(db, status="live")
+    _file(db, p.id, "a.py", "print(1)")
+    fp = treinador._source_fingerprint(db, p.id)
+    assert len(fp) == 40
+    assert all(c in "0123456789abcdef" for c in fp)
+
+
+def test_source_fingerprint_changes_with_content():
+    db = _mem_db()
+    p = _proj(db, status="live")
+    _file(db, p.id, "a.py", "print(1)")
+    fp_before = treinador._source_fingerprint(db, p.id)
+
+    f = db.query(SourceFile).filter_by(project_id=p.id, path="a.py").one()
+    f.content = "print(2)"
+    db.flush()
+
+    fp_after = treinador._source_fingerprint(db, p.id)
+    assert fp_before != fp_after
+
+
+def test_source_fingerprint_skips_dirs():
+    db = _mem_db()
+    p = _proj(db, status="live")
+    _file(db, p.id, "a.py", "print(1)")
+    fp_before = treinador._source_fingerprint(db, p.id)
+
+    _file(db, p.id, "subdir", "", is_dir=True)
+    fp_after = treinador._source_fingerprint(db, p.id)
+
+    assert fp_before == fp_after
