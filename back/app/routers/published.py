@@ -90,6 +90,7 @@ def _stage_dict(s: Stage) -> dict:
 def app_info(subdomain: str, db: Session = Depends(get_db)):
     project = _get_live_project(db, subdomain)
     return {
+        "project_id": project.id,
         "name": project.name,
         "subdomain": project.subdomain,
         "status": project.status,
