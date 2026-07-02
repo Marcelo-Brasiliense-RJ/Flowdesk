@@ -184,6 +184,7 @@ _ANALYZE_INSTR = (
     'do que a automação vai fazer", '
     '"trigger": {"kind": "manual"|"schedule"|"webhook"|null, "confident": true|false, "question": "pergunta curta ou null"}, '
     '"input": {"kind": "file"|"fields"|"none"|null, "confident": true|false, "question": "ou null", '
+    '"files": [{"role": "extrato", "label": "Extrato bancario", "hint": "PDF do extrato"}], '
     '"fields": [{"label": "", "type": "text"|"number"|"date"|"select"}]}, '
     '"process": {"description": "o que fazer, extraído do pedido, ou null", "confident": true|false, "question": "ou null"}, '
     '"output": {"kind": "download"|"summary"|null, "confident": true|false, "question": "ou null"}}. '
@@ -193,6 +194,10 @@ _ANALYZE_INSTR = (
     "Se o pedido menciona planilha/arquivo/Excel/CSV, input.kind='file' confident=true. "
     "Se pede 'planilha de saída'/'gerar arquivo'/'Excel', output.kind='download' confident=true; "
     "se pede só um resumo/números na tela, output.kind='summary'. "
+    "Quando input.kind='file', liste em input.files TODOS os arquivos distintos que a "
+    "tarefa precisa, na ORDEM em que o codigo deve le-los (get_file(0), get_file(1), ...), "
+    "cada um com role curto (ex: 'extrato', 'plano_contas', 'modelo'), label amigavel e "
+    "hint do formato. Um unico arquivo => uma unica entrada em files. "
     "process.description deve capturar a regra de negócio exata do pedido."
 )
 
@@ -205,7 +210,7 @@ def _analyze_prompt(db: Session, project_id: int, prompt: str, sample_file: str 
         return {
             "summary": "Vou montar uma automação a partir do seu pedido.",
             "trigger": {"kind": "manual", "confident": True, "question": None},
-            "input": {"kind": "file", "confident": True, "question": None, "fields": []},
+            "input": {"kind": "file", "confident": True, "question": None, "fields": [], "files": []},
             "process": {"description": p, "confident": bool(p),
                         "question": None if p else "O que a automação deve fazer com os dados?"},
             "output": {"kind": "download", "confident": True, "question": None},
@@ -231,7 +236,8 @@ def _analyze_prompt(db: Session, project_id: int, prompt: str, sample_file: str 
             "summary": f"(análise automática indisponível: {exc})",
             "trigger": {"kind": "manual", "confident": True, "question": None},
             "input": {"kind": "file", "confident": False,
-                      "question": "O que a automação recebe (um arquivo, alguns campos, ou nada)?", "fields": []},
+                      "question": "O que a automação recebe (um arquivo, alguns campos, ou nada)?",
+                      "fields": [], "files": []},
             "process": {"description": p, "confident": bool(p), "question": None},
             "output": {"kind": "download", "confident": False,
                        "question": "Como você quer o resultado (arquivo para baixar ou resumo na tela)?"},
