@@ -140,9 +140,34 @@ def _input_fields(inp: dict, code: str = "") -> list[dict]:
     return []
 
 
+def _files_intent(inp: dict) -> str:
+    """Descreve os arquivos de entrada (papel mais ordem) para o gerador ler com
+    get_file(0..n) POSICIONAL e carregar cada arquivo anexado. Vazio quando o plano
+    nao trouxe arquivos (o gerador se apoia na referencia e no contexto)."""
+    files = inp.get("files") or []
+    if not files:
+        return ""
+    partes = []
+    for i, f in enumerate(files):
+        rot = f.get("label") or f.get("role") or f"arquivo {i + 1}"
+        hint = (f.get("hint") or "").strip()
+        partes.append(f"({i}) {rot}" + (f": {hint}" if hint else ""))
+    return (
+        f"A entrada tem {len(files)} arquivo(s), nesta ordem exata: {'; '.join(partes)}. "
+        "Leia cada um por indice com get_file(0), get_file(1), ... POSICIONAL "
+        "(nunca get_file() sem indice quando ha mais de um arquivo). "
+        "Leia o CONTEUDO de cada arquivo anexado; se um deles for o plano de contas, "
+        "carregue-o do arquivo (NAO use get_table('regras_classificacao') para o plano). "
+    )
+
+
 def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
-    """Gera o código do Script via a geração estruturada do chat. Retorna
-    (explicação, código)."""
+    """Gera o codigo do Script via a geracao estruturada do chat. Injeta o codigo de
+    referencia da galeria (few-shot; semente deterministica em casamento claro) e o
+    plano de arquivos deduzido, para o gerador ler N arquivos posicionalmente e nao
+    reinventar um classificador. Retorna (explicacao, codigo)."""
+    from ..services.reference_code import reference_for_task, REF_LOW, REF_HIGH
+
     process = (ws.get("process") or {}).get("description", "").strip()
     inp = ws.get("input") or {}
     out = ws.get("output") or {}
@@ -150,23 +175,39 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
     intent = (
         f"Monte agora a automação. Tarefa: {process}. "
         f"Entrada: {inp.get('kind', 'nenhuma')}. "
-        f"Saída desejada: "
+        + _files_intent(inp)
+        + "Saída desejada: "
         + ("um arquivo para download (use output_path e set_output com "
-           "'arquivo_resultado' e 'resumo')." if out_kind == "download"
+           "'arquivo_resultado' e 'resumo'). Se o fluxo tiver revisão humana em 2 "
+           "passes, o pass 2 (com a confirmação) DEVE gerar o arquivo_resultado."
+           if out_kind == "download"
            else "um resumo na tela (set_output com a chave 'resumo').")
     )
+    proj_ctx = _project_context(db, project_id)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "system", "content": _project_context(db, project_id)},
+        {"role": "system", "content": proj_ctx},
     ]
-    sample = inp.get("sample_file")
-    if sample:
-        ctx = _attachment_context(project_id, [sample])
+    # contexto real dos arquivos anexados (colunas/amostras): aceita lista ou um so
+    samples = inp.get("sample_files") or ([inp["sample_file"]] if inp.get("sample_file") else [])
+    if samples:
+        ctx = _attachment_context(project_id, samples)
         if ctx:
             messages.append({"role": "system", "content": ctx})
+    # codigo de referencia da galeria: mesma alavanca do Construtor do chat
+    ref = reference_for_task(process + " " + proj_ctx)
+    if ref and ref["score"] >= REF_LOW:
+        messages.append({
+            "role": "system",
+            "content": "IMPLEMENTAÇÃO DE REFERÊNCIA PROVADA (adapte, não reescreva do "
+                       f"zero):\n```python\n{ref['code']}\n```",
+        })
     messages.append({"role": "user", "content": intent})
 
     explanation, actions, _name = _generate_build(messages)
+    if ref and ref["score"] >= REF_HIGH:
+        from .orchestrator import _seed_primary_script
+        actions = _seed_primary_script(actions, ref["code"])
     code = ""
     for a in actions:
         if a.get("kind") in ("create_file", "edit_file") and a.get("content"):
