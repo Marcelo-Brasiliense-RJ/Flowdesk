@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -34,6 +35,19 @@ def _is_transient_import_error(stderr: str) -> bool:
         or ("KeyboardInterrupt" in s and "import" in s.lower())
         or ("numpy" in s and "_multiarray" in s)
     )
+
+
+def _last_error_line(stderr: str) -> str:
+    """Ultima linha significativa de um traceback, para virar mensagem legivel ao
+    usuario (o campo 'erro' que o app publicado ja exibe). Prefere a linha da
+    excecao (ex.: 'ValueError: ...'), cai na ultima linha nao vazia."""
+    linhas = [ln.strip() for ln in (stderr or "").splitlines() if ln.strip()]
+    if not linhas:
+        return "A automacao falhou sem mensagem. Verifique os arquivos de entrada."
+    for ln in reversed(linhas):
+        if re.match(r"^[\w.]+(Error|Exception|Warning|Erro)\b", ln):
+            return ln[:300]
+    return linhas[-1][:300]
 
 
 class RuntimeManager:
@@ -82,6 +96,9 @@ class RuntimeManager:
             if execu:
                 execu.status = "error"
                 execu.stderr = (execu.stderr or "") + f"\n[runtime] {message}"
+                if not (execu.output_data or {}).get("erro"):
+                    execu.output_data = {**(execu.output_data or {}),
+                                         "erro": _last_error_line(execu.stderr)}
                 execu.finished_at = _utcnow()
                 db.commit()
         finally:
@@ -163,8 +180,13 @@ class RuntimeManager:
 
             execu.stdout = out
             execu.stderr = err
-            execu.output_data = output_data
             execu.status = "success" if code == 0 else "error"
+            # falha dura sem saida gravada: sintetiza uma mensagem legivel no mesmo
+            # canal 'erro' que o app publicado e o ReportCard ja exibem.
+            if (execu.status == "error" and not output_data.get("erro")
+                    and not output_data.get("arquivo_resultado")):
+                output_data = {**output_data, "erro": _last_error_line(err)}
+            execu.output_data = output_data
             execu.finished_at = _utcnow()
             db.commit()
 
