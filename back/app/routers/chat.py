@@ -874,16 +874,25 @@ def _file_labels_from_code(code: str, n: int) -> list[str | None]:
     return [files.get(i) for i in range(n)]
 
 
-def _input_file_fields(n: int, code: str = "") -> list[dict]:
-    """Campos de arquivo do Form de entrada. O rotulo vem do nome da variavel que
-    recebe cada get_file(i) no codigo (ex.: 'Extrato', 'Razao'); cai em 'Arquivo N'
-    quando o nome e generico. Um so campo mantem o nome 'arquivo' (compatibilidade);
-    dois ou mais viram 'arquivo1', 'arquivo2'..., na ordem que o get_file(i) espera."""
-    labels = _file_labels_from_code(code, n)
+def _input_file_fields(n: int, code: str = "", plan_files: list[dict] | None = None) -> list[dict]:
+    """Campos de arquivo do Form. O rotulo vem, na ordem: do papel do plano do
+    analyze (plan_files), senao da variavel que recebe get_file(i) no codigo, senao
+    'Arquivo N'. Um so campo mantem o nome 'arquivo' (compatibilidade); dois ou mais
+    viram 'arquivo1', 'arquivo2', ..., na ordem que get_file(i) espera."""
+    plan_files = plan_files or []
+    code_labels = _file_labels_from_code(code, n)
+
+    def _label(i: int) -> str | None:
+        if i < len(plan_files):
+            rot = (plan_files[i].get("label") or plan_files[i].get("role") or "").strip()
+            if rot:
+                return rot
+        return code_labels[i] if i < len(code_labels) else None
+
     if n <= 1:
-        return [{"name": "arquivo", "label": labels[0] or "Arquivo", "type": "file"}]
+        return [{"name": "arquivo", "label": _label(0) or "Arquivo", "type": "file"}]
     return [
-        {"name": f"arquivo{i + 1}", "label": labels[i] or f"Arquivo {i + 1}", "type": "file"}
+        {"name": f"arquivo{i + 1}", "label": _label(i) or f"Arquivo {i + 1}", "type": "file"}
         for i in range(n)
     ]
 

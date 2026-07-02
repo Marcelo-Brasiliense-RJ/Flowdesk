@@ -112,3 +112,36 @@ def test_reconcilia_preserva_campos_nao_arquivo():
     ]
     novos = _reconciled_input_fields(old, _HELPER_2_FILES)
     assert [f["name"] for f in novos] == ["arquivo1", "arquivo2", "mes"]
+
+
+def test_input_file_fields_usa_papeis_do_plano():
+    # papel do plano (analyze) vence o rotulo derivado do codigo
+    code = "ext = get_file(0)\npl = get_file(1)\n"
+    plan = [
+        {"role": "extrato", "label": "Extrato bancario"},
+        {"role": "plano_contas", "label": "Plano de contas"},
+        {"role": "modelo", "label": "Modelo Dominio"},
+    ]
+    fields = _input_file_fields(3, code, plan)
+    assert [f["name"] for f in fields] == ["arquivo1", "arquivo2", "arquivo3"]
+    assert [f["label"] for f in fields] == ["Extrato bancario", "Plano de contas", "Modelo Dominio"]
+
+
+def test_input_file_fields_sem_plano_mantem_comportamento():
+    # plan_files ausente => rotulos derivam do codigo, como antes
+    code = "extrato = pd.read_excel(get_file(0))\nrazao = pd.read_excel(get_file(1))\n"
+    assert [f["label"] for f in _input_file_fields(2, code)] == ["Extrato", "Razao"]
+
+
+def test_input_fields_dimensiona_por_max_plano_codigo():
+    from app.routers.wizard import _input_fields
+    code = "ext = get_file(0)\npl = get_file(1)\n"  # codigo le 2
+    inp = {"kind": "file", "files": [
+        {"role": "extrato", "label": "Extrato"},
+        {"role": "plano", "label": "Plano"},
+        {"role": "modelo", "label": "Modelo"},
+    ]}  # plano pede 3
+    fields = _input_fields(inp, code)
+    assert len(fields) == 3            # max(3, 2)
+    assert fields[0]["label"] == "Extrato"
+    assert fields[2]["label"] == "Modelo"

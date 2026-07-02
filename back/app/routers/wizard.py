@@ -122,9 +122,12 @@ def _write_source(db: Session, project_id: int, path: str, content: str) -> None
 def _input_fields(inp: dict, code: str = "") -> list[dict]:
     kind = inp.get("kind")
     if kind == "file":
-        # dimensiona os campos de upload pelo que o script usa (get_file(0), get_file(1),
-        # ...); com codigo vazio cai em 1 campo "arquivo" (compatibilidade).
-        return _input_file_fields(_count_input_files(code), code)
+        # dimensiona pelo MAIOR entre o plano do analyze (papeis) e o que o codigo usa
+        # (get_file(0), get_file(1), ...). Assim 3 arquivos deduzidos nao encolhem para
+        # 1 so porque o codigo gerado ainda lia menos.
+        plan_files = inp.get("files") or []
+        n = max(len(plan_files), _count_input_files(code))
+        return _input_file_fields(n, code, plan_files)
     if kind == "fields":
         out = []
         for i, f in enumerate(inp.get("fields") or []):
