@@ -12,6 +12,7 @@ block:
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 
@@ -94,6 +95,15 @@ com semáforo. O pass 2 chega com "_classificacao_confirmada" (mapa padrao->cont
 "IGNORAR" pula o grupo), "_conta_banco" e "_periodo" ({inicio, fim} dd/mm/aaaa) no \
 get_input(); aí filtre o período e gere o arquivo. Siga o contrato do modelo \
 "extrato-dominio" da galeria.
+- EXTRATO BANCÁRIO -> DOMÍNIO: NÃO escreva um classificador do zero. Parta do modelo \
+"extrato-dominio" da galeria: read_table para o plano, parse POSICIONAL do PDF via \
+pdfplumber (separando colunas por x0/x1, nunca fatiando doc["text"] por espaços), \
+get_table("regras_classificacao") + revisão em 2 passes, e as COLUNAS EXATAS do Domínio \
+(Data, Cód. Conta Debito, Cód. Conta Credito, Valor, Cód. Histórico, Complemento \
+Histórico, Inicia Lote, Código Matriz/Filial, ...). O PLANO DE CONTAS não é tabela \
+De/Para: tem cabeçalho DESLOCADO (leia com header=None e localize a linha de cabeçalho) \
+e colunas Código/T/Classificação/Nome/Grau, NUNCA uma coluna "Descrição". Jamais \
+classifique por substring do nome da conta no histórico.
 
 REGRAS DE CÓDIGO:
 - O código deve ser COMPLETO E FUNCIONAL na primeira entrega. É PROIBIDO devolver \
@@ -103,7 +113,8 @@ leitura, a transformação e a escrita do resultado, com base na estrutura real 
 - NUNCA comente nem omita a linha que grava a saída (`df.to_excel(...)` / `ExcelWriter`); \
 se a automação gera um arquivo, o código TEM que gravá-lo de fato e só então chamar set_output.
 - Scripts Python usam o SDK: `from flowdesk_sdk import get_file, set_output, \
-output_path, log` (get_file() para ler o arquivo de entrada).
+output_path, log, read_table` (get_file() para ler o arquivo de entrada; read_table \
+para planilhas).
 - `set_output` SEMPRE recebe um DICT, nunca uma string. Ex.: \
 `set_output({"arquivo_resultado": str(out), "resumo": {...}})`.
 - pandas é 2.x: NÃO use `df.append(...)` (foi removido), use `pd.concat([...])`. \
@@ -116,7 +127,10 @@ existentes). Não invente nomes de colunas nem recrie stages que já existem.
 
 ENTRADA E SAÍDA DE ARQUIVOS (a PLATAFORMA cuida disso):
 - Para LER o arquivo de entrada use `get_file()` do SDK (retorna o caminho do arquivo \
-enviado no Form, sem depender do nome do campo). Ex.: `df = pd.read_excel(get_file())`. \
+enviado no Form, sem depender do nome do campo). Para planilhas (xlsx/xls/csv) use \
+SEMPRE `read_table(get_file())` do SDK, NUNCA `pd.read_excel`/`pd.read_csv` direto: \
+read_table converte o .xls legado do Domínio (via Excel COM) e evita os erros \
+"Expected BOF record" e "utf-8 codec can't decode". Ex.: `df = read_table(get_file())`. \
 Para um 2º arquivo: `get_file(1)`. NUNCA peça ao usuário o caminho do arquivo de entrada \
 e NUNCA invente uma chave fixa em get_input().
 - Os arquivos de SAÍDA devem ser gravados com `output_path("nome.xlsx")` do SDK; o \
@@ -448,6 +462,12 @@ def chat_stream(
                     if sug_name and name_is_placeholder(proj.name, proj.description):
                         proj.name = sug_name[:80]
                         proj.description = sug_desc[:240]
+                        # a URL foi congelada do nome inicial (o prompt cru, virando um
+                        # slug enorme). Enquanto não publicou, alinha ao nome curto.
+                        if proj.status != "live":
+                            from .projects import unique_subdomain
+
+                            proj.subdomain = unique_subdomain(s, sug_name, exclude_id=proj.id)
                     s.commit()
 
             assistant = ChatMessage(
@@ -708,6 +728,10 @@ def approve_action(
         path = p.get("path", "")
         if path.endswith(".py") and "set_output" in (p.get("content") or ""):
             workflow_created = _ensure_runnable_workflow(db, project_id, path)
+            # workflow ja existia: o Form nao e recriado, entao re-sincroniza os campos
+            # de arquivo com o script editado (ex.: passou a ler um 2o/3o arquivo).
+            if not workflow_created:
+                _sync_input_file_fields(db, project_id, path)
     action.status = "approved"
     # mensagem de fechamento: sem isto a conversa "morre" após aprovar (parece
     # travada). Confirma o que foi feito e aponta o próximo passo.
@@ -751,25 +775,117 @@ def reject_action(
     return {"ok": True, "status": "rejected"}
 
 
+def _input_files_from_code(code: str) -> dict[int, str | None]:
+    """Analisa o script por AST e devolve {indice_do_arquivo: rotulo_ou_None}. Robusto
+    a como o modelo escreve: get_file(0)/get_file() direto (mesmo aninhado em
+    pd.read_excel(...)), ou um helper que repassa um parametro a get_file e e chamado
+    com indices literais, com ou sem argumentos extras (ex.: ler_arquivo(1, 'razao')).
+    O rotulo, quando da, vem do nome da variavel que recebe o arquivo. Regex nao da
+    conta da variedade de chamadas; o AST le a aridade real de cada chamada."""
+    try:
+        tree = ast.parse(code or "")
+    except SyntaxError:
+        # codigo invalido nao deveria chegar aqui (o script e materializado e roda);
+        # degrada para "1 arquivo se ha get_file, senao nenhum".
+        return {0: None} if re.search(r"get_file\(", code or "") else {}
+
+    # helpers que repassam um parametro para get_file: nome -> posicao do parametro.
+    readers: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            params = [a.arg for a in node.args.args]
+            for sub in ast.walk(node):
+                if (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
+                        and sub.func.id == "get_file" and sub.args
+                        and isinstance(sub.args[0], ast.Name) and sub.args[0].id in params):
+                    readers[node.name] = params.index(sub.args[0].id)
+                    break
+
+    def _arg_int(call: ast.Call, pos: int) -> int | None:
+        if 0 <= pos < len(call.args):
+            a = call.args[pos]
+            if isinstance(a, ast.Constant) and isinstance(a.value, int):
+                return a.value
+        return None
+
+    files: dict[int, str | None] = {}
+
+    def _record(i: int, label: str | None) -> None:
+        if i not in files or (files[i] is None and label):
+            files[i] = label
+
+    class _Visitor(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.label: str | None = None
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            # rotulo herdado da variavel alvo, mesmo com get_file aninhado no valor
+            # (ex.: `extrato = pd.read_excel(get_file(0))`).
+            prev = self.label
+            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                self.label = _humanize_var(node.targets[0].id)
+            self.visit(node.value)
+            self.label = prev
+
+        def visit_Call(self, node: ast.Call) -> None:
+            fn = node.func.id if isinstance(node.func, ast.Name) else None
+            if fn == "get_file":
+                _record(_arg_int(node, 0) or 0, self.label)
+            elif fn in readers:
+                _record(_arg_int(node, readers[fn]) or 0, self.label)
+            self.generic_visit(node)  # desce nos argumentos (get_file aninhado)
+
+    _Visitor().visit(tree)
+    return files
+
+
 def _count_input_files(code: str) -> int:
     """Quantos arquivos de entrada o script usa, para montar N campos de arquivo no
-    Form de entrada. get_file()/get_file(0) conta como 1; usar get_file(1) implica 2,
-    e assim por diante. Teto de seguranca de 5 para nao explodir com codigo estranho."""
-    indices: set[int] = set()
-    if re.search(r"get_file\(", code or ""):
-        indices.add(0)
-    for m in re.finditer(r"get_file\(\s*(\d+)\s*\)", code or ""):
-        indices.add(int(m.group(1)))
-    return min(max(indices) + 1, 5) if indices else 1
+    Form de entrada. Teto de seguranca de 5 para nao explodir com codigo estranho."""
+    files = _input_files_from_code(code)
+    return min(max(files) + 1, 5) if files else 1
 
 
-def _input_file_fields(n: int) -> list[dict]:
-    """Campos de arquivo do Form de entrada. Um so campo mantem o nome 'arquivo'
-    (compatibilidade); dois ou mais viram 'arquivo1', 'arquivo2'..., na ordem que o
-    get_file(i) espera."""
+_GENERIC_VARS = {
+    "df", "data", "arquivo", "arq", "f", "file", "entrada", "input",
+    "x", "tmp", "temp", "path", "caminho", "src", "planilha", "tabela",
+}
+
+
+def _humanize_var(var: str) -> str | None:
+    """Nome de variavel -> rotulo humano ('df_extrato' -> 'Extrato'). None quando o
+    nome e generico e nao ajuda o usuario (df, data, arquivo...)."""
+    v = (var or "").strip().lower()
+    for pre in ("df_", "arquivo_", "arq_", "planilha_", "tabela_", "file_"):
+        if v.startswith(pre):
+            v = v[len(pre):]
+            break
+    v = v.strip("_")
+    if not v or v in _GENERIC_VARS:
+        return None
+    return v.replace("_", " ").title()
+
+
+def _file_labels_from_code(code: str, n: int) -> list[str | None]:
+    """Rotulo por indice a partir da variavel que recebe cada arquivo no codigo.
+    Ex.: `extrato = pd.read_excel(get_file(0))` -> 'Extrato'. O Construtor ja escreve
+    variaveis com nome de negocio, entao isso da rotulos uteis sem outra chamada de IA."""
+    files = _input_files_from_code(code)
+    return [files.get(i) for i in range(n)]
+
+
+def _input_file_fields(n: int, code: str = "") -> list[dict]:
+    """Campos de arquivo do Form de entrada. O rotulo vem do nome da variavel que
+    recebe cada get_file(i) no codigo (ex.: 'Extrato', 'Razao'); cai em 'Arquivo N'
+    quando o nome e generico. Um so campo mantem o nome 'arquivo' (compatibilidade);
+    dois ou mais viram 'arquivo1', 'arquivo2'..., na ordem que o get_file(i) espera."""
+    labels = _file_labels_from_code(code, n)
     if n <= 1:
-        return [{"name": "arquivo", "label": "Arquivo", "type": "file"}]
-    return [{"name": f"arquivo{i + 1}", "label": f"Arquivo {i + 1}", "type": "file"} for i in range(n)]
+        return [{"name": "arquivo", "label": labels[0] or "Arquivo", "type": "file"}]
+    return [
+        {"name": f"arquivo{i + 1}", "label": labels[i] or f"Arquivo {i + 1}", "type": "file"}
+        for i in range(n)
+    ]
 
 
 def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) -> None:
@@ -786,7 +902,8 @@ def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) ->
         .filter(SourceFile.project_id == project_id, SourceFile.path == script_path)
         .first()
     )
-    fields = _input_file_fields(_count_input_files(src.content if src else ""))
+    code = src.content if src else ""
+    fields = _input_file_fields(_count_input_files(code), code)
 
     used = {s.key for s in stages}
 
@@ -830,6 +947,45 @@ def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) ->
         Edge(project_id=project_id, source_stage_id=script.id,
              target_stage_id=form_out.id, variable_label="resultado"),
     ])
+    db.flush()
+    return True
+
+
+def _reconciled_input_fields(old_fields: list[dict], code: str) -> list[dict] | None:
+    """Novos campos do Form de entrada apos uma edicao de script, ou None se nada muda.
+    Preserva os campos que NAO sao de arquivo e so recalcula os type=file a partir do
+    codigo (get_file(0), get_file(1), ...). Retorna None quando o script nao le arquivos
+    (para nao injetar upload num form de campos de texto) ou quando os campos ja batem."""
+    if not re.search(r"get_file\(", code or ""):
+        return None
+    non_file = [f for f in old_fields if f.get("type") != "file"]
+    new_fields = _input_file_fields(_count_input_files(code), code) + non_file
+    return new_fields if new_fields != old_fields else None
+
+
+def _sync_input_file_fields(db: Session, project_id: int, script_path: str) -> bool:
+    """Reconcilia os campos de arquivo do Form de entrada com o que o script usa. O Form
+    e montado uma unica vez em _ensure_runnable_workflow; sem esta sincronia, editar o
+    script para ler mais (ou menos) arquivos deixaria o Form defasado, com campos de
+    upload de menos, e testar/publicar com N arquivos ficaria impossivel."""
+    form_in = next(
+        (s for s in db.query(Stage).filter(Stage.project_id == project_id, Stage.type == "form").all()
+         if (s.config or {}).get("mode") == "input"),
+        None,
+    )
+    if form_in is None:
+        return False
+    src = (
+        db.query(SourceFile)
+        .filter(SourceFile.project_id == project_id, SourceFile.path == script_path)
+        .first()
+    )
+    new_fields = _reconciled_input_fields(
+        list((form_in.config or {}).get("fields") or []), src.content if src else ""
+    )
+    if new_fields is None:
+        return False
+    form_in.config = {**(form_in.config or {}), "fields": new_fields}  # novo dict: SQLAlchemy detecta a mudanca
     db.flush()
     return True
 

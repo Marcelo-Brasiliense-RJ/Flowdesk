@@ -22,7 +22,9 @@ from ..schemas import ExplanationUpdate, WizardAnalyzeIn, WizardBuildOut
 from .chat import (
     SYSTEM_PROMPT,
     _attachment_context,
+    _count_input_files,
     _generate_build,
+    _input_file_fields,
     _project_context,
 )
 from .projects import get_project, slugify
@@ -117,10 +119,12 @@ def _write_source(db: Session, project_id: int, path: str, content: str) -> None
     db.flush()
 
 
-def _input_fields(inp: dict) -> list[dict]:
+def _input_fields(inp: dict, code: str = "") -> list[dict]:
     kind = inp.get("kind")
     if kind == "file":
-        return [{"name": "arquivo", "label": "Arquivo", "type": "file"}]
+        # dimensiona os campos de upload pelo que o script usa (get_file(0), get_file(1),
+        # ...); com codigo vazio cai em 1 campo "arquivo" (compatibilidade).
+        return _input_file_fields(_count_input_files(code), code)
     if kind == "fields":
         out = []
         for i, f in enumerate(inp.get("fields") or []):
@@ -271,6 +275,10 @@ def build_from_wizard(
 
     stage_ids: dict[str, int] = {}
 
+    # gera o código antes do Form de entrada: os campos de arquivo sao dimensionados
+    # pelo que o script de fato usa (get_file(0), get_file(1), ...).
+    explanation, code = _generate_script(db, project_id, ws)
+
     # ---- Entrada (Form) ----
     input_stage = None
     if inp.get("kind") in ("file", "fields"):
@@ -280,14 +288,13 @@ def build_from_wizard(
                 "title": "Entrada de dados",
                 "mode": "input",
                 "submit_label": "Executar",
-                "fields": _input_fields(inp),
+                "fields": _input_fields(inp, code),
             },
             pos_x=40, pos_y=120, existing=existing,
         )
         stage_ids["input"] = input_stage.id
 
-    # ---- Processamento (Script) + código gerado ----
-    explanation, code = _generate_script(db, project_id, ws)
+    # ---- Processamento (Script) ----
     script_stage = _upsert_stage(
         db, project_id, "script", stype="script", name="Processamento",
         config={"description": (ws.get("process") or {}).get("description", "")[:200]},
