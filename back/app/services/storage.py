@@ -135,13 +135,20 @@ def get_input() -> dict:
 
 
 def get_file(name=None):
-    """Caminho do arquivo enviado no Form anterior, independente do nome do campo.
-    Use assim: df = pd.read_excel(get_file()). Para o 2o arquivo: get_file(1)."""
+    """Caminho do arquivo enviado no Form anterior. get_file() pega o 1o arquivo;
+    get_file(i) pega o i-esimo. Com N arquivos o Form nomeia os campos
+    'arquivo1'..'arquivoN', entao get_file(i) resolve 'arquivo{i+1}' por NOME (a
+    ordem dos campos, que e a ordem do plano), e so cai no posicional se esse nome
+    nao existir. Isso evita alimentar o parser errado quando o usuario escolhe os
+    arquivos fora de ordem (a ordem de escolha vira a ordem de insercao no input)."""
     data = get_input()
     if isinstance(name, str) and data.get(name):
         return data[name]
     paths = [v for v in data.values() if isinstance(v, str) and v and Path(v).exists()]
     if isinstance(name, int):
+        by_field = data.get(f"arquivo{name + 1}")
+        if isinstance(by_field, str) and by_field and Path(by_field).exists():
+            return by_field
         return paths[name] if name < len(paths) else None
     return paths[0] if paths else data.get("arquivo")
 
