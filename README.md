@@ -67,9 +67,10 @@ npm run dev                       # http://localhost:5173 (proxy /api -> :8000)
 
 ## Acesso (seed)
 
-- Console (admin): `admin@irko.com.br` / `REMOVED-SEED-PASSWORD`
-- Outros usuários: `ana@irko.com.br`, `bruno@irko.com.br` (mesma senha)
-- App publicado: login por SSO de domínio (`@irko.com.br`), só e-mail.
+O seed inicial cria a organização e usuários de exemplo (um admin e demais).
+As credenciais não são versionadas por segurança; solicite ao responsável pelo
+ambiente ou defina a senha do seed via variável de ambiente.
+- App publicado: login por SSO de domínio, só e-mail.
 
 ## Projeto de exemplo
 

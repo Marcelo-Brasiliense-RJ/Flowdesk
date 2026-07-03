@@ -381,7 +381,7 @@ Reiniciar o backend (sem `--reload`), depois:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/api/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"admin@irko.com.br","password":"REMOVED-SEED-PASSWORD"}'
+  -d '{"email":"admin@irko.com.br","password":"'"$SEED_PASSWORD"'"}'
 ```
 
 Subir `testes/teste2_sistema.xlsx` e `testes/teste2_banco.xlsx` no app `/app/conciliador` e conferir o resumo: `conciliados=3, somente_a=3, somente_b=3, divergencias=1`. A planilha de saída deve ter a aba `Divergencias` com `id=5, valor_A=500, valor_B=550`.

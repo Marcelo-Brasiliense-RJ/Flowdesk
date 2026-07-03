@@ -6,11 +6,13 @@ Creates only 'QA …' projects and deletes them at the end.
 """
 import asyncio
 import json
+import os
 import time
 
 import httpx
 
 BASE = "http://127.0.0.1:8000"
+SEED_PWD = os.environ.get("SEED_PASSWORD", "")
 RESULTS = []
 CREATED_PROJECTS = []
 
@@ -26,7 +28,7 @@ def section(t):
 
 def login(c):
     r = c.post(f"{BASE}/api/auth/login",
-               json={"email": "admin@irko.com.br", "password": "REMOVED-SEED-PASSWORD"})
+               json={"email": "admin@irko.com.br", "password": SEED_PWD})
     return r.json()["access_token"]
 
 
@@ -201,7 +203,7 @@ def main():
     check("excluir arquivo", not any(e["name"] == "qa2.txt" for e in br["entries"]))
 
     section("Controle de acesso (app publicado)")
-    PWD = "REMOVED-SEED-PASSWORD"
+    PWD = SEED_PWD
     pa = new_project(c, H, "QA Acesso")
     pasub = pa["subdomain"]
     deny = c.post(f"{BASE}/api/app/{pasub}/login", data={"email": "ana@irko.com.br", "password": PWD})
@@ -271,7 +273,7 @@ def main():
           json={"access_mode": "domain", "allowed_domain": "irko.com.br"})
     c.post(f"{BASE}/api/projects/{pf['id']}/publish", headers=H)
     atok = c.post(f"{BASE}/api/app/{pf['subdomain']}/login",
-                  data={"email": "ana@irko.com.br", "password": "REMOVED-SEED-PASSWORD"}).json()["access_token"]
+                  data={"email": "ana@irko.com.br", "password": SEED_PWD}).json()["access_token"]
     sub = c.post(f"{BASE}/api/app/{pf['subdomain']}/stages/{fid['id']}/submit",
                  data={"token": atok, "payload": json.dumps({"n": 21})}).json()
     check("submit form -> processing", sub.get("status") == "processing", f"{sub}")

@@ -6,6 +6,7 @@ and is published so its app is immediately reachable at /app/conciliador.
 """
 from __future__ import annotations
 
+import os
 import uuid
 
 from .auth import hash_password
@@ -143,7 +144,12 @@ def seed_if_empty() -> None:
         db.add(org)
         db.flush()
 
-        pwd = hash_password("REMOVED-SEED-PASSWORD")
+        seed_pwd = os.environ.get("SEED_PASSWORD")
+        if not seed_pwd:
+            raise RuntimeError(
+                "SEED_PASSWORD nao definido: defina no .env antes de rodar o seed inicial"
+            )
+        pwd = hash_password(seed_pwd)
         db.add_all(
             [
                 User(org_id=org.id, email="admin@irko.com.br", name="Admin IRKO",

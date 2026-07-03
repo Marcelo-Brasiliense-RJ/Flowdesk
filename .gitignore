@@ -22,6 +22,7 @@ front/.vite/
 
 # Local agent / editor state
 .claude/
+.superpowers/
 front/tsconfig.tsbuildinfo
 
 # OS
