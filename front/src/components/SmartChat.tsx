@@ -30,6 +30,7 @@ export default function SmartChat({
   const [streaming, setStreaming] = useState("");
   const [input, setInput] = useState(initialInput ?? "");
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Fase | null>(null);
   const [ctx, setCtx] = useState({ percent: 0, ai_enabled: false });
   const [attached, setAttached] = useState<File[]>([]);
   const [envDrafts, setEnvDrafts] = useState<Record<number, string>>({});
@@ -77,7 +78,7 @@ export default function SmartChat({
     load();
   }, [projectId]);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "auto", block: "nearest" });
   }, [messages, streaming]);
   useEffect(() => {
     // fire the initial message exactly once per project (StrictMode-safe)
@@ -98,6 +99,7 @@ export default function SmartChat({
       if (!desc || busy) return;
       setInput("");
       setBusy(true);
+      setPhase("thinking");
       try {
         setMessages((m) => [...m, { id: Date.now(), role: "user", content: desc, meta: {}, tokens: 0, created_at: "" }]);
         await api.post(`/api/projects/${projectId}/chat/report-repair`, {
@@ -111,6 +113,7 @@ export default function SmartChat({
         setMessages((m) => [...m, { id: Date.now() + 1, role: "assistant", content: `Erro: ${e.message}`, meta: {}, tokens: 0, created_at: "" }]);
       } finally {
         setBusy(false);
+        setPhase(null);
       }
       return;
     }
@@ -123,6 +126,7 @@ export default function SmartChat({
     let content = base;
     setBusy(true);
     setStreaming("");
+    setPhase(files.length ? "uploading" : "thinking");
     try {
       // already-uploaded project paths (e.g. from the interview) + new File uploads
       const uploaded: string[] = [...extra];
@@ -138,6 +142,7 @@ export default function SmartChat({
           (content ? "\n\n" : "") + `[Arquivos anexados: ${uploaded.join(", ")}]`;
         onApplied();
       }
+      setPhase("thinking");
       setMessages((m) => [
         ...m,
         { id: Date.now(), role: "user", content, meta: {}, tokens: 0, created_at: "" },
@@ -190,6 +195,7 @@ export default function SmartChat({
     } finally {
       setBusy(false);
       setAttached([]);
+      setPhase(null);
     }
   }
 
@@ -301,7 +307,7 @@ export default function SmartChat({
               }}
             />
           )}
-          {busy && !streaming && <TypingIndicator />}
+          {busy && !streaming && <TypingIndicator phase={phase} />}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -541,8 +547,49 @@ function Avatar() {
   );
 }
 
-/** Indicador "digitando" com três pontos saltitantes. */
-function TypingIndicator() {
+/** Status reais que o balão exibe enquanto processa. Reflete a fase atual, não um loop. */
+type Fase = "uploading" | "thinking";
+const STATUS: Record<Fase, { text: string; emoji: string }> = {
+  uploading: { text: "Enviando seus arquivos", emoji: "📎" },
+  thinking: { text: "Analisando seu pedido", emoji: "🔎" },
+};
+
+/** Texto do status: "digita" letra por letra (revela em sequência, procedural) e as
+ * letras já visíveis ondulam bem devagar. As duas animações rodam em conjunto. */
+function WaveText({ text, animate }: { text: string; animate: boolean }) {
+  return (
+    <span className="inline-flex whitespace-pre" aria-label={text}>
+      {[...text].map((ch, i) => (
+        <motion.span
+          key={i}
+          aria-hidden
+          className="inline-block"
+          initial={animate ? { opacity: 0 } : false}
+          animate={{ opacity: 1 }}
+          transition={animate ? { delay: i * 0.06, duration: 0.12 } : { duration: 0 }}
+        >
+          <motion.span
+            className="inline-block"
+            animate={animate ? { y: [0, -3, 0] } : undefined}
+            transition={
+              animate
+                ? { duration: 2.4, repeat: Infinity, delay: i * 0.08, ease: "easeInOut" }
+                : undefined
+            }
+          >
+          {ch === " " ? " " : ch}
+          </motion.span>
+        </motion.span>
+      ))}
+    </span>
+  );
+}
+
+/** Indicador de status: mostra a fase atual (com onda nas letras), sem pontinhos e sem loop. */
+function TypingIndicator({ phase }: { phase: Fase | null }) {
+  const reduce = useReducedMotion();
+  const key = phase ?? "thinking";
+  const s = STATUS[key];
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -550,17 +597,25 @@ function TypingIndicator() {
       className="flex items-end gap-2"
     >
       <Avatar />
-      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-line bg-surface-2 px-3.5 py-3 shadow-token-sm">
-        {[0, 1, 2].map((i) => (
+      <motion.div
+        layout
+        className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-line bg-surface-2 px-3.5 py-2.5 text-xs font-medium text-ink2 shadow-token-sm"
+        aria-live="polite"
+      >
+        <AnimatePresence mode="wait">
           <motion.span
-            key={i}
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ background: "var(--text-3)" }}
-            animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
-          />
-        ))}
-      </div>
+            key={key}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center gap-1"
+          >
+            <WaveText text={s.text} animate={!reduce} />
+            <span aria-hidden>{s.emoji}</span>
+          </motion.span>
+        </AnimatePresence>
+      </motion.div>
     </motion.div>
   );
 }

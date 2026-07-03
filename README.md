@@ -45,17 +45,18 @@ python -m venv .venv
 .venv\Scripts\activate            # Windows  (source .venv/bin/activate no Unix)
 pip install -r requirements.txt
 copy .env.example .env            # e preencha OPENAI_API_KEY (opcional)
-uvicorn main:app --host 127.0.0.1 --port 8000   # ou .\run-dev.ps1
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app   # ou .\run-dev.ps1
 ```
 Na primeira execução o banco `flowdesk.db` é criado e populado com o seed.
 
-> **Não use `--reload`.** O runtime regrava o script `.py` de cada projeto em
-> `back/storage/<id>/` a cada execução; com `--reload` o watcher reinicia o
-> servidor no meio da execução, matando o teste/publicação ("o servidor foi
-> reiniciado") e fazendo a ação não refletir na tela. No Python 3.11 não dá para
-> excluir `storage/` do watcher de forma confiável. Editou o backend? Reinicie o
-> processo (ou rode `.\run-dev.ps1`, que derruba o servidor antigo antes de subir
-> um limpo, evitando processos zumbis servindo código velho).
+> **Use `--reload-dir app`, nunca `--reload` sozinho.** O runtime regrava o script
+> `.py` de cada projeto em `back/storage/<id>/` a cada execução; o `--reload` padrão
+> observa o diretório inteiro, vê esse `.py` e reinicia o servidor no meio da
+> execução, matando o teste/publicação ("o servidor foi reiniciado"). Restringir o
+> watch a `app/` recarrega o código do backend sem enxergar `storage/`. Excluir
+> `storage/` via `--reload-exclude` não é confiável no Python 3.11. Editou `main.py`
+> (fora de `app/`)? Reinicie o processo (ou rode `.\run-dev.ps1`, que derruba o
+> servidor antigo antes de subir um limpo, evitando zumbis servindo código velho).
 
 ### Frontend
 ```bash

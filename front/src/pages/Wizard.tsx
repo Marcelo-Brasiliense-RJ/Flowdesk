@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { api, getToken } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type {
-  ChatMessage,
   ClassificacaoReviewData,
   Execution,
   InputKind,
@@ -21,6 +20,7 @@ import ProjectLayout from "../components/ProjectLayout";
 import OcrReview from "../components/OcrReview";
 import ProgressTimeline from "../components/ProgressTimeline";
 import ClassificacaoReview from "../components/ClassificacaoReview";
+import SmartChat from "../components/SmartChat";
 
 const STEPS = ["Gatilho", "Entrada", "Processamento", "Resultado", "Revisão"];
 
@@ -90,7 +90,9 @@ function StepProgress({ step, plan }: { step: number; plan: AnalyzePlan | null }
             className="h-1.5 w-1.5 rounded-full"
             style={{ background: "var(--accent)", animation: "pulse 1.4s infinite" }}
           />
-          {step >= STEPS.length - 1
+          {step >= STEPS.length
+            ? "Automação publicada"
+            : step >= STEPS.length - 1
             ? "Revisão final"
             : `Passo ${step + 1} de ${STEPS.length} · em andamento`}
         </span>
@@ -231,19 +233,24 @@ export default function Wizard() {
   const [state, setState] = useState<WizardState>({});
   const [build, setBuild] = useState<BuildResult | null>(null);
   const [built, setBuilt] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatOpen, setChatOpen] = useState(true);
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState("");
   const [dismissedDirty, setDismissedDirty] = useState(false);
+  const [published, setPublished] = useState(false);
   const [stats, setStats] = useState<ProjStats | null>(null);
+  // campos reais do form de entrada (com nome), p/ o teste aceitar N arquivos
+  const [inputFields, setInputFields] = useState<
+    { name: string; label?: string; type?: string }[]
+  >([]);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     Promise.all([
       api.get<Project>(`/api/projects/${projectId}`),
       api.get<Stage[]>(`/api/projects/${projectId}/stages`),
     ]).then(([p, stages]) => {
       setProject(p);
+      setPublished(p.status === "live");
       const ws = (p.wizard_state || {}) as WizardState;
       const scriptStage = stages.find((s) => s.type === "script" || s.type === "agent");
       // a automação está montada quando há _built (assistente) OU um nó de script
@@ -255,6 +262,7 @@ export default function Wizard() {
       setState(derived);
       const ids = ((ws as any)._stage_ids || {}) as BuildResult["stage_ids"];
       const inputForm = stages.find((s) => s.type === "form" && s.config?.mode === "input");
+      setInputFields((inputForm?.config?.fields ?? []) as typeof inputFields);
       const resultForm = stages.find((s) => s.type === "form" && s.config?.mode === "result");
       setBuild({
         // descrição persistida; se vazia, o card gera ou pede ao usuário
@@ -269,17 +277,16 @@ export default function Wizard() {
         ai_enabled: false,
       });
     });
-    // histórico da conversa que originou a automação (somente leitura no Pedido)
-    api
-      .get<ChatMessage[]>(`/api/projects/${projectId}/chat`)
-      .then(setMessages)
-      .catch(() => setMessages([]));
     // métricas reais do projeto para o card "Métricas" do aside
     api
       .get<ProjStats>(`/api/projects/${projectId}/stats`)
       .then(setStats)
       .catch(() => setStats(null));
   }, [projectId]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   async function buildFlow() {
     setBuilding(true);
@@ -368,17 +375,21 @@ export default function Wizard() {
             {/* Coluna principal: chat → teste → montagem (ordem do design v3) */}
             <div className="min-w-0 space-y-7">
               <ChatCard
-                messages={messages}
+                projectId={projectId}
                 open={chatOpen}
                 built={built}
                 onToggle={() => setChatOpen((v) => !v)}
-                onContinue={goChat}
+                onApplied={reload}
               />
               {build?.stage_ids?.script ? (
                 <TestPanel
                   projectId={projectId}
                   scriptStageId={build.stage_ids.script}
                   state={state}
+                  inputFields={inputFields}
+                  subdomain={project.subdomain}
+                  alreadyPublished={published}
+                  onPublished={() => setPublished(true)}
                 />
               ) : (
                 <div
@@ -388,7 +399,7 @@ export default function Wizard() {
                   <Spinner className="h-4 w-4" /> Preparando o teste…
                 </div>
               )}
-              <StepProgress step={STEPS.length - 1} plan={null} />
+              <StepProgress step={published ? STEPS.length : STEPS.length - 1} plan={null} />
             </div>
 
             {/* Aside: sobre esta automação */}
@@ -406,11 +417,11 @@ export default function Wizard() {
         ) : (
           <div className="mt-6 space-y-6">
             <ChatCard
-              messages={messages}
+              projectId={projectId}
               open={chatOpen}
               built={built}
               onToggle={() => setChatOpen((v) => !v)}
-              onContinue={goChat}
+              onApplied={reload}
             />
             <StepProgress step={0} plan={null} />
             <div className="card p-6 text-center">
@@ -562,30 +573,20 @@ function Metric({ value, label, color = "var(--text)" }: { value: string; label:
   );
 }
 
-/* ---------- Card Smart Chat (histórico colapsável do Pedido) ---------- */
-/** Separa o texto da mensagem dos anexos embutidos no formato
- * "[Arquivos anexados: a, b]" usado pelo SmartChat. */
-function stripAttachments(content: string): { text: string; files: string[] } {
-  const m = content.match(/\[Arquivos anexados:\s*([^\]]+)\]/);
-  const files = m ? m[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
-  const text = content.replace(/\n*\[Arquivos anexados:[^\]]*\]/, "").trim();
-  return { text, files };
-}
-
+/* ---------- Card Smart Chat (colapsável do Pedido, funcional inline) ---------- */
 function ChatCard({
-  messages,
+  projectId,
   open,
   built,
   onToggle,
-  onContinue,
+  onApplied,
 }: {
-  messages: ChatMessage[];
+  projectId: number;
   open: boolean;
   built: boolean;
   onToggle: () => void;
-  onContinue: (draft?: string) => void;
+  onApplied: () => void;
 }) {
-  const [draft, setDraft] = useState("");
   return (
     <div className="card overflow-hidden">
       <button
@@ -628,92 +629,9 @@ function ChatCard({
       </button>
 
       {open && (
-        <>
-          <div className="flex max-h-[340px] flex-col gap-3.5 overflow-y-auto overflow-x-hidden p-4">
-            {messages.length === 0 ? (
-              <p className="text-sm text-ink3">
-                Ainda não há conversa para esta automação. Use o Smart Chat para descrever o
-                que você quer automatizar.
-              </p>
-            ) : (
-              messages.map((m) => {
-                const { text, files } = stripAttachments(m.content);
-                if (m.role === "user") {
-                  return (
-                    <div key={m.id} className="flex flex-col items-end gap-1.5">
-                      <div
-                        className="max-w-[82%] whitespace-pre-wrap rounded-2xl rounded-tr-md px-3.5 py-2.5 text-sm leading-relaxed shadow-token"
-                        style={{ background: "var(--user-bubble)", color: "var(--user-text)" }}
-                      >
-                        {text}
-                      </div>
-                      {files.length > 0 && (
-                        <div className="flex flex-wrap justify-end gap-1.5">
-                          {files.map((f) => (
-                            <span
-                              key={f}
-                              className="badge"
-                              style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
-                            >
-                              📎 {f.split(/[\\/]/).pop()}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                return (
-                  <div key={m.id} className="flex items-start gap-2.5">
-                    <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10.5px] font-bold text-white"
-                      style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))" }}
-                    >
-                      FD
-                    </span>
-                    <div className="max-w-[82%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-line bg-surface-2 px-3.5 py-2.5 text-sm leading-relaxed text-ink">
-                      {text}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <div className="border-t border-line p-3">
-            <div className="flex items-center gap-2 rounded-2xl border border-line bg-surface-2 py-1.5 pl-4 pr-1.5">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && draft.trim()) onContinue(draft.trim());
-                }}
-                placeholder="Pedir um ajuste neste pedido…"
-                className="flex-1 border-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink3"
-              />
-              <button
-                type="button"
-                onClick={() => onContinue(draft.trim() || undefined)}
-                title="Continuar no chat"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
-                style={{ background: "linear-gradient(135deg, var(--brand), var(--accent))" }}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  width="16"
-                  height="16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M12 19V5M6 11l6-6 6 6" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </>
+        <div className="h-[520px]">
+          <SmartChat projectId={projectId} centered={false} onApplied={onApplied} />
+        </div>
       )}
     </div>
   );
@@ -1150,30 +1068,66 @@ function AutomationDescription({ projectId, initial }: { projectId: number; init
 }
 
 function TestPanel({
-  projectId, scriptStageId, state, onFlow,
+  projectId, scriptStageId, state, inputFields = [], onFlow,
+  subdomain, alreadyPublished = false, onPublished,
 }: {
   projectId: number;
   scriptStageId: number;
   state: WizardState;
+  /** Campos reais do form de entrada (com nome). Quando há mais de um campo de
+   * arquivo (ex: conciliação extrato + razão), o teste recebe um upload por campo. */
+  inputFields?: { name: string; label?: string; type?: string }[];
   onFlow?: (active: string | null, status: "idle" | "running" | "success" | "error") => void;
+  /** Subdomínio do app publicado, para o botão "Usar" logo após publicar. */
+  subdomain?: string;
+  /** Projeto já estava no ar ao abrir a tela (mostra "Usar" mesmo sem republicar). */
+  alreadyPublished?: boolean;
+  /** Avisa o Wizard que a automação foi publicada (atualiza o progresso). */
+  onPublished?: () => void;
 }) {
-  const [samplePath, setSamplePath] = useState(state.input?.sample_file ?? "");
-  const [sampleName, setSampleName] = useState(state.input?.sample_file?.split("/").pop() ?? "");
+  const nav = useNavigate();
+  // arquivos esperados pela automação, vindos do form real; se não houver campos
+  // de arquivo mas o assistente diz "file", cai num único campo genérico "arquivo".
+  const fileFields =
+    inputFields.filter((f) => f.type === "file").map((f) => ({
+      name: f.name,
+      label: f.label || f.name,
+    }));
+  const effectiveFileFields =
+    fileFields.length > 0
+      ? fileFields
+      : state.input?.kind === "file"
+      ? [{ name: "arquivo", label: "Arquivo de exemplo" }]
+      : [];
+  // path por nome de campo: { planilha_a: "uploads/extrato.xlsx", ... }
+  const [sampleFiles, setSampleFiles] = useState<Record<string, { path: string; name: string }>>(
+    () =>
+      state.input?.sample_file
+        ? {
+            [effectiveFileFields[0]?.name ?? "arquivo"]: {
+              path: state.input.sample_file,
+              name: state.input.sample_file.split("/").pop() ?? "",
+            },
+          }
+        : {}
+  );
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [exec, setExec] = useState<Execution | null>(null);
   const [publishing, setPublishing] = useState(false);
-  const [published, setPublished] = useState(false);
+  const [published, setPublished] = useState(alreadyPublished);
   const [correctedText, setCorrectedText] = useState("");
 
   const inputKind = state.input?.kind ?? "none";
   const fields = state.input?.fields ?? [];
   const passed = exec?.status === "success";
 
-  // conveniência: se já existe um arquivo em uploads/, pré-seleciona o mais
-  // recente em vez de obrigar a pessoa a subir de novo o que acabou de enviar.
+  // conveniência: só com UM arquivo esperado, pré-seleciona o upload mais recente
+  // (com dois ou mais, ex: extrato + razão, seria ambíguo; a pessoa escolhe cada um).
   useEffect(() => {
-    if (inputKind !== "file" || samplePath) return;
+    if (effectiveFileFields.length !== 1) return;
+    const only = effectiveFileFields[0].name;
+    if (sampleFiles[only]) return;
     api
       .get<{ entries: { name: string; path: string; is_dir: boolean; modified_at: string }[] }>(
         `/api/projects/${projectId}/fs?path=uploads`
@@ -1184,25 +1138,30 @@ function TestPanel({
         const ultimo = [...arquivos].sort((a, b) =>
           (b.modified_at || "").localeCompare(a.modified_at || "")
         )[0];
-        setSamplePath(ultimo.path);
-        setSampleName(ultimo.name);
+        setSampleFiles((s) => ({ ...s, [only]: { path: ultimo.path, name: ultimo.name } }));
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputKind, projectId]);
+  }, [projectId, effectiveFileFields.length]);
 
-  async function uploadSample(file: File) {
+  async function uploadSample(field: string, file: File) {
     const fd = new FormData();
     fd.append("path", "uploads");
     fd.append("file", file);
     const r = await api.postForm<{ name: string }>(`/api/projects/${projectId}/fs/upload`, fd);
-    setSamplePath(`uploads/${r.name}`);
-    setSampleName(r.name);
+    setSampleFiles((s) => ({ ...s, [field]: { path: `uploads/${r.name}`, name: r.name } }));
   }
   function buildPayload(): Record<string, unknown> {
     const texto = correctedText.trim();
     const extra = texto ? { _texto_corrigido: texto } : {};
-    if (inputKind === "file") return samplePath ? { arquivo: samplePath, ...extra } : { ...extra };
+    if (effectiveFileFields.length) {
+      const files: Record<string, unknown> = {};
+      for (const f of effectiveFileFields) {
+        const v = sampleFiles[f.name];
+        if (v) files[f.name] = v.path;
+      }
+      return { ...files, ...extra };
+    }
     if (inputKind === "fields") return { ...fieldValues, ...extra };
     return { ...extra };
   }
@@ -1244,12 +1203,13 @@ function TestPanel({
     try {
       await api.post(`/api/projects/${projectId}/publish`);
       setPublished(true);
+      onPublished?.();
     } finally {
       setPublishing(false);
     }
   }
 
-  const needsSample = inputKind === "file" && !samplePath;
+  const needsSample = effectiveFileFields.some((f) => !sampleFiles[f.name]);
   const finished = exec?.status === "success" || exec?.status === "error";
   const summary = exec?.output_data?.resumo;
   const resultFile = exec?.output_data?.arquivo_resultado as string | undefined;
@@ -1346,27 +1306,38 @@ function TestPanel({
         Rode a automação de verdade antes de publicar. Publicar só fica disponível após um teste bem-sucedido.
       </p>
 
-      {inputKind === "file" && (
-        <div className="mt-3.5 flex items-center gap-2.5 text-sm">
-          <label className="btn-outline shrink-0 cursor-pointer py-2 text-xs" style={{ background: "var(--surface)" }}>
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9 17a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" />
-            </svg>
-            {sampleName ? "Trocar arquivo" : "Subir arquivo de exemplo"}
-            <input type="file" className="hidden" onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) uploadSample(f);
-              e.target.value = "";
-            }} />
-          </label>
-          {sampleName && (
-            <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-accentv">
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
-              {sampleName}
-            </span>
-          )}
+      {effectiveFileFields.length > 0 && (
+        <div className="mt-3.5 space-y-2">
+          {effectiveFileFields.map((field) => {
+            const val = sampleFiles[field.name];
+            const multi = effectiveFileFields.length > 1;
+            return (
+              <div key={field.name} className="flex flex-wrap items-center gap-2.5 text-sm">
+                <label className="btn-outline shrink-0 cursor-pointer py-2 text-xs" style={{ background: "var(--surface)" }}>
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9 17a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" />
+                  </svg>
+                  {val ? "Trocar" : multi ? `Subir ${field.label}` : "Subir arquivo de exemplo"}
+                  <input type="file" className="hidden" onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadSample(field.name, f);
+                    e.target.value = "";
+                  }} />
+                </label>
+                {multi && <span className="shrink-0 text-xs text-ink2">{field.label}</span>}
+                {val ? (
+                  <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-accentv">
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                    {val.name}
+                  </span>
+                ) : (
+                  multi && <span className="text-xs text-ink3">pendente</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       {inputKind === "fields" && (
@@ -1464,6 +1435,17 @@ function TestPanel({
         )}
       </AnimatePresence>
 
+      {exec?.id && (exec.status === "success" || exec.status === "error") && (
+        <button
+          type="button"
+          onClick={() => nav(`/projects/${projectId}/chat?report=${exec.id}`)}
+          className="btn-outline mt-2 inline-flex items-center gap-1.5 py-1.5 text-xs text-err"
+          style={{ borderColor: "var(--err)" }}
+        >
+          Reportar problema
+        </button>
+      )}
+
       {passed && review && (
         <div className="mt-4">
           <OcrReview
@@ -1517,8 +1499,21 @@ function TestPanel({
         {!passed && !published && (
           <span className="text-xs text-ink3">Publicar libera após um teste bem-sucedido.</span>
         )}
+        {published && subdomain && (
+          <a
+            href={`/app/${subdomain}`}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-accent inline-flex items-center gap-1.5 py-1.5 text-sm"
+          >
+            Usar automação
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M7 17L17 7M9 7h8v8" />
+            </svg>
+          </a>
+        )}
         {published && (
-          <span className="text-xs text-ok">Automação no ar. Veja em Versões ou abra o app publicado.</span>
+          <span className="text-xs text-ok">No ar. Também aparece em Versões.</span>
         )}
       </div>
       </div>

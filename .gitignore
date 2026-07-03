@@ -9,6 +9,11 @@ venv/
 back/flowdesk.db
 back/storage/
 back/.env
+back/.env.bak*
+
+# Dados de cliente e midia — NUNCA versionar (confidencial)
+testes/dominio/
+my-video/
 
 # Node / frontend
 node_modules/

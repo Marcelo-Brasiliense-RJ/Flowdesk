@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,9 +54,34 @@ from ..services import storage
 router = APIRouter(prefix="/api", tags=["projects"])
 
 
-def slugify(value: str) -> str:
-    value = re.sub(r"[^a-zA-Z0-9]+", "-", value.lower()).strip("-")
-    return value or "projeto"
+_SLUG_STOPWORDS = {"o", "a", "os", "as", "de", "do", "da", "dos", "das", "e", "com", "para", "em", "um", "uma"}
+
+
+def slugify(value: str, max_words: int = 5) -> str:
+    """Slug ASCII para URL/chave. Translitera acentos (á->a, ção->cao, NUNCA apaga
+    a letra), remove palavras vazias e limita a max_words para a URL não virar uma
+    frase inteira. max_words=0 desliga o corte (usado em chaves de nó)."""
+    ascii_only = (
+        unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    )
+    words = [w for w in re.sub(r"[^a-z0-9]+", " ", ascii_only.lower()).split() if w]
+    if max_words:
+        kept = [w for w in words if w not in _SLUG_STOPWORDS][:max_words]
+        words = kept or words[:max_words]  # tudo stopword? mantém as primeiras
+    return "-".join(words) or "projeto"
+
+
+def unique_subdomain(db: Session, name: str, exclude_id: int | None = None) -> str:
+    """Subdomínio único a partir do nome, com sufixo curto só em caso de colisão."""
+    base = slugify(name)
+    sub = base
+    while True:
+        q = db.query(Project).filter(Project.subdomain == sub)
+        if exclude_id is not None:
+            q = q.filter(Project.id != exclude_id)
+        if not q.first():
+            return sub
+        sub = f"{base}-{uuid.uuid4().hex[:4]}"
 
 
 def unsafe_source_path(path: str) -> bool:
@@ -200,10 +226,7 @@ def create_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    base = slugify(body.name)
-    subdomain = base
-    while db.query(Project).filter(Project.subdomain == subdomain).first():
-        subdomain = f"{base}-{uuid.uuid4().hex[:4]}"
+    subdomain = unique_subdomain(db, body.name)
     project = Project(
         org_id=user.org_id,
         created_by_id=user.id,
@@ -279,7 +302,9 @@ def update_project(
     if body.description is not None:
         project.description = body.description
     if body.subdomain is not None:
-        sub = slugify(body.subdomain)
+        # subdomínio digitado à mão: respeita as palavras do usuário (só translitera
+        # e hifeniza), sem remover stopword nem cortar como na derivação do nome.
+        sub = slugify(body.subdomain, max_words=0)
         clash = (
             db.query(Project)
             .filter(Project.subdomain == sub, Project.id != project_id)
@@ -406,8 +431,19 @@ def list_stages(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    get_project(db, project_id, user)
-    return db.query(Stage).filter(Stage.project_id == project_id).all()
+    project = get_project(db, project_id, user)
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    # auto-heal: um Form de entrada montado antes pode ter menos campos de arquivo do
+    # que o script usa (get_file(0), get_file(1), ...). Reconcilia na leitura, para
+    # projetos ainda nao publicados, sem exigir que a pessoa reedite o script.
+    if project.status != "live":
+        from .chat import _sync_input_file_fields
+
+        script = next((s for s in stages if s.type == "script" and s.entry_file), None)
+        if script and _sync_input_file_fields(db, project_id, script.entry_file):
+            db.commit()
+            stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    return stages
 
 
 @router.post("/projects/{project_id}/stages", response_model=StageOut)

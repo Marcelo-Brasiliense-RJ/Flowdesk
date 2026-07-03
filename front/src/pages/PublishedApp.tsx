@@ -5,7 +5,8 @@ import OcrReview from "../components/OcrReview";
 import ProgressTimeline from "../components/ProgressTimeline";
 import ClassificacaoReview from "../components/ClassificacaoReview";
 import type { ClassificacaoReviewData, ProgressEvent } from "../lib/types";
-import { formatSummaryValue } from "./publishedSummary";
+import { formatSummaryValue, summaryEntries } from "./publishedSummary";
+import { getToken } from "../lib/api";
 
 interface Stage {
   id: number;
@@ -34,6 +35,7 @@ export default function PublishedApp() {
   const [review, setReview] = useState<ClassificacaoReviewData | null>(null);
   const [lastInput, setLastInput] = useState<any>(null);
   const [resultStageRef, setResultStageRef] = useState<number | null>(null);
+  const [lastExecId, setLastExecId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${base}/info`)
@@ -105,6 +107,7 @@ export default function PublishedApp() {
   }
 
   async function pollExecution(execId: string, resultStageId: number | null) {
+    setLastExecId(execId);
     setResultStageRef(resultStageId);
     const tick = async () => {
       const ex = await fetch(`${base}/executions/${execId}?token=${token}`).then((r) =>
@@ -123,7 +126,14 @@ export default function PublishedApp() {
         if (resultStageId) await loadStage(resultStageId);
         setPhase("result");
       } else if (ex.status === "error") {
-        setError(ex.stderr || "Erro no processamento");
+        // execução interrompida por reinício do servidor: não é erro do usuário nem
+        // do arquivo; peça só para tentar de novo, sem despejar stderr técnico.
+        const restarted = /servidor foi reiniciado|\[runtime\]/i.test(ex.stderr || "");
+        setError(
+          restarted
+            ? "A execução foi interrompida. Tente enviar novamente."
+            : ex.stderr || "Erro no processamento"
+        );
         setPhase("form");
       } else {
         setTimeout(tick, 1000);
@@ -246,7 +256,14 @@ export default function PublishedApp() {
         />
       )}
       {phase === "result" && (
-        <ResultRenderer stage={stage} result={result} base={base} token={token} />
+        <ResultRenderer
+          stage={stage}
+          result={result}
+          base={base}
+          token={token}
+          projectId={info?.project_id ?? info?.project?.id}
+          lastExecId={lastExecId}
+        />
       )}
       {phase === "done" && (
         <p className="text-center text-ok">Concluído.</p>
@@ -344,16 +361,21 @@ function ResultRenderer({
   result,
   base,
   token,
+  projectId,
+  lastExecId,
 }: {
   stage: Stage | null;
   result: any;
   base: string;
   token: string | null;
+  projectId?: number | string | null;
+  lastExecId?: string | null;
 }) {
   const fileKey = stage?.config?.result_file_key || "arquivo_resultado";
   const summaryKey = stage?.config?.summary_key || "resumo";
   const filePath = result?.[fileKey];
   const summary = result?.[summaryKey];
+  const summaryRows = summaryEntries(summary);
   const review = result?._ocr_review;
   const [dlError, setDlError] = useState("");
   const [reviewed, setReviewed] = useState(false);
@@ -391,16 +413,20 @@ function ResultRenderer({
       {summary && (
         <div className="rounded-lg bg-surface-2 p-4 text-sm">
           <div className="mb-2 font-semibold text-ink">Resumo</div>
-          <table className="w-full">
-            <tbody>
-              {Object.entries(summary).map(([k, v]) => (
-                <tr key={k} className="border-b border-line last:border-0">
-                  <td className="py-1 text-ink3">{k}</td>
-                  <td className="py-1 text-right font-medium">{formatSummaryValue(v)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {summaryRows ? (
+            <table className="w-full">
+              <tbody>
+                {summaryRows.map(([k, v]) => (
+                  <tr key={k} className="border-b border-line last:border-0">
+                    <td className="py-1 text-ink3">{k}</td>
+                    <td className="py-1 text-right font-medium">{formatSummaryValue(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="whitespace-pre-wrap text-ink2">{String(summary)}</p>
+          )}
         </div>
       )}
       {review && (
@@ -414,6 +440,15 @@ function ResultRenderer({
         <button onClick={download} className="btn-accent w-full">
           Baixar resultado
         </button>
+      )}
+      {getToken() && lastExecId && projectId && (
+        <a
+          href={`/projects/${projectId}/chat?report=${lastExecId}`}
+          className="btn-outline inline-flex items-center justify-center py-1.5 text-xs text-err"
+          style={{ borderColor: "var(--err)" }}
+        >
+          Reportar problema
+        </a>
       )}
       {filePath && blockedByReview && (
         <p className="text-center text-xs text-warn2">

@@ -1,11 +1,14 @@
 """Disk storage layout per project + file-manager helpers.
 
 Layout under back/storage/<project_id>/:
-    src/                      materialized source code (from SourceFile rows)
     _uploads/<uuid>/          raw upload sessions
     uploads/                  organized uploads
     <output_folder_name>/     processed results
     runs/<execution_uuid>/    per-run input.json / output.json
+
+O código executável (script do projeto + flowdesk_sdk.py) NÃO fica aqui: vai para
+RUNTIME_SRC_DIR (fora de back/), pois é regravado a cada execução e, sob back/, o
+`uvicorn --reload` reiniciaria o servidor no meio do teste. Ver config.RUNTIME_SRC_DIR.
 """
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from ..config import STORAGE_DIR
+from ..config import RUNTIME_SRC_DIR, STORAGE_DIR
 from ..models import Project, SourceFile
 
 
@@ -27,15 +30,19 @@ def project_root(project_id: int) -> Path:
 
 def ensure_project_dirs(project: Project) -> Path:
     root = project_root(project.id)
-    for sub in ["src", "_uploads", "uploads", project.output_folder_name, "runs"]:
+    for sub in ["_uploads", "uploads", project.output_folder_name, "runs"]:
         (root / sub).mkdir(parents=True, exist_ok=True)
     return root
 
 
 def materialize_sources(db: Session, project: Project) -> Path:
-    """Write all SourceFile rows to <project>/src so scripts can run."""
-    root = ensure_project_dirs(project)
-    src_dir = root / "src"
+    """Grava os SourceFile do projeto em RUNTIME_SRC_DIR/<id> (fora de back/) para o
+    subprocesso rodar. Fica fora do storage de propósito: assim regravar esses .py a
+    cada execução não dispara o watcher do `uvicorn --reload`. Retorna o src_dir, usado
+    como PYTHONPATH e local do script; os dados do projeto seguem em STORAGE_DIR."""
+    ensure_project_dirs(project)
+    src_dir = RUNTIME_SRC_DIR / str(project.id)
+    src_dir.mkdir(parents=True, exist_ok=True)
     files = (
         db.query(SourceFile)
         .filter(SourceFile.project_id == project.id, SourceFile.is_dir == False)  # noqa: E712

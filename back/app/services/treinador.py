@@ -237,3 +237,26 @@ def _bump_new_examples() -> None:
     meta = _load(_meta_path())
     meta["new_examples"] = int(meta.get("new_examples", 0)) + 1
     _save(_meta_path(), meta)
+
+
+def record_repair(project_id: int, symptom: str, root_cause: str, fix: str,
+                  source: str = "manual") -> bool:
+    """Registra um evento de reparo (sintoma -> causa-raiz -> correção) no store do
+    Treinador. Sinal de treino do lado das FALHAS (complementa os exemplos de sucesso
+    do harvest). Best-effort, sem DB, dedup por fingerprint; NUNCA lança. Retorna True
+    se gravou um evento novo. NÃO guarda dados de execução nem arquivos enviados."""
+    try:
+        fp = hashlib.sha1(
+            f"{project_id}|{symptom}|{fix}".encode("utf-8")
+        ).hexdigest()[:16]
+        data = _load(_repairs_path())
+        items = data.get("items", [])
+        if any(r.get("fingerprint") == fp for r in items):
+            return False  # dedup: mesmo reparo já registrado
+        items.append({"project_id": project_id, "symptom": symptom,
+                      "root_cause": root_cause, "fix": fix, "source": source,
+                      "fingerprint": fp})
+        _save(_repairs_path(), {"items": items})
+        return True
+    except Exception:
+        return False

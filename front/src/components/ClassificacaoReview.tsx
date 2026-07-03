@@ -65,6 +65,36 @@ export default function ClassificacaoReview({
     setEscolhas((e) => ({ ...e, [padrao]: { ...e[padrao], confirmado: true } }));
   }
 
+  // --- Ações em lote ---
+  function confirmarTodasIa() {
+    setEscolhas((e) => {
+      const next = { ...e };
+      for (const g of data.grupos) {
+        const cur = next[g.padrao];
+        if (cur?.origem === "ia" && cur.conta && !cur.confirmado) {
+          next[g.padrao] = { ...cur, confirmado: true };
+        }
+      }
+      return next;
+    });
+  }
+  function ignorarSemSugestao() {
+    setEscolhas((e) => {
+      const next = { ...e };
+      for (const g of data.grupos) {
+        if (!next[g.padrao]?.conta) {
+          next[g.padrao] = { conta: "IGNORAR", confirmado: true, origem: "manual" };
+        }
+      }
+      return next;
+    });
+  }
+  const iaPendentes = data.grupos.filter((g) => {
+    const e = escolhas[g.padrao];
+    return e?.origem === "ia" && e.conta && !e.confirmado;
+  }).length;
+  const semSugestao = data.grupos.filter((g) => !escolhas[g.padrao]?.conta).length;
+
   const pendentes = data.grupos.filter((g) => {
     const e = escolhas[g.padrao];
     return !e?.conta || !e.confirmado;
@@ -127,6 +157,28 @@ export default function ClassificacaoReview({
             placeholder="dd/mm/aaaa"
           />
         </label>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-ink2">Em lote:</span>
+        <button
+          type="button"
+          onClick={confirmarTodasIa}
+          disabled={iaPendentes === 0}
+          className="rounded-md border border-line px-2 py-1 text-xs text-ink hover:bg-surface-2 disabled:opacity-40"
+          title="Confirma todos os grupos com sugestão da IA (âmbar)"
+        >
+          Aceitar sugestões da IA ({iaPendentes})
+        </button>
+        <button
+          type="button"
+          onClick={ignorarSemSugestao}
+          disabled={semSugestao === 0}
+          className="rounded-md border border-line px-2 py-1 text-xs text-ink hover:bg-surface-2 disabled:opacity-40"
+          title="Marca como ignorado todos os grupos sem conta (vermelho)"
+        >
+          Ignorar sem sugestão ({semSugestao})
+        </button>
       </div>
 
       <div className="mt-3 max-h-80 space-y-2 overflow-auto pr-1">
@@ -194,7 +246,7 @@ function GrupoRow({
       : { borderColor: "var(--warn2)", background: "var(--warn2-soft)" };
   const valor = grupo.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   return (
-    <div className="rounded-lg border p-2.5" style={cor}>
+    <div className="flex min-h-[4.75rem] flex-col justify-between rounded-lg border p-2.5" style={cor}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-ink" title={grupo.exemplo}>
@@ -233,14 +285,13 @@ function GrupoRow({
           </button>
         </div>
       </div>
-      {escolha?.conta && escolha.conta !== "IGNORAR" && (
-        <div className="mt-1 text-[11px] text-ink2">
-          → {escolha.conta} {contasPorCodigo[escolha.conta]?.nome || ""}
-        </div>
-      )}
-      {escolha?.conta === "IGNORAR" && (
-        <div className="mt-1 text-[11px] text-ink2">→ fora da planilha (ignorado)</div>
-      )}
+      <div className="mt-1 truncate text-[11px] text-ink2">
+        {escolha?.conta === "IGNORAR"
+          ? "→ fora da planilha (ignorado)"
+          : escolha?.conta
+            ? `→ ${escolha.conta} ${contasPorCodigo[escolha.conta]?.nome || ""}`
+            : "→ selecione a conta contábil"}
+      </div>
     </div>
   );
 }

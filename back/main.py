@@ -1,12 +1,13 @@
 """FlowDesk backend entrypoint.
 
-Rode com:  python -m uvicorn main:app --host 127.0.0.1 --port 8000
-(ou .\\run-dev.ps1, que ainda derruba servidores antigos antes de subir)
+Rode com:  .\\run-dev.ps1   (recomendado: derruba servidor antigo e sobe com reload seguro)
+Ou:        python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app
 
-NAO use --reload: o runtime grava scripts .py em storage/ a cada execucao e o
-watcher do --reload reiniciaria o servidor no meio da execucao, matando o teste/
-publicacao (e a acao nao reflete na tela). Editou o backend? Reinicie o processo
-(ou rode run-dev.ps1 de novo, que faz isso de forma limpa).
+Use --reload-dir app, NUNCA --reload sozinho: o runtime grava scripts .py em
+storage/ a cada execucao, e o watcher do --reload padrao (que observa o diretorio
+inteiro) reiniciaria o servidor no meio da execucao, matando o teste/publicacao.
+Restringir o watch a app/ recarrega o codigo do backend sem enxergar storage/.
+Editou main.py (fora de app/)? Reinicie o processo (rode run-dev.ps1 de novo).
 """
 from __future__ import annotations
 

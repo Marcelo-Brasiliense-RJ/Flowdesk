@@ -40,3 +40,8 @@ def test_construtor_handles_bad_json(monkeypatch):
     monkeypatch.setattr(orchestrator, "call_agent", lambda *a, **k: "lixo")
     out = orchestrator.run_construtor({"regra_negocio": "x"}, {}, "")
     assert out["message"] == "" and out["actions"] == []
+
+
+def test_construtor_prompt_names_sdk_module():
+    # sem o nome exato do módulo, o modelo gera `import flowdesk` -> ModuleNotFoundError
+    assert "flowdesk_sdk" in orchestrator.CONSTRUTOR_PROMPT

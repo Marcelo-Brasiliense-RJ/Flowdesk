@@ -9,7 +9,9 @@ export default function ProgressTimeline({
   events: ProgressEvent[];
   running: boolean;
 }) {
-  if (!events.length && !running) return null;
+  // sem eventos ainda: o botão de teste / o "Processando..." do app já indicam o
+  // início; um "Iniciando…" aqui seria um segundo spinner para o mesmo estado.
+  if (!events.length) return null;
   return (
     <ol className="mt-3 space-y-1.5" aria-label="Etapas da execução">
       {events.map((e, i) => {
@@ -38,11 +40,6 @@ export default function ProgressTimeline({
           </li>
         );
       })}
-      {running && events.length === 0 && (
-        <li className="flex items-center gap-2 text-sm text-ink2">
-          <Spinner className="h-3.5 w-3.5 text-accentv" /> Iniciando…
-        </li>
-      )}
     </ol>
   );
 }
