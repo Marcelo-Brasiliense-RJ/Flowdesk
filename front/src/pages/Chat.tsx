@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion, type Variants } from "framer-motion";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import type { Project } from "../lib/types";
+import type { Project, TemplateInfo } from "../lib/types";
 import TopNav from "../components/TopNav";
 import SmartChat from "../components/SmartChat";
 import { Spinner } from "../components/ui";
@@ -17,12 +17,15 @@ const SUGGESTIONS = [
 
 export default function Chat() {
   const { user } = useAuth();
+  const nav = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [autoStart, setAutoStart] = useState<{ content: string; files: File[] } | null>(null);
   const [prompt, setPrompt] = useState(() => localStorage.getItem("flowdesk_chat_draft") || "");
   const [files, setFiles] = useState<File[]>([]);
   const [creating, setCreating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
+  const [instantiating, setInstantiating] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
   const reduce = useReducedMotion();
 
@@ -31,6 +34,21 @@ export default function Chat() {
   useEffect(() => {
     if (!project) localStorage.setItem("flowdesk_chat_draft", prompt);
   }, [prompt, project]);
+
+  useEffect(() => {
+    api.get<TemplateInfo[]>("/api/templates").then(setTemplates).catch(() => {});
+  }, []);
+
+  async function useTemplate(key: string) {
+    if (instantiating) return;
+    setInstantiating(key);
+    try {
+      const r = await api.post<{ project_id: number }>(`/api/templates/${key}/instantiate`);
+      nav(`/projects/${r.project_id}/assistente`);
+    } catch {
+      setInstantiating("");
+    }
+  }
 
   async function start() {
     if (!prompt.trim() && files.length === 0) return;
@@ -222,15 +240,18 @@ export default function Chat() {
                 </AnimatePresence>
               </motion.div>
 
-              {/* chips de sugestão */}
-              <motion.div variants={item} className="mt-5 flex flex-wrap justify-center gap-2">
+              {/* chips de sugestão: fila horizontal rolável (evita empilhar frases longas) */}
+              <motion.div
+                variants={item}
+                className="mt-5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
                 {SUGGESTIONS.map((s) => (
                   <motion.button
                     key={s}
                     onClick={() => useSuggestion(s)}
                     whileHover={{ scale: 1.04, y: -2 }}
                     whileTap={{ scale: 0.97 }}
-                    className="rounded-full border border-line bg-surface/70 px-3 py-1.5 text-xs text-ink2 backdrop-blur transition-colors hover:border-accentv hover:text-ink"
+                    className="shrink-0 whitespace-nowrap rounded-full border border-line bg-surface/70 px-3 py-1.5 text-xs text-ink2 backdrop-blur transition-colors hover:border-accentv hover:text-ink"
                   >
                     {s}
                   </motion.button>
@@ -240,6 +261,30 @@ export default function Chat() {
               <motion.p variants={item} className="mt-4 text-center text-xs text-ink3">
                 Dica: Ctrl/Cmd + Enter para começar.
               </motion.p>
+
+              {templates.length > 0 && (
+                <motion.div variants={item} className="mt-8">
+                  <h2 className="mb-3 text-center text-xs font-bold uppercase tracking-wide text-ink3">
+                    Ou comece com um modelo
+                  </h2>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {templates.map((t) => (
+                      <button
+                        key={t.key}
+                        onClick={() => useTemplate(t.key)}
+                        disabled={!!instantiating}
+                        className="rounded-2xl border border-dashed border-line-strong p-4 text-left transition hover:border-accentv disabled:opacity-60"
+                        style={{ background: "var(--accent-soft)" }}
+                      >
+                        <div className="font-semibold text-ink">
+                          {instantiating === t.key ? "Criando…" : t.name}
+                        </div>
+                        <div className="mt-1 text-sm text-ink2">{t.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             </motion.div>
           </motion.main>
         ) : (

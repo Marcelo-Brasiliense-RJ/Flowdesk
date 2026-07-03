@@ -3,11 +3,21 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDialog } from "../components/Dialog";
-import type { Folder, Project, TemplateInfo } from "../lib/types";
+import type { Folder, Project } from "../lib/types";
 import { Spinner, StatusBadge } from "../components/ui";
 import TopNav from "../components/TopNav";
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+// ponytail: favoritos por navegador (localStorage); trocar por coluna/endpoint se precisar sincronizar entre dispositivos
+const FAV_KEY = "flowdesk_favorites";
+function loadFavs(): Set<number> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
 
 function fmtData(iso?: string) {
   if (!iso) return "";
@@ -32,32 +42,26 @@ export default function Console() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
-  const [instantiating, setInstantiating] = useState("");
+  const [favorites, setFavorites] = useState<Set<number>>(loadFavs);
 
-  async function useTemplate(key: string) {
-    if (instantiating) return;
-    setInstantiating(key);
-    try {
-      const r = await api.post<{ project_id: number }>(`/api/templates/${key}/instantiate`);
-      nav(`/projects/${r.project_id}/assistente`);
-    } catch (e: any) {
-      await dlg.confirm({ title: "Não foi possível criar", message: e?.message || "Erro ao usar o modelo.", confirmLabel: "Entendi" });
-      setInstantiating("");
-    }
+  function toggleFavorite(id: number) {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      localStorage.setItem(FAV_KEY, JSON.stringify([...next]));
+      return next;
+    });
   }
 
   async function load() {
     // carrega projetos e pastas em paralelo e renderiza juntos (evita o flash em
     // que projetos de pastas somem até as pastas chegarem)
-    const [ps, fs, ts] = await Promise.all([
+    const [ps, fs] = await Promise.all([
       api.get<Project[]>("/api/projects"),
       api.get<Folder[]>("/api/folders"),
-      api.get<TemplateInfo[]>("/api/templates").catch(() => [] as TemplateInfo[]),
     ]);
     setProjects(ps);
     setFolders(fs);
-    setTemplates(ts);
     setLoading(false);
   }
   useEffect(() => {
@@ -78,9 +82,10 @@ export default function Console() {
   }
 
   async function bulkDelete() {
-    if (selected.size === 0) return;
+    const n = selected.size;
+    if (n === 0) return;
     const ok = await dlg.confirm({
-      title: `Excluir ${selected.size} projeto(s)`,
+      title: `Excluir ${n} projeto(s)`,
       message:
         "Esta ação não pode ser desfeita. Versões, execuções e arquivos de todos os projetos selecionados serão removidos.",
       confirmLabel: "Excluir selecionados",
@@ -88,9 +93,23 @@ export default function Console() {
     });
     if (!ok) return;
     try {
-      await api.post("/api/projects/bulk-delete", { ids: [...selected] });
+      const r = await api.post<{ deleted: number }>("/api/projects/bulk-delete", {
+        ids: [...selected],
+      });
       exitSelectMode();
-      load();
+      await load();
+      // feedback explícito: a lista some sozinha, mas o usuário precisa de confirmação
+      await dlg.confirm({
+        title:
+          r.deleted >= n
+            ? `${r.deleted} projeto(s) excluído(s)`
+            : `${r.deleted} de ${n} projeto(s) excluído(s)`,
+        message:
+          r.deleted < n
+            ? "Os demais não foram excluídos: podem já ter sido removidos ou pertencer a outra organização."
+            : undefined,
+        confirmLabel: "Entendi",
+      });
     } catch (e: any) {
       await dlg.confirm({
         title: "Não foi possível excluir",
@@ -179,7 +198,10 @@ export default function Console() {
     folder: f,
     items: projects.filter((p) => p.folder_id === f.id),
   }));
-  const ungrouped = projects.filter((p) => !p.folder_id);
+  // "Sem pasta" mostra só o que está no ar; rascunhos sem pasta vão para a seção "Rascunhos"
+  const ungroupedLive = projects.filter((p) => !p.folder_id && p.status === "live");
+  const drafts = projects.filter((p) => !p.folder_id && p.status === "draft");
+  const favorited = projects.filter((p) => favorites.has(p.id));
 
   return (
     <div className="min-h-full">
@@ -247,36 +269,26 @@ export default function Console() {
               </form>
             )}
 
-            {!loading && templates.length > 0 && (
-              <section className="mb-8">
-                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink3">
-                  Comece com um modelo
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {templates.map((t) => (
-                    <button
-                      key={t.key}
-                      onClick={() => useTemplate(t.key)}
-                      disabled={!!instantiating}
-                      className="rounded-2xl border border-dashed border-line-strong p-4 text-left transition hover:border-accentv disabled:opacity-60"
-                      style={{ background: "var(--accent-soft)" }}
-                    >
-                      <div className="font-semibold text-ink">
-                        {instantiating === t.key ? "Criando…" : t.name}
-                      </div>
-                      <div className="mt-1 text-sm text-ink2">{t.description}</div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
             {loading ? (
               <div className="flex justify-center py-20">
                 <Spinner className="h-8 w-8 text-ink3" />
               </div>
             ) : (
               <>
+                <Section
+                  title="⭐ Favoritos"
+                  count={favorited.length}
+                  projects={favorited}
+                  onDelete={deleteProject}
+                  onMoveMenu={moveProjectViaMenu}
+                  selectMode={selectMode}
+                  selected={selected}
+                  onToggleSelect={toggleSelect}
+                  favorites={favorites}
+                  onToggleFavorite={toggleFavorite}
+                  pinned
+                  emptyHint="Nenhum favorito ainda — clique na ⭐ de uma automação para fixá-la aqui"
+                />
                 {grouped.map(({ folder, items }) => (
                   <Section
                     key={folder.id}
@@ -292,18 +304,34 @@ export default function Console() {
                     selectMode={selectMode}
                     selected={selected}
                     onToggleSelect={toggleSelect}
+                    favorites={favorites}
+                    onToggleFavorite={toggleFavorite}
                   />
                 ))}
                 <Section
                   title="Sem pasta"
-                  count={ungrouped.length}
-                  projects={ungrouped}
+                  count={ungroupedLive.length}
+                  projects={ungroupedLive}
                   onDelete={deleteProject}
                   onMoveMenu={moveProjectViaMenu}
                   onDropProject={(id) => moveProject(id, null)}
                   selectMode={selectMode}
                   selected={selected}
                   onToggleSelect={toggleSelect}
+                  favorites={favorites}
+                  onToggleFavorite={toggleFavorite}
+                />
+                <Section
+                  title="📝 Rascunhos"
+                  count={drafts.length}
+                  projects={drafts}
+                  onDelete={deleteProject}
+                  onMoveMenu={moveProjectViaMenu}
+                  selectMode={selectMode}
+                  selected={selected}
+                  onToggleSelect={toggleSelect}
+                  favorites={favorites}
+                  onToggleFavorite={toggleFavorite}
                 />
               </>
             )}
@@ -326,6 +354,10 @@ function Section({
   selectMode,
   selected,
   onToggleSelect,
+  favorites,
+  onToggleFavorite,
+  pinned,
+  emptyHint,
 }: {
   title: string;
   count: number;
@@ -339,11 +371,15 @@ function Section({
   selectMode: boolean;
   selected: Set<number>;
   onToggleSelect: (id: number) => void;
+  favorites: Set<number>;
+  onToggleFavorite: (id: number) => void;
+  pinned?: boolean;
+  emptyHint?: string;
 }) {
   const [menu, setMenu] = useState(false);
   const [over, setOver] = useState(false);
-  // hide only the virtual "Sem pasta" group when empty; keep real (empty) folders
-  if (projects.length === 0 && !folderId) return null;
+  // hide only the virtual "Sem pasta" group when empty; keep real (empty) folders and pinned sections (favoritos)
+  if (projects.length === 0 && !folderId && !pinned) return null;
   return (
     <section
       className="mb-8"
@@ -407,7 +443,7 @@ function Section({
           }`}
           style={over ? { background: "var(--accent-soft)" } : undefined}
         >
-          {over ? "Solte aqui para mover" : "Pasta vazia — arraste projetos para cá"}
+          {over ? "Solte aqui para mover" : emptyHint ?? "Pasta vazia — arraste projetos para cá"}
         </div>
       ) : (
         <div
@@ -425,6 +461,8 @@ function Section({
               selectMode={selectMode}
               selected={selected.has(p.id)}
               onToggleSelect={onToggleSelect}
+              isFavorite={favorites.has(p.id)}
+              onToggleFavorite={onToggleFavorite}
             />
           ))}
         </div>
@@ -440,6 +478,8 @@ function ProjectCard({
   selectMode,
   selected,
   onToggleSelect,
+  isFavorite,
+  onToggleFavorite,
 }: {
   project: Project;
   onDelete: (id: number) => void;
@@ -447,6 +487,8 @@ function ProjectCard({
   selectMode: boolean;
   selected: boolean;
   onToggleSelect: (id: number) => void;
+  isFavorite: boolean;
+  onToggleFavorite: (id: number) => void;
 }) {
   const nav = useNavigate();
   const [menu, setMenu] = useState(false);
@@ -459,7 +501,7 @@ function ProjectCard({
         e.dataTransfer.effectAllowed = "move";
       }}
       onClick={() =>
-        selectMode ? onToggleSelect(project.id) : nav(`/projects/${project.id}/assistente`)
+        selectMode ? onToggleSelect(project.id) : nav(`/projects/${project.id}/chat`)
       }
       className={`card group relative flex cursor-pointer flex-col p-5 pl-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-token active:cursor-grabbing ${
         selectMode && selected ? "ring-2" : ""
@@ -492,6 +534,21 @@ function ProjectCard({
           </h3>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(project.id);
+            }}
+            title={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+            aria-label={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+            aria-pressed={isFavorite}
+            className={`rounded-md px-1 text-base leading-none transition hover:bg-surface-2 ${
+              isFavorite ? "text-amber-400" : "text-ink3 hover:text-ink2"
+            }`}
+          >
+            {isFavorite ? "★" : "☆"}
+          </button>
+          <span className="badge font-mono">#{project.id}</span>
           <StatusBadge status={project.status} />
           {!selectMode && (
             <button
