@@ -1,0 +1,54 @@
+# FlowDesk — stack para EasyPanel (front + back)
+#
+# No EasyPanel: crie um servico do tipo "Compose", cole este arquivo, defina as
+# variaveis de ambiente (ver .env.example) e aponte o dominio para o servico
+# "front" na porta 80. Somente o front precisa de dominio publico; ele faz proxy
+# de /api e /ws para o back pela rede interna do compose.
+#
+# Persistencia: com SUPABASE_DB_URL o banco fica no Supabase; o volume
+# flowdesk_storage guarda uploads e outputs dos scripts (sobrevive a redeploys).
+# Sem SUPABASE_DB_URL, o mesmo volume guarda tambem o SQLite (flowdesk.db).
+
+services:
+  back:
+    build: ./back
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      # So exigido no primeiro seed de um banco vazio; com o Supabase ja populado
+      # o seed_if_empty pula e esta variavel pode ficar vazia.
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # Vazio no container: o backend usa o proprio python da imagem.
+      SCRIPT_PYTHON: ${SCRIPT_PYTHON:-}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost}
+      # Banco Postgres (Supabase). Vazio = SQLite local no volume.
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      # true = apps publicados (/app/<sub>) abertos, SEM login.
+      PUBLIC_APPS_OPEN: ${PUBLIC_APPS_OPEN:-false}
+    volumes:
+      - flowdesk_storage:/app/storage
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  front:
+    build: ./front
+    restart: unless-stopped
+    depends_on:
+      - back
+    expose:
+      - "80"
+    # Para testar localmente com `docker compose up`, descomente e acesse :8080.
+    # No EasyPanel, deixe comentado e aponte o dominio para front:80.
+    # ports:
+    #   - "8080:80"
+
+volumes:
+  flowdesk_storage:
