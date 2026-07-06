@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+.env.bak*
+flowdesk.db
+storage/
+tests/
+qa_suite.py
+supabase/

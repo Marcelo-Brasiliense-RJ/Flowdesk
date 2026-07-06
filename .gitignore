@@ -8,7 +8,12 @@ venv/
 # FlowDesk runtime data and DB
 back/flowdesk.db
 back/storage/
-back/.env
+
+# Env com segredos (senha do banco, chaves) — NUNCA versionar, em qualquer pasta.
+# .env.example fica versionado (nome diferente, nao casa com estes padroes).
+.env
+.env.*
+!.env.example
 back/.env.bak*
 
 # Dados de cliente e midia — NUNCA versionar (confidencial)
