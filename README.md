@@ -1,115 +1,163 @@
+<div align="center">
+
 # FlowDesk
 
-Plataforma low-code de automação de processos com IA integrada (inspirada no
-Abstra), com identidade IRKO. O usuário descreve a automação em linguagem
-natural no **Smart Chat**, a IA conduz uma entrevista e escreve o código Python,
-o fluxo é montado num canvas visual (Form → Script → Form) e publicado como uma
-aplicação web independente.
+### Automação de processos em linguagem natural. Você descreve, a IA constrói.
+
+Descreva o que quer automatizar. Um agente de IA entrevista, escreve o Python,
+monta o fluxo num canvas visual e publica como aplicação web. Sem sair do navegador.
+
+![Status](https://img.shields.io/badge/status-em%20desenvolvimento-yellow)
+![FastAPI](https://img.shields.io/badge/FastAPI-Python%203.11-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React%2018-TypeScript-20232A?logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-Build-646CFF?logo=vite&logoColor=FFD62B)
+![OpenAI](https://img.shields.io/badge/IA-LLM%20codegen-FF6F61?logo=openai&logoColor=white)
+
+</div>
+
+---
+
+## O problema
+
+Times de negócio sabem exatamente o processo que precisam automatizar, mas dependem de um engenheiro para transformar isso em software. A fila de TI é longa, o processo simples espera semanas, e quando fica pronto já mudou. Ferramentas low-code tradicionais esbarram no primeiro caso que sai do padrão.
+
+## A ideia
+
+A linguagem natural é a interface. Você descreve a automação no chat; a IA faz as perguntas certas, escreve e testa o Python, e monta o fluxo num canvas. O time técnico mantém controle total do código gerado; o time de negócio publica sozinho.
+
+> Você: *"toda segunda, pegar a planilha do SharePoint, conciliar com o banco e mandar as divergências por e-mail"*
+>
+> FlowDesk: entrevista rápida → gera o script → monta Form → Script → Job → publica a URL
+
+---
+
+## Como funciona
+
+```mermaid
+flowchart LR
+  A[Descreve no Smart Chat] --> B[IA entrevista via opcoes]
+  B --> C[IA escreve o Python]
+  C --> D{Voce aprova?}
+  D -->|sim| E[Monta o stage no canvas]
+  D -->|nao| B
+  E --> F[Testa em subprocesso isolado]
+  F --> G{Falhou?}
+  G -->|sim| H[Auto-reparo diagnostica e corrige]
+  G -->|nao| I[Publica em URL publica]
+  H --> F
+```
+
+Cada etapa do fluxo é um **stage** executável: `Form` (entrada), `Script` (lógica), `Job` (agendamento), `Hook` (webhook) ou `Agent` (IA). O modelo de stages é inspirado no da Abstra (abstra.io).
+
+---
+
+## Módulos
+
+| Módulo | O que faz |
+| --- | --- |
+| Console | Painel admin com cards de projetos, pastas e gerenciamento |
+| Editor | Três painéis: Smart Chat, editor Monaco e canvas React Flow |
+| Monitor | Visualiza execuções em tempo real, stage a stage |
+| Histórico de versões | Tabela de builds imutáveis |
+| Logs de execução | Filtragem e rastreamento completo |
+| Sistema de arquivos | Uploads, processamento e outputs |
+| Controle de acesso | Gestão de usuários e papéis |
+| Aplicação publicada | Interface do usuário final com SSO e formulários |
+| Auto-reparo | Diagnóstico e correção assistida de scripts que falharam |
+
+---
+
+## Arquitetura
+
+```mermaid
+flowchart TB
+  subgraph Frontend
+    UI[React 18 + TS + Vite + Tailwind]
+    MON[Monaco Editor]
+    RF[React Flow canvas]
+  end
+  subgraph Backend
+    API[FastAPI + Python 3.11]
+    WS[WebSocket - tempo real]
+    RT[Runtime: subprocesso isolado + fila FIFO]
+  end
+  subgraph IA
+    LLM[OpenAI API com streaming]
+  end
+  DB[(SQLite local / Postgres em producao)]
+  UI <--> API
+  MON --> API
+  RF --> API
+  API <--> WS
+  API --> RT
+  API --> LLM
+  API --> DB
+```
+
+- Scripts executam em **subprocesso isolado**, com fila FIFO e logs capturados em tempo real via WebSocket.
+- A IA usa OpenAI API com streaming, com fallback para modo simulado quando a chave não está configurada.
+
+---
 
 ## Stack
 
-- **Backend:** FastAPI + Python 3.11 · SQLAlchemy + SQLite · WebSocket nativo ·
-  runtime de scripts em subprocesso isolado com fila asyncio · JWT.
-- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS · Monaco Editor ·
-  React Flow.
-- **IA:** OpenAI API com streaming (override consciente do spec, que sugeria
-  Anthropic). Cai em modo simulado se não houver `OPENAI_API_KEY`.
+- **Backend:** FastAPI, Python 3.11, SQLAlchemy, WebSocket nativo
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
+- **Editor de código:** Monaco Editor
+- **Canvas de workflow:** React Flow
+- **IA:** OpenAI (gpt-4o-mini por padrão)
+- **Autenticação:** JWT
+- **Banco:** SQLite local, Postgres/Supabase em produção
 
-## Estrutura
+---
+
+## Estrutura do repositório
 
 ```
-flowdesk/
-  back/                 FastAPI
-    main.py             entrypoint (lifespan: cria tabelas, seed, runtime)
-    app/
-      models.py         modelos dos 10 módulos
-      routers/          auth, projects, executions, builds, filemanager,
-                        settings, chat, published, realtime
-      runtime/runner.py fila FIFO + subprocesso + WebSocket
-      services/         storage em disco, hub de WebSocket
-      seed.py           org IRKO, 3 usuários, 2 projetos
-    storage/            dados em disco por projeto (gitignored)
-    qa_suite.py         suíte de testes de integração ponta-a-ponta
-  front/                React + Vite
-    src/pages/          Login, Console, Editor, WorkflowMonitor, Builds,
-                        Logs, Files, AccessControl, ProjectSettings, PublishedApp
-    src/components/     SmartChat, ProjectLayout, flowNodes, ui
+back/     API FastAPI, runtime e integracao de IA
+front/    Aplicacao React (console, editor, canvas)
+docs/     Documentacao tecnica
+testes/   Suite de integracao (qa_suite.py)
 ```
 
-## Como rodar
+---
 
-### Backend
+## Execução local
+
 ```bash
+# Backend (porta 8000)
 cd back
-python -m venv .venv
-.venv\Scripts\activate            # Windows  (source .venv/bin/activate no Unix)
-pip install -r requirements.txt
-copy .env.example .env            # e preencha OPENAI_API_KEY (opcional)
-uvicorn main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app   # ou .\run-dev.ps1
-```
-Na primeira execução o banco `flowdesk.db` é criado e populado com o seed.
+uvicorn app.main:app --reload --reload-dir app
 
-> **Use `--reload-dir app`, nunca `--reload` sozinho.** O runtime regrava o script
-> `.py` de cada projeto em `back/storage/<id>/` a cada execução; o `--reload` padrão
-> observa o diretório inteiro, vê esse `.py` e reinicia o servidor no meio da
-> execução, matando o teste/publicação ("o servidor foi reiniciado"). Restringir o
-> watch a `app/` recarrega o código do backend sem enxergar `storage/`. Excluir
-> `storage/` via `--reload-exclude` não é confiável no Python 3.11. Editou `main.py`
-> (fora de `app/`)? Reinicie o processo (ou rode `.\run-dev.ps1`, que derruba o
-> servidor antigo antes de subir um limpo, evitando zumbis servindo código velho).
-
-### Frontend
-```bash
+# Frontend (porta 5173, com proxy para a API)
 cd front
-npm install
-npm run dev                       # http://localhost:5173 (proxy /api -> :8000)
+npm install && npm run dev
 ```
 
-## Acesso (seed)
+> Use `--reload-dir app`. Sem isso, o runtime recarrega o servidor ao reescrever scripts em `storage/`.
 
-O seed inicial cria a organização e usuários de exemplo (um admin e demais).
-As credenciais não são versionadas por segurança; solicite ao responsável pelo
-ambiente ou defina a senha do seed via variável de ambiente.
-- App publicado: login por SSO de domínio, só e-mail.
+A suíte de integração (`testes/qa_suite.py`) exercita todos os módulos contra o servidor real.
 
-## Projeto de exemplo
+---
 
-**Conciliador de Planilhas** (`/app/conciliador`): workflow de 3 nós
-`Form (upload) → Script (pandas) → Form (download)`, já publicado. Concilia duas
-planilhas por uma chave comum e gera o relatório de divergências.
+## Roadmap
 
-## Os 10 módulos
+- [x] Modelo de stages (Form, Script, Job, Hook, Agent)
+- [x] Smart Chat com codegen assistido por IA
+- [x] Runtime isolado com logs em tempo real
+- [x] Auto-reparo de scripts
+- [ ] Publicação em Postgres/Supabase gerenciado
+- [ ] Biblioteca de templates de automação
+- [ ] Permissões granulares por projeto
 
-Console · Editor (Smart Chat + Monaco + Canvas) · Monitor em tempo real ·
-Histórico de versões (builds) · Logs de execução · Sistema de arquivos ·
-Controle de acesso · Configurações do projeto · Aplicação publicada ·
-Runtime de execução.
+---
 
-## Testes
+## Sobre
 
-Suíte de integração que exercita todos os módulos contra o servidor real
-(inclui runtime de subprocesso, WebSocket, segurança e o fluxo publicado):
+Projeto de [Marcelo Brasiliense](https://github.com/Marcelo-Brasiliense-RJ) · [Portfólio](https://portifolio-marcelo-brasiliense.vercel.app/)
 
-```bash
-# com o backend rodando em :8000
-cd back
-python qa_suite.py
-```
-Cria apenas projetos `QA …` e os remove ao final. Saída esperada:
-`RESULTADO: 46/46 testes passaram`.
+<div align="center">
 
-Verificações de tipo / build do frontend:
-```bash
-cd front
-npx tsc --noEmit
-npm run build
-```
+Da descrição em linguagem natural ao app publicado.
 
-## Notas de runtime
-
-- Cada Script roda em subprocesso Python isolado, com timeout configurável,
-  stdout/stderr capturados e UUID por execução.
-- As variáveis de ambiente do projeto (incluindo segredos preenchidos no Smart
-  Chat via `require_env`) são injetadas no subprocesso.
-- O SDK `flowdesk_sdk` (`get_input`, `set_output`, `output_path`, `log`) é
-  injetado automaticamente em cada projeto.
+</div>
