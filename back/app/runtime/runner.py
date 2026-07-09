@@ -21,6 +21,25 @@ from ..services import storage
 from ..services.ws import hub
 
 
+# S1: allowlist de variaveis do SO repassadas ao subprocesso. Apenas o minimo
+# para o interpretador Python e libs nativas (numpy/pandas) subirem em Windows e
+# Linux. Segredos do servidor (SECRET_KEY, OPENAI_API_KEY, SMTP_PASSWORD,
+# SUPABASE_DB_URL...) NAO entram. ponytail: allowlist e nao denylist, para que um
+# segredo novo no ambiente do servidor jamais vaze por esquecimento; ajuste esta
+# lista se alguma lib exigir outra var de SO.
+_SUBPROCESS_ENV_ALLOWLIST = (
+    # Windows (os.environ ja normaliza as chaves para maiuscula neste SO)
+    "SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATH", "PATHEXT", "TEMP", "TMP",
+    "COMSPEC", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+    "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES",
+    "PROGRAMFILES(X86)", "COMMONPROGRAMFILES", "USERPROFILE",
+    "HOMEDRIVE", "HOMEPATH", "USERNAME",
+    # POSIX
+    "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "LD_LIBRARY_PATH",
+    "USER", "LOGNAME", "SHELL", "TZ",
+)
+
+
 def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
@@ -225,7 +244,9 @@ class RuntimeManager:
     ) -> tuple[int, str, str]:
         import os
 
-        env = os.environ.copy()
+        # S1: monta o ambiente do zero a partir da allowlist do SO, NUNCA de
+        # os.environ.copy() (que herdava todos os segredos do servidor).
+        env = {k: os.environ[k] for k in _SUBPROCESS_ENV_ALLOWLIST if k in os.environ}
         env.update({k: str(v) for k, v in env_vars.items()})
         env["FLOWDESK_INPUT"] = str(input_path)
         env["FLOWDESK_OUTPUT"] = str(output_path)
