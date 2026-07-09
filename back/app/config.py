@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # Backend de execução de scripts: "local" (subprocesso na máquina, default)
     # ou "docker" (contêiner Linux efêmero isolado, ver S1 parte 2).
     execution_backend: str = "local"
+    # Imagem e limites do backend "docker" (S1 parte 2). runtime_image aponta
+    # para ghcr.io/<org>/flowdesk-runtime:<tag> no deploy Linux.
+    runtime_image: str = "flowdesk-runtime:local"
+    runtime_memory: str = "512m"
+    runtime_cpus: str = "1.0"
+    runtime_pids_limit: int = 256
     frontend_origin: str = "http://localhost:5173"
     # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
     supabase_db_url: str = ""
