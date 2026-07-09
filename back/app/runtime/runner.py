@@ -229,7 +229,13 @@ class RuntimeManager:
         finally:
             db.close()
 
-    async def _spawn(
+    async def _spawn(self, **kwargs) -> tuple[int, str, str]:
+        backend = settings.execution_backend
+        if backend == "local":
+            return await self._spawn_local(**kwargs)
+        raise ValueError(f"execution_backend desconhecido: {backend!r}")
+
+    async def _spawn_local(
         self,
         *,
         src_dir: Path,

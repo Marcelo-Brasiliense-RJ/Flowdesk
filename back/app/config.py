@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     openai_model_codegen: str = "gpt-5.3-codex"
     openai_model_strong: str = "gpt-4.1"
     script_python: str = ""
+    # Backend de execução de scripts: "local" (subprocesso na máquina, default)
+    # ou "docker" (contêiner Linux efêmero isolado, ver S1 parte 2).
+    execution_backend: str = "local"
     frontend_origin: str = "http://localhost:5173"
     # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
     supabase_db_url: str = ""
