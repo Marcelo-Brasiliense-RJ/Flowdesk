@@ -69,6 +69,12 @@ def _last_error_line(stderr: str) -> str:
     return linhas[-1][:300]
 
 
+def _cap(b: bytes, limit: int = 100_000) -> str:
+    """Decodifica e trunca stdout/stderr do subprocesso para persistir."""
+    s = b.decode("utf-8", "replace")
+    return s if len(s) <= limit else s[:limit] + "\n[...saída truncada...]"
+
+
 class RuntimeManager:
     def __init__(self) -> None:
         self.queue: "asyncio.Queue[str]" = asyncio.Queue()
@@ -265,10 +271,6 @@ class RuntimeManager:
 
         script_path = src_dir / entry
 
-        def _cap(b: bytes, limit: int = 100_000) -> str:
-            s = b.decode("utf-8", "replace")
-            return s if len(s) <= limit else s[:limit] + "\n[...saída truncada...]"
-
         # subprocess SÍNCRONO numa thread: funciona em qualquer event loop
         # (o asyncio subprocess exige ProactorEventLoop no Windows, que o uvicorn
         # com --reload nem sempre usa).
@@ -336,10 +338,6 @@ class RuntimeManager:
         for k, v in env_vars.items():
             cmd += ["-e", f"{k}={v}"]
         cmd += [settings.runtime_image, "python", f"/src/{entry}"]
-
-        def _cap(b: bytes, limit: int = 100_000) -> str:
-            s = b.decode("utf-8", "replace")
-            return s if len(s) <= limit else s[:limit] + "\n[...saida truncada...]"
 
         def _blocking():
             try:
