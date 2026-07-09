@@ -23,7 +23,7 @@ def test_backend_local_chama_spawn_local(monkeypatch):
 
 
 def test_backend_desconhecido_levanta(monkeypatch):
-    monkeypatch.setattr(settings, "execution_backend", "docker", raising=False)
+    monkeypatch.setattr(settings, "execution_backend", "invalido", raising=False)
     mgr = runner.RuntimeManager()
     with pytest.raises(ValueError, match="execution_backend"):
         asyncio.run(mgr._spawn(entry="x.py", env_vars={}))

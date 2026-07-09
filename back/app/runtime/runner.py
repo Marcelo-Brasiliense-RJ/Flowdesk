@@ -233,6 +233,8 @@ class RuntimeManager:
         backend = settings.execution_backend
         if backend == "local":
             return await self._spawn_local(**kwargs)
+        if backend == "docker":
+            return await self._spawn_docker(**kwargs)
         raise ValueError(f"execution_backend desconhecido: {backend!r}")
 
     async def _spawn_local(
@@ -283,6 +285,69 @@ class RuntimeManager:
                 )
                 return r.returncode, _cap(r.stdout), _cap(r.stderr)
             except subprocess.TimeoutExpired as e:
+                err = _cap(e.stderr or b"") + f"\n[runtime] Tempo limite de {timeout}s excedido."
+                return 1, _cap(e.stdout or b""), err
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _blocking)
+
+    async def _spawn_docker(
+        self,
+        *,
+        src_dir: Path,
+        cwd: Path,
+        entry: str,
+        input_path: Path,
+        output_path: Path,
+        output_dir: Path,
+        run_dir: Path,
+        env_vars: dict,
+        timeout: int,
+    ) -> tuple[int, str, str]:
+        import subprocess
+
+        # cwd e o root de storage do projeto; run_dir e output_dir vivem sob ele.
+        root = cwd
+
+        def _to_container(p: Path) -> str:
+            rel = str(p.relative_to(root)).replace("\\", "/")
+            return "/project/" + rel
+
+        name = f"flowdesk-run-{run_dir.name}"
+        cmd = [
+            "docker", "run", "--rm", "--name", name,
+            "--network", "none",
+            "--read-only",
+            "--tmpfs", "/tmp",
+            "-v", f"{root}:/project:rw",
+            "-v", f"{src_dir}:/src:ro",
+            "--user", "1000:1000",
+            "--memory", settings.runtime_memory,
+            "--cpus", settings.runtime_cpus,
+            "--pids-limit", str(settings.runtime_pids_limit),
+            "-w", "/project",
+            "-e", "PYTHONPATH=/src",
+            "-e", "PYTHONIOENCODING=utf-8",
+            "-e", f"FLOWDESK_INPUT={_to_container(input_path)}",
+            "-e", f"FLOWDESK_OUTPUT={_to_container(output_path)}",
+            "-e", f"FLOWDESK_OUTPUT_DIR={_to_container(output_dir)}",
+            "-e", f"FLOWDESK_RUN_DIR={_to_container(run_dir)}",
+        ]
+        for k, v in env_vars.items():
+            cmd += ["-e", f"{k}={v}"]
+        cmd += [settings.runtime_image, "python", f"/src/{entry}"]
+
+        def _cap(b: bytes, limit: int = 100_000) -> str:
+            s = b.decode("utf-8", "replace")
+            return s if len(s) <= limit else s[:limit] + "\n[...saida truncada...]"
+
+        def _blocking():
+            try:
+                r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+                return r.returncode, _cap(r.stdout), _cap(r.stderr)
+            except subprocess.TimeoutExpired as e:
+                # o cliente docker morreu, mas o container pode seguir vivo
+                subprocess.run(["docker", "rm", "-f", name], capture_output=True)
                 err = _cap(e.stderr or b"") + f"\n[runtime] Tempo limite de {timeout}s excedido."
                 return 1, _cap(e.stdout or b""), err
 
