@@ -359,14 +359,100 @@ REGRAS DE/PARA: get_table("regras_classificacao") traz as regras aprendidas do p
 
 REVISÃO HUMANA EM 2 PASSES: no pass 1 devolva set_output({"_classificacao_review": {periodo_detectado, conta_banco, grupos, contas, total_lancamentos}}) SEM gerar arquivo (a interface mostra a tela de revisão com semáforo). O pass 2 chega com "_classificacao_confirmada" (mapa padrao->conta; "IGNORAR" pula o grupo), "_conta_banco" e "_periodo" ({inicio, fim} dd/mm/aaaa) no get_input(); então filtre o período e gere o arquivo_resultado.
 
-AGING / dias de atraso: dias = (data_base - vencimento).days; dias <= 0 é "A vencer". Faixas com limite superior INCLUSIVO e sem sobreposição: "1-30" (1<=dias<=30), "31-60", "61-90", "90+" (dias>90). Para "por cliente E faixa", pivot_table(index=cliente, columns=faixa, values=valor, aggfunc="sum").
-
-CONCILIAÇÃO débito x crédito que zera: pareie por VALOR ABSOLUTO (abs(valor)), tratando crédito negativo. Pareamento 1:1, marcando cada lançamento usado; com valores repetidos, ordene de forma estável. Mantenha TODOS os registros (Conciliados + Não Conciliados = carregados) e gere resumo com as contagens que fecham.
-
-CONCILIAÇÃO por valor + data com tolerância: case mesmo valor com diferença de datas <= tolerância (em dias); > tolerância NÃO casa. Casamento 1:1 (não reutilize a mesma linha). Inclua na saída a coluna "dif_dias". Remova não casados por ÍNDICE da linha, nunca por valor de data.
-
-VALIDAÇÃO contábil: antes de declarar sucesso, confira que as somas por categoria fecham com o total carregado.
+VALIDAÇÃO: antes de declarar sucesso, confira que as somas por categoria fecham com o total carregado.
 """
+
+
+_AGING_REFERENCE = """\
+Regras para AGING / dias de atraso de títulos (contas a receber ou a pagar).
+
+Adapte os NOMES das colunas (vencimento, valor, cliente) aos do arquivo real; pergunte a data-base se não vier (default: hoje).
+dias = (data_base - vencimento).days. dias <= 0 é "A vencer".
+Faixas com limite superior INCLUSIVO e SEM sobreposição: "1-30" (1<=dias<=30), "31-60" (31<=dias<=60), "61-90" (61<=dias<=90), "90+" (dias>90).
+Para "por cliente E faixa", use pivot_table(index=cliente, columns=faixa, values=valor, aggfunc="sum").
+"""
+
+
+_CONCILIACAO_CONTABIL_REFERENCE = """\
+Regras para CONCILIAÇÃO de lançamentos (débito x crédito, ou por valor + data).
+
+Adapte os nomes das colunas ao arquivo real.
+DÉBITO x CRÉDITO que zera: pareie por VALOR ABSOLUTO (abs(valor)), tratando crédito negativo. Pareamento 1:1, marcando cada lançamento usado; com valores repetidos, ordene de forma estável. Mantenha TODOS os registros (Conciliados + Não Conciliados = carregados) e gere resumo com as contagens que fecham.
+POR VALOR + DATA com tolerância: case mesmo valor com diferença de datas <= tolerância (em dias); > tolerância NÃO casa. Casamento 1:1 (não reutilize a mesma linha). Inclua na saída a coluna "dif_dias". Remova não casados por ÍNDICE da linha, nunca por valor de data.
+Antes de declarar sucesso: Conciliados + Não Conciliados = total carregado.
+"""
+
+
+# Exemplos ILUSTRATIVOS: como o formato de entrada varia por projeto, os nomes de
+# coluna são um ponto de partida a adaptar (o valor real está no reference acima).
+_AGING_CODE = '''"""Aging: dias de atraso por faixa. ADAPTE os nomes das colunas ao seu arquivo."""
+from flowdesk_sdk import get_file, read_table, set_output, output_path
+
+import datetime as dt
+
+import pandas as pd
+
+COL_VENCIMENTO = "vencimento"  # ajuste ao nome real da coluna
+COL_VALOR = "valor"
+COL_CLIENTE = "cliente"
+
+
+def faixa(d):
+    if pd.isna(d) or d <= 0:
+        return "A vencer"
+    if d <= 30:
+        return "1-30"
+    if d <= 60:
+        return "31-60"
+    if d <= 90:
+        return "61-90"
+    return "90+"
+
+
+df = read_table(get_file())
+base = pd.Timestamp(dt.date.today())
+venc = pd.to_datetime(df[COL_VENCIMENTO], dayfirst=True, errors="coerce")
+df["faixa"] = [faixa(d) for d in (base - venc).dt.days]
+piv = pd.pivot_table(df, index=COL_CLIENTE, columns="faixa", values=COL_VALOR,
+                     aggfunc="sum", fill_value=0)
+out = output_path("aging.xlsx")
+piv.to_excel(out)
+set_output({"arquivo_resultado": str(out), "resumo": {"titulos": int(len(df))}})
+'''
+
+
+_CONCILIACAO_CONTABIL_CODE = '''"""Concilia lançamentos que se anulam por valor absoluto (1:1). ADAPTE a coluna de valor."""
+from collections import defaultdict
+
+from flowdesk_sdk import get_file, read_table, set_output, output_path
+
+COL_VALOR = "valor"  # ajuste ao nome real da coluna
+
+df = read_table(get_file()).reset_index(drop=True)
+vals = [float(v) for v in df[COL_VALOR]]
+usados = set()
+status = ["Nao Conciliado"] * len(df)
+por_abs = defaultdict(list)
+for i, v in enumerate(vals):
+    por_abs[round(abs(v), 2)].append(i)
+for i, v in enumerate(vals):
+    if i in usados:
+        continue
+    for j in por_abs[round(abs(v), 2)]:
+        if j == i or j in usados:
+            continue
+        if round(vals[j] + v, 2) == 0.0:  # um positivo, outro negativo, mesmo módulo
+            usados.update((i, j))
+            status[i] = status[j] = "Conciliado"
+            break
+df["conciliacao"] = status
+out = output_path("conciliacao.xlsx")
+df.to_excel(out, index=False)
+n_ok = status.count("Conciliado")
+set_output({"arquivo_resultado": str(out),
+            "resumo": {"conciliados": n_ok, "nao_conciliados": len(df) - n_ok,
+                       "total": len(df)}})
+'''
 
 
 TEMPLATES: dict[str, dict] = {
@@ -399,6 +485,22 @@ TEMPLATES: dict[str, dict] = {
         "input_fields": [{"name": "arquivo", "label": "Extrato bancário (PDF)", "type": "file"}],
         "code": _EXTRATO_DOMINIO,
         "reference": _EXTRATO_DOMINIO_REFERENCE,
+    },
+    "aging": {
+        "name": "Aging de títulos (dias de atraso)",
+        "description": "Calcula os dias de atraso de títulos por faixa "
+                       "(1-30, 31-60, 61-90, 90+) e o total por cliente.",
+        "input_fields": [{"name": "arquivo", "label": "Planilha de títulos", "type": "file"}],
+        "code": _AGING_CODE,
+        "reference": _AGING_REFERENCE,
+    },
+    "conciliacao-contabil": {
+        "name": "Conciliação contábil (débito x crédito)",
+        "description": "Pareia lançamentos de débito e crédito que se anulam por "
+                       "valor e separa conciliados de não conciliados.",
+        "input_fields": [{"name": "arquivo", "label": "Planilha de lançamentos", "type": "file"}],
+        "code": _CONCILIACAO_CONTABIL_CODE,
+        "reference": _CONCILIACAO_CONTABIL_REFERENCE,
     },
 }
 
