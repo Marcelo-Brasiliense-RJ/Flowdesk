@@ -114,6 +114,33 @@ def read_progress(project_id: int, execution_id: str) -> list[dict]:
     return out
 
 
+def prune_runs(project_id: int, max_age_days: int) -> int:
+    """I3: remove pastas de execução (runs/<id>) mais antigas que max_age_days, para o
+    disco não crescer sem limite. best-effort, nunca lança. 0/negativo = não limpa.
+    ponytail: só runs/ (efêmero); uploads são referenciados por execuções, não pruna aqui."""
+    if not max_age_days or max_age_days <= 0:
+        return 0
+    import shutil
+    import time as _time
+
+    removed = 0
+    try:
+        runs = project_root(project_id) / "runs"
+        if not runs.is_dir():
+            return 0
+        cutoff = _time.time() - max_age_days * 86400
+        for d in runs.iterdir():
+            try:
+                if d.is_dir() and d.stat().st_mtime < cutoff:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed += 1
+            except OSError:
+                pass
+    except Exception:
+        pass
+    return removed
+
+
 def read_table(path, **kw):
     """Leitura tolerante de planilha SERVER-SIDE (para grounding do chat/wizard),
     espelhando o read_table do SDK: pandas normal -> conversão via Excel para .xls

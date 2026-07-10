@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     container_cpus: str = "1"
     container_pids: int = 128
     container_runtime: str = ""  # vazio = runtime padrão; "runsc" = gVisor
+    # I3: retenção de pastas de execução (runs/<id>). 0 = manter para sempre.
+    run_retention_days: int = 30
     frontend_origin: str = "http://localhost:5173"
     # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
     supabase_db_url: str = ""

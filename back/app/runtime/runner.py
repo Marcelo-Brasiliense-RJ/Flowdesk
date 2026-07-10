@@ -162,6 +162,11 @@ class RuntimeManager:
             )
 
             root = storage.ensure_project_dirs(project)
+            # I3: limpa execuções antigas para o disco não crescer sem limite (best-effort)
+            try:
+                storage.prune_runs(project.id, settings.run_retention_days)
+            except Exception:
+                pass
             src_dir = storage.materialize_sources(db, project)
             run_dir = root / "runs" / execu.id
             run_dir.mkdir(parents=True, exist_ok=True)
