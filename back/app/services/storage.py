@@ -114,6 +114,39 @@ def read_progress(project_id: int, execution_id: str) -> list[dict]:
     return out
 
 
+def read_table(path, **kw):
+    """Leitura tolerante de planilha SERVER-SIDE (para grounding do chat/wizard),
+    espelhando o read_table do SDK: pandas normal -> conversão via Excel para .xls
+    fora do padrão (Windows on-premise) -> erro claro. B1: o contexto de anexos usa
+    isto em vez de pd.read_excel direto, que falhava no .xls legado."""
+    import os as _os
+    import pandas as pd
+
+    spath = str(path)
+    ext = _os.path.splitext(spath)[1].lower()
+    if ext == ".csv":
+        return pd.read_csv(spath, **kw)
+    try:
+        return pd.read_excel(spath, **kw)
+    except Exception:
+        if ext != ".xls":
+            raise
+    import subprocess
+    import tempfile
+    dst = _os.path.join(tempfile.gettempdir(), "fd_srv_conv_" + _os.path.basename(spath) + ".xlsx")
+    ps = (
+        "$x=New-Object -ComObject Excel.Application;$x.Visible=$false;"
+        "$x.DisplayAlerts=$false;$wb=$x.Workbooks.Open('{src}');"
+        "$wb.SaveAs('{dst}',51);$wb.Close($false);$x.Quit()"
+    ).format(src=spath.replace("'", "''"), dst=dst.replace("'", "''"))
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                       capture_output=True, timeout=120)
+    if r.returncode != 0 or not _os.path.exists(dst):
+        raise RuntimeError(
+            "Não consegui ler este .xls (formato fora do padrão). Exporte como .xlsx ou .csv.")
+    return pd.read_excel(dst, **kw)
+
+
 _SDK_SOURCE = '''"""FlowDesk runtime SDK injected into every project (do not edit).
 
 Use inside Script stages to read the upstream input and write results:

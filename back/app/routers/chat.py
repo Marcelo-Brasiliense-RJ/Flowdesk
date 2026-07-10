@@ -229,8 +229,6 @@ def _attachment_context(project_id: int, paths: list[str]) -> str:
     questions are grounded in the real data instead of guessing."""
     if not paths:
         return ""
-    import pandas as pd
-
     root = storage.project_root(project_id)
     blocks: list[str] = []
     for rel in paths[:5]:
@@ -242,21 +240,11 @@ def _attachment_context(project_id: int, paths: list[str]) -> str:
             continue
         suffix = target.suffix.lower()
         try:
-            if suffix in (".xlsx", ".xls"):
-                xls = pd.ExcelFile(target)
-                parts = []
-                for sheet in xls.sheet_names[:5]:
-                    df = pd.read_excel(target, sheet_name=sheet)
-                    sample = df.head(5).to_string(index=False)
-                    parts.append(
-                        f"  Aba '{sheet}': {len(df)} linha(s), colunas {list(df.columns)}\n"
-                        f"  Amostra:\n{sample}"
-                    )
-                blocks.append(f"Arquivo {rel} (Excel):\n" + "\n".join(parts))
-            elif suffix == ".csv":
-                df = pd.read_csv(target)
+            # B1: lê via read_table (tolerante a .xls legado), NUNCA pd.read_excel direto.
+            if suffix in (".xlsx", ".xls", ".csv"):
+                df = storage.read_table(str(target))
                 blocks.append(
-                    f"Arquivo {rel} (CSV): {len(df)} linha(s), colunas {list(df.columns)}\n"
+                    f"Arquivo {rel}: {len(df)} linha(s), colunas {list(df.columns)}\n"
                     f"Amostra:\n{df.head(5).to_string(index=False)}"
                 )
             else:
