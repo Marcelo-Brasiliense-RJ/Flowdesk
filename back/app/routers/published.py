@@ -211,6 +211,24 @@ async def app_submit(
     return {"status": "next_form", "next_stage_id": nxt.id, "values": values}
 
 
+def _execution_public_view(execu, progress) -> dict:
+    """Resposta do app PUBLICADO: nunca expõe o traceback cru (S2) nem o input_data
+    com caminhos do servidor (S4). Erro vira mensagem amigável; o traceback completo
+    fica só nos logs internos."""
+    erro = ""
+    if execu.status == "error":
+        from ..runtime.runner import _last_error_line
+        erro = (execu.output_data or {}).get("erro") or _last_error_line(execu.stderr or "")
+    return {
+        "id": execu.id,
+        "status": execu.status,
+        "output": execu.output_data,
+        "progress": progress,
+        "erro": erro,
+        "stderr": erro,  # compat de front: só a mensagem amigável, sem traceback/paths
+    }
+
+
 @router.get("/{subdomain}/executions/{execution_id}")
 def app_execution(subdomain: str, execution_id: str, token: str | None = None, db: Session = Depends(get_db)):
     project = _get_live_project(db, subdomain)
@@ -218,14 +236,7 @@ def app_execution(subdomain: str, execution_id: str, token: str | None = None, d
     execu = db.get(Execution, execution_id)
     if execu is None or execu.project_id != project.id:
         raise HTTPException(status_code=404, detail="Execução não encontrada")
-    return {
-        "id": execu.id,
-        "status": execu.status,
-        "output": execu.output_data,
-        "input": execu.input_data,
-        "progress": storage.read_progress(project.id, execution_id),
-        "stderr": execu.stderr if execu.status == "error" else "",
-    }
+    return _execution_public_view(execu, storage.read_progress(project.id, execution_id))
 
 
 @router.post("/{subdomain}/regras-classificacao")
