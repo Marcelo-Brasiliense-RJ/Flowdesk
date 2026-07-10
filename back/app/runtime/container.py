@@ -87,16 +87,25 @@ def _stage_inputs(run_dir: Path) -> None:
     data = json.loads(input_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         return
+    # Só faz staging de arquivos DENTRO da raiz do projeto (run_dir = <root>/runs/
+    # <id>). Sem isso, um input malicioso citando um caminho absoluto do servidor
+    # (ex.: .env, flowdesk.db) faria o arquivo ser copiado para dentro do sandbox
+    # e devolvido na saída. Ver B2 do dossiê (get_file heurístico).
+    project_root = run_dir.parent.parent.resolve()
     in_dir = run_dir / "in"
     changed = False
     for key, value in list(data.items()):
         if isinstance(value, str):
             p = Path(value)
-            if p.is_absolute() and p.is_file():
-                in_dir.mkdir(exist_ok=True)
-                shutil.copy2(p, in_dir / p.name)
-                data[key] = f"/run/in/{p.name}"
-                changed = True
+            if not (p.is_absolute() and p.is_file()):
+                continue
+            resolved = p.resolve()
+            if project_root not in resolved.parents:
+                continue  # fora da raiz do projeto: não expõe ao sandbox
+            in_dir.mkdir(exist_ok=True)
+            shutil.copy2(resolved, in_dir / p.name)
+            data[key] = f"/run/in/{p.name}"
+            changed = True
     if changed:
         input_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 

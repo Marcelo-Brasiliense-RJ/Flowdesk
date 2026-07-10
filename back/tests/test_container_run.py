@@ -68,6 +68,26 @@ def test_escrita_fora_do_run_dir_falha(tmp_path):
     assert rc != 0  # root FS read-only
 
 
+def test_staging_ignora_arquivo_fora_da_raiz_do_projeto(tmp_path):
+    # run_dir = <root>/runs/<id>; a raiz do projeto é run_dir.parent.parent
+    from app.runtime.container import _stage_inputs
+
+    root = tmp_path / "proj"
+    run = root / "runs" / "exec1"
+    run.mkdir(parents=True)
+    segredo = tmp_path / "segredo.env"  # FORA da raiz do projeto
+    segredo.write_text("SECRET_KEY=vaza", encoding="utf-8")
+    (run / "input.json").write_text(
+        json.dumps({"arquivo": str(segredo)}), encoding="utf-8"
+    )
+
+    _stage_inputs(run)
+
+    data = json.loads((run / "input.json").read_text(encoding="utf-8"))
+    assert data["arquivo"] == str(segredo)  # caminho NÃO reescrito
+    assert not (run / "in").exists()  # nada copiado para dentro do sandbox
+
+
 def test_staging_copia_upload_e_reescreve_caminho(tmp_path):
     upload = tmp_path / "_uploads" / "abc"
     upload.mkdir(parents=True)
