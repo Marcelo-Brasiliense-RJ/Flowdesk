@@ -33,7 +33,13 @@ def reference_for_task(task_text: str):
         base = _tokens(tpl["name"] + " " + tpl["description"])
         score = len(tt & base)
         if best is None or score > best["score"]:
-            best = {"template_key": key, "code": tpl["code"], "score": score}
+            best = {
+                "template_key": key,
+                "code": tpl["code"],
+                # A1: instruções de domínio carregadas sob demanda (vazio se ausente)
+                "reference": tpl.get("reference", ""),
+                "score": score,
+            }
     if best is None or best["score"] < REF_LOW:
         return None
     return best

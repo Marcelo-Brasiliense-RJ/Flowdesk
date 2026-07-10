@@ -220,6 +220,9 @@ def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
             "IMPLEMENTAÇÃO DE REFERÊNCIA PROVADA (adapte, não reescreva do zero):\n"
             f"```python\n{ref['code']}\n```"
         )
+        # A1: instruções de domínio do template, injetadas só quando ele casa
+        if ref.get("reference"):
+            blocks.append("REGRAS DO DOMÍNIO (aplique quando pertinente):\n" + ref["reference"])
     messages = [{"role": "user", "content": "\n\n".join(blocks)}]
     raw = call_agent("construtor", CONSTRUTOR_PROMPT, messages, json_mode=True)
     try:

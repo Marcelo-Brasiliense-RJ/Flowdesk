@@ -202,6 +202,12 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
             "content": "IMPLEMENTAÇÃO DE REFERÊNCIA PROVADA (adapte, não reescreva do "
                        f"zero):\n```python\n{ref['code']}\n```",
         })
+        # A1: instruções de domínio do template, injetadas só quando ele casa
+        if ref.get("reference"):
+            messages.append({
+                "role": "system",
+                "content": "REGRAS DO DOMÍNIO (aplique quando pertinente):\n" + ref["reference"],
+            })
     messages.append({"role": "user", "content": intent})
 
     explanation, actions, _name = _generate_build(messages)

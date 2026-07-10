@@ -14,3 +14,13 @@ def test_tarefa_sem_relacao_tem_score_baixo():
     ref = reference_for_task("enviar um email de boas vindas para novos usuarios")
     # pode até casar algum template, mas com score abaixo do limiar de few-shot
     assert ref is None or ref["score"] < REF_LOW
+
+
+def test_reference_for_task_carrega_campo_reference():
+    # A1: o mecanismo passa a devolver o texto de instruções de domínio do template
+    # (campo 'reference'), injetado sob demanda só quando o template casa.
+    ref = reference_for_task(
+        "Ler o extrato bancario do Bradesco em PDF e gerar lancamentos para o Dominio"
+    )
+    assert ref is not None
+    assert "reference" in ref  # chave sempre presente (string vazia se o template não tiver)
