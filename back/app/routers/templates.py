@@ -343,6 +343,32 @@ if not get_input().get("_somente_definicoes"):
     main()
 '''
 
+# A1: conhecimento contábil que ANTES vivia hardcoded nos prompts centrais. Agora
+# mora aqui, junto do template que o implementa, e é injetado no contexto da IA só
+# quando a tarefa casa com este template (via reference_for_task). Prompts genéricos.
+_EXTRATO_DOMINIO_REFERENCE = """\
+Regras do domínio contábil (extrato bancário -> importação do Domínio). Aplique só a esta classe de tarefa.
+
+CONTRATO DA SAÍDA (layout de importação do Domínio): colunas EXATAS, nesta ordem: Data, Cód. Conta Debito, Cód. Conta Credito, Valor, Cód. Histórico, Complemento Histórico, Inicia Lote, Código Matriz/Filial, Centro de Custo Débito, Centro de Custo Crédito. "Cód. Histórico" fica vazio. "Inicia Lote" = 1 na PRIMEIRA linha de cada dia e reinicia a cada troca de data. Convenção débito/crédito: o banco vai no débito da entrada e a contrapartida classificada no crédito; inverte na tarifa.
+
+PARSE DO EXTRATO EM PDF: NÃO escreva um classificador do zero; parta do modelo "extrato-dominio" da galeria. Faça parse POSICIONAL do PDF via pdfplumber (import pdfplumber; pdf = pdfplumber.open(get_file(0))), separando colunas pelas POSIÇÕES x das palavras (page.extract_words(), campos x0/x1), NUNCA fatiando doc["text"] por espaços: no texto linear, data/histórico/crédito/débito/saldo perdem o alinhamento.
+
+PLANO DE CONTAS (get_file(1)): não é tabela De/Para. Tem cabeçalho DESLOCADO (leia com header=None e localize a linha de cabeçalho) e colunas Código/T/Classificação/Nome/Grau, NUNCA uma coluna "Descrição". Jamais classifique por substring do nome da conta no histórico.
+
+REGRAS DE/PARA: get_table("regras_classificacao") traz as regras aprendidas do projeto (lista de {padrao, conta_codigo}); a regra especial "_CONTA_BANCO" guarda a conta do banco.
+
+REVISÃO HUMANA EM 2 PASSES: no pass 1 devolva set_output({"_classificacao_review": {periodo_detectado, conta_banco, grupos, contas, total_lancamentos}}) SEM gerar arquivo (a interface mostra a tela de revisão com semáforo). O pass 2 chega com "_classificacao_confirmada" (mapa padrao->conta; "IGNORAR" pula o grupo), "_conta_banco" e "_periodo" ({inicio, fim} dd/mm/aaaa) no get_input(); então filtre o período e gere o arquivo_resultado.
+
+AGING / dias de atraso: dias = (data_base - vencimento).days; dias <= 0 é "A vencer". Faixas com limite superior INCLUSIVO e sem sobreposição: "1-30" (1<=dias<=30), "31-60", "61-90", "90+" (dias>90). Para "por cliente E faixa", pivot_table(index=cliente, columns=faixa, values=valor, aggfunc="sum").
+
+CONCILIAÇÃO débito x crédito que zera: pareie por VALOR ABSOLUTO (abs(valor)), tratando crédito negativo. Pareamento 1:1, marcando cada lançamento usado; com valores repetidos, ordene de forma estável. Mantenha TODOS os registros (Conciliados + Não Conciliados = carregados) e gere resumo com as contagens que fecham.
+
+CONCILIAÇÃO por valor + data com tolerância: case mesmo valor com diferença de datas <= tolerância (em dias); > tolerância NÃO casa. Casamento 1:1 (não reutilize a mesma linha). Inclua na saída a coluna "dif_dias". Remova não casados por ÍNDICE da linha, nunca por valor de data.
+
+VALIDAÇÃO contábil: antes de declarar sucesso, confira que as somas por categoria fecham com o total carregado.
+"""
+
+
 TEMPLATES: dict[str, dict] = {
     "totais-planilha": {
         "name": "Totais de uma planilha",
@@ -372,6 +398,7 @@ TEMPLATES: dict[str, dict] = {
                        "importação de lançamentos contábeis do Domínio.",
         "input_fields": [{"name": "arquivo", "label": "Extrato bancário (PDF)", "type": "file"}],
         "code": _EXTRATO_DOMINIO,
+        "reference": _EXTRATO_DOMINIO_REFERENCE,
     },
 }
 

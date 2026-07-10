@@ -24,3 +24,15 @@ def test_reference_for_task_carrega_campo_reference():
     )
     assert ref is not None
     assert "reference" in ref  # chave sempre presente (string vazia se o template não tiver)
+
+
+def test_extrato_dominio_tem_reference_contabil():
+    # A1: o conhecimento contábil migrou dos prompts para o reference do template.
+    ref = reference_for_task(
+        "Ler o extrato bancario do Bradesco em PDF e gerar lancamentos para o Dominio"
+    )
+    assert ref["template_key"] == "extrato-dominio"
+    r = ref["reference"]
+    assert "Inicia Lote" in r
+    assert "regras_classificacao" in r
+    assert "_classificacao_review" in r
