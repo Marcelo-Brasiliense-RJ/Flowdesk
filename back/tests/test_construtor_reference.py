@@ -1,5 +1,12 @@
 import json
+import unicodedata
+
 from app.routers import orchestrator
+
+
+def _norm(s):
+    s = unicodedata.normalize("NFKD", s or "")
+    return "".join(c for c in s if not unicodedata.combining(c)).lower()
 
 
 def _plan_extrato():
@@ -46,3 +53,20 @@ def test_reference_de_dominio_injetado_quando_presente(monkeypatch):
     monkeypatch.setattr(orchestrator, "call_agent", fake)
     orchestrator.run_construtor(_plan_extrato(), {}, "")
     assert "Inicia Lote reinicia a cada dia" in captured["content"]
+
+
+def test_tarefa_generica_nao_recebe_contabil_no_contexto(monkeypatch):
+    # A1: para uma automação genérica, NENHUM conteúdo contábil entra no contexto
+    # do Construtor (o reference contábil só é injetado quando a tarefa casa).
+    captured = {}
+    def fake(agent_id, prompt, messages, **k):
+        captured["content"] = messages[0]["content"]
+        return json.dumps({"message": "", "actions": []})
+    monkeypatch.setattr(orchestrator, "call_agent", fake)
+    plano = {"regra_negocio": "somar a coluna total de um arquivo CSV e gerar um resumo",
+             "saida": {"contrato": "planilha com o total"}}
+    orchestrator.run_construtor(plano, {}, "")
+    ctx = _norm(captured["content"])
+    for marcador in ["dominio", "inicia lote", "aging", "conciliac", "credito", "debito",
+                     "regras_classificacao", "_classificacao"]:
+        assert marcador not in ctx, f"contexto genérico vazou contábil: {marcador}"
