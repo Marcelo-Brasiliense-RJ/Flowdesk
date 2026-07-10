@@ -222,6 +222,15 @@ def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
         # A1: instruções de domínio do template, injetadas só quando ele casa
         if ref.get("reference"):
             blocks.append("REGRAS DO MODELO (aplique quando pertinente):\n" + ref["reference"])
+    # Melhoria contínua: exemplos de automações já validadas em produção (few-shot).
+    # Best-effort, fora do caminho crítico: nunca quebra a geração.
+    try:
+        from ..services.treinador import examples_context
+        ex = examples_context(plan or {})
+        if ex:
+            blocks.append(ex)
+    except Exception:
+        pass
     messages = [{"role": "user", "content": "\n\n".join(blocks)}]
     raw = call_agent("construtor", CONSTRUTOR_PROMPT, messages, json_mode=True)
     try:

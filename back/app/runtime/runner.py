@@ -6,6 +6,8 @@ execution; status changes are broadcast over WebSocket to the workflow monitor.
 """
 from __future__ import annotations
 
+import threading
+
 import asyncio
 import datetime as dt
 import json
@@ -109,6 +111,20 @@ class RuntimeManager:
                 self._fail_silently(execution_id, str(exc))
             finally:
                 self.queue.task_done()
+
+    def _schedule_harvest(self, project_id: int) -> None:
+        """Melhoria contínua: colhe a automação para virar exemplo, em thread
+        destacada e best-effort. NUNCA bloqueia nem quebra o caminho crítico."""
+        def _run() -> None:
+            try:
+                from ..services.treinador import harvest_project
+                harvest_project(project_id)
+            except Exception:
+                pass
+        try:
+            threading.Thread(target=_run, daemon=True).start()
+        except Exception:
+            pass
 
     def _fail_silently(self, execution_id: str, message: str) -> None:
         db = SessionLocal()
@@ -227,6 +243,7 @@ class RuntimeManager:
             )
 
             if execu.status == "success":
+                self._schedule_harvest(project.id)
                 await self._chain_next(db, project, stage, output_data, execu.build_id)
         finally:
             db.close()

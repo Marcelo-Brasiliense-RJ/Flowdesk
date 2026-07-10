@@ -264,6 +264,18 @@ def chat_report_repair(
     assistant = ChatMessage(project_id=project_id, role="assistant", content=texto, meta={}, tokens=0)
     db.add(assistant)
 
+    # Melhoria contínua: registra a lição erro->correção (best-effort, nunca quebra).
+    if proposal.has_changes:
+        try:
+            from ..services.treinador import record_repair
+            sintoma = ((getattr(execu, "stderr", "") or "").strip()[:500]
+                       or "resultado incorreto (falso sucesso)")
+            record_repair(project_id, symptom=sintoma,
+                          root_cause=proposal.diagnosis or "",
+                          fix=proposal.change_summary or "", source="auto-repair")
+        except Exception:
+            pass
+
     action = None
     payload = _repair_action_payload(stage.entry_file, proposal)
     if payload is not None:
