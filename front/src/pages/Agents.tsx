@@ -435,7 +435,96 @@ export default function Agents() {
             )}
           </aside>
         </div>
+        {isAdmin && <TreinadorProposals />}
       </main>
+    </div>
+  );
+}
+
+type Proposal = { id: string; agent_id: string; proposed_prompt: string; rationale: string; status: string };
+
+function TreinadorProposals() {
+  const [items, setItems] = useState<Proposal[]>([]);
+  const [newCount, setNewCount] = useState(0);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const d = await api.get<{ proposals: Proposal[]; new_examples: number }>(
+        "/api/ai/treinador/proposals?status=pending"
+      );
+      setItems(d.proposals || []);
+      setNewCount(d.new_examples || 0);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+  useEffect(() => {
+    load();
+  }, []);
+
+  const resolve = async (id: string, approve: boolean) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/ai/treinador/proposals/${id}/${approve ? "approve" : "reject"}`);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const distill = async () => {
+    setBusy(true);
+    try {
+      await api.post("/api/ai/treinador/distill");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card mt-5 p-5">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-extrabold tracking-tight text-ink">Melhoria contínua (Treinador)</h2>
+          <p className="mt-0.5 max-w-2xl text-sm text-ink3">
+            Propostas de melhoria de prompt a partir das automações que foram ao ar e rodaram sem erro.
+            Você aprova antes de aplicar. {newCount} exemplo(s) novo(s) acumulado(s).
+          </p>
+        </div>
+        <button onClick={distill} disabled={busy} className="btn-outline py-2 text-sm disabled:opacity-40">
+          Gerar propostas
+        </button>
+      </div>
+      {err && <div className="mb-2 text-sm" style={{ color: "#b91c1c" }}>{err}</div>}
+      {items.length === 0 ? (
+        <div className="text-sm text-ink3">Nenhuma proposta pendente.</div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {items.map((p) => (
+            <div key={p.id} className="rounded-xl border border-line p-4">
+              <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink3">Agente: {p.agent_id}</div>
+              {p.rationale && <div className="mb-2 text-sm text-ink2">{p.rationale}</div>}
+              <pre className="mb-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-md p-3 text-xs text-ink2" style={{ background: "var(--surface-glass)" }}>
+                {p.proposed_prompt}
+              </pre>
+              <div className="flex gap-2">
+                <button onClick={() => resolve(p.id, true)} disabled={busy} className="btn-accent py-1.5 text-sm disabled:opacity-40">
+                  Aprovar
+                </button>
+                <button onClick={() => resolve(p.id, false)} disabled={busy} className="btn-outline py-1.5 text-sm disabled:opacity-40">
+                  Rejeitar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
