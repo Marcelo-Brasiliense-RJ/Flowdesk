@@ -3,7 +3,6 @@
 O conhecimento do caso extrato-Domínio vive no reference do template
 (templates.py), injetado sob demanda, não hardcoded nos prompts do núcleo.
 """
-import inspect
 import sys
 import unicodedata
 from pathlib import Path
@@ -40,7 +39,3 @@ def test_system_prompt_generico():
 
 def test_construtor_prompt_generico():
     _assert_generico("CONSTRUTOR_PROMPT", orchestrator.CONSTRUTOR_PROMPT)
-
-
-def test_generate_build_instr_generico():
-    _assert_generico("_generate_build", inspect.getsource(chat._generate_build))

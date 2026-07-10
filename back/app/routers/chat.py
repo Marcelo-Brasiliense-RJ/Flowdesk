@@ -483,69 +483,6 @@ def chat_stream(
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-def _generate_build(messages: list[dict]):
-    """Build turn: força JSON estruturado {message, actions} (sem depender de bloco
-    solto no texto). Garante que o fluxo termina com ações concretas."""
-    instr = {
-        "role": "system",
-        "content": (
-            "Responda SOMENTE em JSON válido: "
-            '{"message": "explicação curta e amigável, em português simples e sem jargão '
-            'técnico, do que a automação vai fazer (1 a 2 frases, pensando num usuário não '
-            'técnico)", "project_name": "nome curto e claro para a automação (3 a 6 '
-            'palavras, ex: Total de Vendas por Produto)", "actions": [...]}. '
-            "Tipos de action: create_file {kind,title,path,content}, "
-            "create_stage {kind,title,stage_type,name}, "
-            "require_env {kind,title,key,description,example}. "
-            "Inclua SEMPRE pelo menos um create_file com o script Python completo, "
-            "usando o SDK (get_file() para ler entrada, output_path() e set_output(DICT) "
-            "para saída), pandas 2.x (NÃO use df.append; use pd.concat). "
-            "O código deve ser COMPLETO E FUNCIONAL: PROIBIDO placeholder, esqueleto ou TODO "
-            "(nada de 'dados = []  # adicione sua lógica', pass ou funções vazias), e NUNCA "
-            "comente a linha que grava o arquivo (df.to_excel deve rodar de fato). "
-            "Para TABELAS em PDF (várias colunas numéricas lado a lado), o texto puro perde o "
-            "alinhamento: use pdfplumber direto (pdfplumber.open(get_file()), page.extract_words()) "
-            "e separe as colunas pelas posições x das palavras. "
-            "Se a entrada for PDF ou imagem, use `from flowdesk_sdk import extract_document` "
-            "e `doc = extract_document(get_file())` (NÃO use pd.read_excel num PDF); quando "
-            "doc vier de OCR, inclua no set_output a chave `_ocr_review` = {'text': doc['text'], "
-            "'mean_confidence': doc['mean_confidence'], 'needs_review': doc['needs_review'], "
-            "'low_confidence': [l['text'] for l in doc['low_confidence']]} para a tela de revisão. "
-            "Quando gerar arquivo, grave com output_path('nome.xlsx') e devolva "
-            "set_output({'arquivo_resultado': str(caminho), 'resumo': {...números...}}); "
-            "inclua SEMPRE a chave 'resumo' com os principais números. "
-            "Use chaves simples { } em dicionários Python; NUNCA escreva chaves "
-            "duplicadas {{ }} (isso quebra o código). "
-            "Não peça caminhos de arquivo. Só use require_env se houver integração "
-            "externa real (e-mail/API)."
-        ),
-    }
-    if not settings.ai_enabled:
-        return ("Fluxo gerado (modo simulado).", [
-            {"kind": "create_file", "title": "Criar processar.py", "path": "processar.py",
-             "content": "from flowdesk_sdk import get_file, set_output\nimport pandas as pd\n\n"
-                        "df = pd.read_excel(get_file())\nset_output({'linhas': len(df)})\n"}
-        ], "")
-    try:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=ai_config.get_model(),
-            messages=messages + [instr],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-        )
-        data = json.loads(resp.choices[0].message.content or "{}")
-        return (
-            data.get("message") or "Fluxo gerado.",
-            data.get("actions") or [],
-            (data.get("project_name") or "").strip(),
-        )
-    except Exception as exc:
-        return f"[IA indisponível: {exc}]", [], ""
-
-
 def _generate(messages: list[dict], last_user: str):
     """Yield text chunks. Real OpenAI streaming when configured, else a mock."""
     if settings.ai_enabled:

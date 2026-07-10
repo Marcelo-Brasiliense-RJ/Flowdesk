@@ -1,9 +1,11 @@
+import json
+
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.database import Base
 from app.models import Organization, Project
-from app.routers import wizard
+from app.routers import orchestrator, wizard
 
 
 def _projeto(s):
@@ -28,15 +30,13 @@ def _ws_extrato():
     }
 
 
-def test_generate_script_injeta_referencia_e_semeia(monkeypatch):
-    captured = {}
-
-    def fake_build(messages):
-        captured["msgs"] = messages
-        return ("ok", [{"kind": "create_file", "title": "x", "path": "p.py",
-                        "content": "print('errado')"}], "")
-
-    monkeypatch.setattr(wizard, "_generate_build", fake_build)
+def test_generate_script_usa_orquestrador_e_semeia(monkeypatch):
+    # A2: o wizard passa pelo MESMO build do chat (orquestrador). O modelo devolve um
+    # script "errado", mas o casamento claro com extrato-dominio semeia o template.
+    monkeypatch.setattr(orchestrator, "call_agent", lambda *a, **k: json.dumps({
+        "message": "ok",
+        "actions": [{"kind": "create_file", "path": "p.py", "content": "print('errado')"}],
+    }))
 
     eng = sa.create_engine("sqlite:///:memory:")
     Base.metadata.create_all(eng)
@@ -44,13 +44,9 @@ def test_generate_script_injeta_referencia_e_semeia(monkeypatch):
         p = _projeto(s)
         explanation, code = wizard._generate_script(s, p.id, _ws_extrato())
 
-    blob = " ".join(m["content"] for m in captured["msgs"])
-    assert "IMPLEMENTAÇÃO DE REFERÊNCIA PROVADA" in blob   # few-shot injetado
-    assert "def parse_extrato" in blob                     # referencia extrato-dominio
-    assert "get_file(0)" in blob                           # instrucao posicional
-    assert "3 arquivo" in blob                             # plano de arquivos no intent
-    assert "def parse_extrato" in code                     # semeado (score alto)
+    assert "def parse_extrato" in code       # semeado pelo run_construtor (score alto)
     assert "print('errado')" not in code
+    assert explanation
 
 
 def test_files_intent_lista_arquivos_por_indice():

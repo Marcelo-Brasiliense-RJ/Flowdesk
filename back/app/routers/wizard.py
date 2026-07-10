@@ -20,10 +20,8 @@ from ..database import get_db
 from ..models import Edge, SourceFile, Stage, User
 from ..schemas import ExplanationUpdate, WizardAnalyzeIn, WizardBuildOut
 from .chat import (
-    SYSTEM_PROMPT,
     _attachment_context,
     _count_input_files,
-    _generate_build,
     _input_file_fields,
     _project_context,
 )
@@ -166,62 +164,44 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
     referencia da galeria (few-shot; semente deterministica em casamento claro) e o
     plano de arquivos deduzido, para o gerador ler N arquivos posicionalmente e nao
     reinventar um classificador. Retorna (explicacao, codigo)."""
-    from ..services.reference_code import reference_for_task, REF_LOW, REF_HIGH
+    from .orchestrator import _build_turn
 
     process = (ws.get("process") or {}).get("description", "").strip()
     inp = ws.get("input") or {}
     out = ws.get("output") or {}
     out_kind = out.get("kind", "download")
-    intent = (
-        f"Monte agora a automação. Tarefa: {process}. "
-        f"Entrada: {inp.get('kind', 'nenhuma')}. "
-        + _files_intent(inp)
-        + "Saída desejada: "
-        + ("um arquivo para download (use output_path e set_output com "
-           "'arquivo_resultado' e 'resumo'). Se o fluxo tiver revisão humana em 2 "
-           "passes, o pass 2 (com a confirmação) DEVE gerar o arquivo_resultado."
+    # A2: monta um PLANO a partir do wizard_state e roda o MESMO build do chat. O
+    # _build_turn (via run_construtor) já injeta referência da galeria, few-shot do
+    # Treinador e semeia em casamento claro. O que era intent vira contexto.
+    plan = {
+        "regra_negocio": process,
+        "fonte": {"tipo": inp.get("kind", "nenhuma")},
+        "saida": {"formato": "arquivo" if out_kind == "download" else "resumo"},
+    }
+    ctx_parts = [_project_context(db, project_id)]
+    samples = inp.get("sample_files") or ([inp["sample_file"]] if inp.get("sample_file") else [])
+    if samples:
+        c = _attachment_context(project_id, samples)
+        if c:
+            ctx_parts.append(c)
+    fi = _files_intent(inp)
+    if fi:
+        ctx_parts.append(fi)
+    ctx_parts.append(
+        "SAÍDA DESEJADA: "
+        + ("um arquivo para download (output_path + set_output com 'arquivo_resultado' e "
+           "'resumo'); se o fluxo tiver revisão humana em 2 passes, o pass 2 DEVE gerar o "
+           "arquivo_resultado."
            if out_kind == "download"
            else "um resumo na tela (set_output com a chave 'resumo').")
     )
-    proj_ctx = _project_context(db, project_id)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "system", "content": proj_ctx},
-    ]
-    # contexto real dos arquivos anexados (colunas/amostras): aceita lista ou um so
-    samples = inp.get("sample_files") or ([inp["sample_file"]] if inp.get("sample_file") else [])
-    if samples:
-        ctx = _attachment_context(project_id, samples)
-        if ctx:
-            messages.append({"role": "system", "content": ctx})
-    # codigo de referencia da galeria: mesma alavanca do Construtor do chat
-    ref = reference_for_task(process + " " + proj_ctx)
-    if ref and ref["score"] >= REF_LOW:
-        messages.append({
-            "role": "system",
-            "content": "IMPLEMENTAÇÃO DE REFERÊNCIA PROVADA (adapte, não reescreva do "
-                       f"zero):\n```python\n{ref['code']}\n```",
-        })
-        # A1: instruções de domínio do template, injetadas só quando ele casa
-        if ref.get("reference"):
-            messages.append({
-                "role": "system",
-                "content": "REGRAS DO MODELO (aplique quando pertinente):\n" + ref["reference"],
-            })
-    messages.append({"role": "user", "content": intent})
-
-    explanation, actions, _name = _generate_build(messages)
-    if ref and ref["score"] >= REF_HIGH:
-        from .orchestrator import _seed_primary_script
-        actions = _seed_primary_script(actions, ref["code"])
-    code = ""
-    for a in actions:
-        if a.get("kind") in ("create_file", "edit_file") and a.get("content"):
-            code = a["content"]
-            break
-    if not code:
-        code = _FALLBACK_SCRIPT
-    return explanation or "Fluxo gerado.", code
+    turn = _build_turn(plan, {}, "\n\n".join(p for p in ctx_parts if p))
+    code = next(
+        (a["content"] for a in (turn.get("actions") or [])
+         if a.get("kind") in ("create_file", "edit_file") and a.get("content")),
+        "",
+    ) or _FALLBACK_SCRIPT
+    return turn.get("text") or "Fluxo gerado.", code
 
 
 _ANALYZE_INSTR = (
