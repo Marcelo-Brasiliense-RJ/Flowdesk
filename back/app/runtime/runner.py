@@ -37,6 +37,27 @@ def _is_transient_import_error(stderr: str) -> bool:
     )
 
 
+# S1: allowlist de variáveis de ambiente do SO repassadas ao subprocesso (nomes
+# comparados em UPPERCASE, pois o Windows é case-insensitive). São vars não
+# secretas necessárias para o interpretador iniciar e as libs nativas (numpy/
+# pandas, DLLs) carregarem. Segredos do servidor (SECRET_KEY, OPENAI_API_KEY,
+# SUPABASE_DB_URL, SMTP_*) ficam de fora por não estarem nesta lista.
+# ponytail: allowlist > denylist. Um segredo novo no ambiente não vaza sozinho.
+_ENV_PASSTHROUGH = {
+    name.upper()
+    for name in (
+        # Windows
+        "SystemRoot", "windir", "SystemDrive", "PATHEXT", "COMSPEC",
+        "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_ARCHITEW6432",
+        "LOCALAPPDATA", "APPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+        "COMMONPROGRAMFILES", "TEMP", "TMP",
+        # POSIX / cross-platform (deploy Linux futuro, ver I2 do dossiê)
+        "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
+        "TZ", "TMPDIR", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+    )
+}
+
+
 def _last_error_line(stderr: str) -> str:
     """Ultima linha significativa de um traceback, para virar mensagem legivel ao
     usuario (o campo 'erro' que o app publicado ja exibe). Prefere a linha da
@@ -225,13 +246,37 @@ class RuntimeManager:
     ) -> tuple[int, str, str]:
         import os
 
-        env = os.environ.copy()
+        from ..config import settings
+
+        # S1: sandbox opt-in. Default "subprocess" mantém o caminho on-premise.
+        if settings.execution_backend == "container":
+            from .container import run_in_container
+
+            return await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: run_in_container(
+                    src_dir=src_dir,
+                    output_dir=output_dir,
+                    run_dir=run_dir,
+                    entry=entry,
+                    env_vars=env_vars,
+                    timeout=timeout,
+                ),
+            )
+
+        # S1: NUNCA herdar os.environ inteiro. O script é gerado por IA e editável;
+        # o ambiente do servidor tem SECRET_KEY (assina JWT de admin), OPENAI_API_KEY,
+        # SUPABASE_DB_URL, SMTP_PASSWORD. Só passamos o mínimo de SO para o Python e as
+        # libs nativas (numpy/pandas) iniciarem, mais as EnvVar do projeto.
+        env = {k: v for k, v in os.environ.items() if k.upper() in _ENV_PASSTHROUGH}
         env.update({k: str(v) for k, v in env_vars.items()})
         env["FLOWDESK_INPUT"] = str(input_path)
         env["FLOWDESK_OUTPUT"] = str(output_path)
         env["FLOWDESK_OUTPUT_DIR"] = str(output_dir)
         env["FLOWDESK_RUN_DIR"] = str(run_dir)
-        env["PYTHONPATH"] = str(src_dir) + os.pathsep + env.get("PYTHONPATH", "")
+        # PYTHONPATH isolado: só o src_dir do projeto, sem herdar o do servidor
+        # (herdar exporia os módulos do app ao script).
+        env["PYTHONPATH"] = str(src_dir)
         env["PYTHONIOENCODING"] = "utf-8"
 
         script_path = src_dir / entry

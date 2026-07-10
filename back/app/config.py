@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     openai_model_codegen: str = "gpt-5.3-codex"
     openai_model_strong: str = "gpt-4.1"
     script_python: str = ""
+    # Sandbox de execução (S1). "subprocess" = comportamento atual (default,
+    # on-premise). "container" = container efêmero isolado por execução.
+    execution_backend: str = "subprocess"
+    container_image: str = "flowdesk-runtime:latest"
+    container_memory: str = "512m"
+    container_cpus: str = "1"
+    container_pids: int = 128
+    container_runtime: str = ""  # vazio = runtime padrão; "runsc" = gVisor
     frontend_origin: str = "http://localhost:5173"
     # Conexão Postgres (Supabase). Vazio = usa SQLite local (flowdesk.db).
     supabase_db_url: str = ""
