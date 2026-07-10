@@ -158,20 +158,47 @@ def read_table(path, **kw):
     except Exception:
         if ext != ".xls":
             raise
-    import subprocess
-    import tempfile
-    dst = _os.path.join(tempfile.gettempdir(), "fd_srv_conv_" + _os.path.basename(spath) + ".xlsx")
-    ps = (
-        "$x=New-Object -ComObject Excel.Application;$x.Visible=$false;"
-        "$x.DisplayAlerts=$false;$wb=$x.Workbooks.Open('{src}');"
-        "$wb.SaveAs('{dst}',51);$wb.Close($false);$x.Quit()"
-    ).format(src=spath.replace("'", "''"), dst=dst.replace("'", "''"))
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                       capture_output=True, timeout=120)
-    if r.returncode != 0 or not _os.path.exists(dst):
+    dst = _xls_to_xlsx(spath)  # I2: conversão portável (LibreOffice) ou Excel COM
+    if not dst:
         raise RuntimeError(
             "Não consegui ler este .xls (formato fora do padrão). Exporte como .xlsx ou .csv.")
     return pd.read_excel(dst, **kw)
+
+
+def _xls_to_xlsx(spath: str) -> str | None:
+    """I2: converte um .xls fora do padrão para .xlsx sem prender ao Windows. No Linux
+    usa LibreOffice headless (`soffice --convert-to`), portável em container; no Windows
+    cai no Excel COM (on-premise). Retorna o caminho do .xlsx ou None se falhar."""
+    import os as _os
+    import subprocess
+    import sys
+    import tempfile
+
+    outdir = tempfile.gettempdir()
+    base = _os.path.splitext(_os.path.basename(spath))[0]
+    if sys.platform.startswith("win"):
+        dst = _os.path.join(outdir, "fd_srv_conv_" + base + ".xlsx")
+        ps = (
+            "$x=New-Object -ComObject Excel.Application;$x.Visible=$false;"
+            "$x.DisplayAlerts=$false;$wb=$x.Workbooks.Open('{src}');"
+            "$wb.SaveAs('{dst}',51);$wb.Close($false);$x.Quit()"
+        ).format(src=spath.replace("'", "''"), dst=dst.replace("'", "''"))
+        try:
+            r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                               capture_output=True, timeout=120)
+        except Exception:
+            return None
+        return dst if (r.returncode == 0 and _os.path.exists(dst)) else None
+    # Linux/container: LibreOffice headless, sem Excel
+    try:
+        r = subprocess.run(
+            ["soffice", "--headless", "--convert-to", "xlsx", "--outdir", outdir, spath],
+            capture_output=True, timeout=120,
+        )
+    except Exception:
+        return None
+    dst = _os.path.join(outdir, base + ".xlsx")
+    return dst if (r.returncode == 0 and _os.path.exists(dst)) else None
 
 
 _SDK_SOURCE = '''"""FlowDesk runtime SDK injected into every project (do not edit).

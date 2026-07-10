@@ -103,6 +103,14 @@ class RuntimeManager:
         await hub.broadcast(project_id, payload)
 
     async def _run_worker(self) -> None:
+        # ponytail (I1): TETO CONHECIDO = 1 execução por vez, global. Um `await`
+        # serial: uma execução de 120s trava TODAS as execuções de todos os projetos.
+        # Aceitável para a caixa on-premise única; NÃO escala para HA/SaaS.
+        # Upgrade path (não fazer sem carga real p/ validar): (1) corrigir I5 —
+        # materializar o código em RUNTIME_SRC_DIR/<projeto>/<exec_id> por execução,
+        # senão execuções concorrentes do mesmo projeto colidem nos .py; (2) fila
+        # durável fora do processo (Redis + RQ/arq/Celery) + pool de N workers
+        # desacoplados do web. Só então trocar este await serial por concorrência.
         while True:
             execution_id = await self.queue.get()
             try:
