@@ -246,6 +246,24 @@ class RuntimeManager:
     ) -> tuple[int, str, str]:
         import os
 
+        from ..config import settings
+
+        # S1: sandbox opt-in. Default "subprocess" mantém o caminho on-premise.
+        if settings.execution_backend == "container":
+            from .container import run_in_container
+
+            return await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: run_in_container(
+                    src_dir=src_dir,
+                    output_dir=output_dir,
+                    run_dir=run_dir,
+                    entry=entry,
+                    env_vars=env_vars,
+                    timeout=timeout,
+                ),
+            )
+
         # S1: NUNCA herdar os.environ inteiro. O script é gerado por IA e editável;
         # o ambiente do servidor tem SECRET_KEY (assina JWT de admin), OPENAI_API_KEY,
         # SUPABASE_DB_URL, SMTP_PASSWORD. Só passamos o mínimo de SO para o Python e as
