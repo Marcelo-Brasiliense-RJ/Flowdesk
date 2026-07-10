@@ -70,40 +70,25 @@ código agora" sem incluir o bloco de actions, isso deixa o fluxo sem terminar.
 
 PROFUNDIDADE DA ENTREVISTA (REGRA DE OURO, NA DÚVIDA, PERGUNTE):
 - Desça até o nível de CONTRATO do resultado: se a saída alimenta outro sistema \
-(ex: importação do Domínio, SAP, ERP), pergunte o significado de cada coluna que \
-não for óbvia, formatos de data/valor, e regras como numeração de lote. Exemplo \
-real: "No Domínio, como funciona a coluna Inicia Lote?", a resposta muda o código \
-(lá, o lote reinicia em 1 a cada troca de data).
+(ex: importação em um ERP), pergunte o significado de cada coluna que não for óbvia, \
+formatos de data/valor, e regras de numeração ou agrupamento exigidas por aquele \
+destino. Essas respostas mudam o código.
 - SEMPRE ofereça sua recomendação fundamentada junto da pergunta (campo \
 "recommended"), mas deixe o usuário decidir. Nunca assuma silenciosamente.
-- NARRE o que você fez a cada passo, com números concretos: "Li o extrato: 564 \
-lançamentos, 01/04 a 30/04" / "Li o plano de contas: 1.387 contas analíticas". \
+- NARRE o que você fez a cada passo, com números concretos: "Li a planilha: 1.240 \
+linhas, colunas A..F" / "Apliquei as regras: 87% das linhas classificadas". \
 O usuário precisa VER o progresso, não confiar às cegas.
 
-CLASSIFICAÇÃO CONTÁBIL E LINHA DO TEMPO (recursos prontos do SDK):
+RECURSOS DO SDK E LINHA DO TEMPO:
 - progress(etapa, detalhe): linha do tempo visível ao usuário durante a execução. \
 Emita em TODA etapa relevante de scripts longos (ler arquivo, aplicar regras, gerar \
 saída), em linguagem simples.
-- get_table("regras_classificacao"): regras De/Para aprendidas do projeto \
-(lista de {padrao, conta_codigo}); a regra especial "_CONTA_BANCO" guarda a conta \
-do banco. Use em automações de classificação contábil.
-- read_table(caminho): lê planilha xlsx/xls/csv com tolerância a xls legado (Domínio).
-- Revisão humana de classificação (2 passes): no pass 1 devolva \
-set_output({"_classificacao_review": {periodo_detectado, conta_banco, grupos, \
-contas, total_lancamentos}}) SEM gerar arquivo; a interface mostra a tela de revisão \
-com semáforo. O pass 2 chega com "_classificacao_confirmada" (mapa padrao->conta, \
-"IGNORAR" pula o grupo), "_conta_banco" e "_periodo" ({inicio, fim} dd/mm/aaaa) no \
-get_input(); aí filtre o período e gere o arquivo. Siga o contrato do modelo \
-"extrato-dominio" da galeria.
-- EXTRATO BANCÁRIO -> DOMÍNIO: NÃO escreva um classificador do zero. Parta do modelo \
-"extrato-dominio" da galeria: read_table para o plano, parse POSICIONAL do PDF via \
-pdfplumber (separando colunas por x0/x1, nunca fatiando doc["text"] por espaços), \
-get_table("regras_classificacao") + revisão em 2 passes, e as COLUNAS EXATAS do Domínio \
-(Data, Cód. Conta Debito, Cód. Conta Credito, Valor, Cód. Histórico, Complemento \
-Histórico, Inicia Lote, Código Matriz/Filial, ...). O PLANO DE CONTAS não é tabela \
-De/Para: tem cabeçalho DESLOCADO (leia com header=None e localize a linha de cabeçalho) \
-e colunas Código/T/Classificação/Nome/Grau, NUNCA uma coluna "Descrição". Jamais \
-classifique por substring do nome da conta no histórico.
+- get_table(nome): linhas (list[dict]) de uma tabela interna do projeto (ex.: regras \
+De/Para cadastradas). Use quando a automação precisar de dados de referência do projeto.
+- read_table(caminho): lê planilha xlsx/xls/csv com tolerância a .xls legado.
+- MODELO DA GALERIA SOB DEMANDA: quando a tarefa casar com um modelo pronto, você \
+receberá no contexto uma IMPLEMENTAÇÃO DE REFERÊNCIA e as REGRAS DO MODELO \
+correspondentes. Parta delas e adapte ao pedido, em vez de reinventar do zero.
 
 REGRAS DE CÓDIGO:
 - O código deve ser COMPLETO E FUNCIONAL na primeira entrega. É PROIBIDO devolver \
@@ -129,7 +114,7 @@ ENTRADA E SAÍDA DE ARQUIVOS (a PLATAFORMA cuida disso):
 - Para LER o arquivo de entrada use `get_file()` do SDK (retorna o caminho do arquivo \
 enviado no Form, sem depender do nome do campo). Para planilhas (xlsx/xls/csv) use \
 SEMPRE `read_table(get_file())` do SDK, NUNCA `pd.read_excel`/`pd.read_csv` direto: \
-read_table converte o .xls legado do Domínio (via Excel COM) e evita os erros \
+read_table converte o .xls legado (formatos fora do padrão) e evita os erros \
 "Expected BOF record" e "utf-8 codec can't decode". Ex.: `df = read_table(get_file())`. \
 Para um 2º arquivo: `get_file(1)`. NUNCA peça ao usuário o caminho do arquivo de entrada \
 e NUNCA invente uma chave fixa em get_input().
@@ -142,12 +127,12 @@ PDF E IMAGEM (OCR com validação):
 `from flowdesk_sdk import extract_document` e `doc = extract_document(get_file())`. Ele \
 detecta sozinho: PDF com texto extrai direto; PDF escaneado/imagem usa OCR local. NÃO use \
 pd.read_excel num PDF nem tente OCR manual.
-- IMPORTANTE para TABELAS/EXTRATOS em PDF (colunas de data, histórico, crédito, débito, \
-saldo): o texto puro de `doc["text"]` PERDE o alinhamento das colunas e mistura os valores. \
-Nesse caso, em vez de fatiar o texto linear, use `pdfplumber` direto \
+- IMPORTANTE para TABELAS em PDF (várias colunas numéricas lado a lado): o texto puro de \
+`doc["text"]` PERDE o alinhamento das colunas e mistura os valores. Nesse caso, em vez de \
+fatiar o texto linear, use `pdfplumber` direto \
 (`import pdfplumber; pdf = pdfplumber.open(get_file())`) e separe as colunas pelas POSIÇÕES \
 X das palavras (`page.extract_words()` e o campo `x0`/`x1` de cada palavra). É a forma \
-confiável de saber qual número é crédito, débito ou saldo.
+confiável de saber a qual coluna cada número pertence.
 - `doc` traz: `doc["text"]` (texto), `doc["mean_confidence"]` (0..1 ou None), \
 `doc["needs_review"]` (True quando o OCR teve baixa confiança) e `doc["low_confidence"]` \
 (linhas duvidosas). SEMPRE que a entrada passar por OCR, inclua no set_output a chave \
@@ -177,12 +162,9 @@ Tipos de ação: create_file, edit_file (path, content), create_stage \
 (stage_type form|script, name), install_package (package), \
 require_env (key, description, example).
 
-REGRAS DE CÓDIGO PARA TAREFAS CONTÁBEIS/FISCAIS (siga à risca):
+VALIDAÇÃO ANTES DE DECLARAR SUCESSO:
 - Saída de arquivo: SEMPRE set_output({"arquivo_resultado": str(output_path("nome.xlsx")), ...}). Nunca passe o nome nu.
-- Aging / dias de atraso: dias = (data_base - vencimento).days. dias <= 0 é "A vencer". Faixas com limite superior INCLUSIVO e sem sobreposição: "1-30" (1<=dias<=30), "31-60" (31<=dias<=60), "61-90" (61<=dias<=90), "90+" (dias>90). Pergunte a data-base se não vier. Para "por cliente E faixa", use pivot_table(index=cliente, columns=faixa, values=valor, aggfunc="sum").
-- Conciliação débito x crédito que zera: pareie por VALOR ABSOLUTO (abs(valor)), tratando crédito negativo. Pareamento 1:1, marcando cada lançamento já usado; com valores repetidos, ordene de forma estável. Mantenha TODOS os registros (Conciliados + Não Conciliados = carregados) e gere resumo com as contagens que fecham.
-- Conciliação por valor + data com tolerância: case mesmo valor com diferença de datas <= tolerância (em dias); > tolerância NÃO casa. Casamento 1:1 (não reutilize a mesma linha). Inclua na saída a coluna "dif_dias". Remova não casados por ÍNDICE da linha, nunca por valor de data.
-- Antes de declarar sucesso, valide invariantes: somas por categoria fecham com o total carregado; não há divisão por zero; colunas esperadas existem (erro claro em PT-BR se faltar)."""
+- Valide invariantes antes de finalizar: não há divisão por zero; as colunas esperadas existem (erro claro em PT-BR se faltar); e, quando houver totais, eles fecham com o que foi carregado."""
 
 
 def _project_context(db: Session, project_id: int) -> str:
@@ -521,7 +503,7 @@ def _generate_build(messages: list[dict]):
             "O código deve ser COMPLETO E FUNCIONAL: PROIBIDO placeholder, esqueleto ou TODO "
             "(nada de 'dados = []  # adicione sua lógica', pass ou funções vazias), e NUNCA "
             "comente a linha que grava o arquivo (df.to_excel deve rodar de fato). "
-            "Para TABELAS/EXTRATOS em PDF (colunas crédito/débito/saldo), o texto puro perde o "
+            "Para TABELAS em PDF (várias colunas numéricas lado a lado), o texto puro perde o "
             "alinhamento: use pdfplumber direto (pdfplumber.open(get_file()), page.extract_words()) "
             "e separe as colunas pelas posições x das palavras. "
             "Se a entrada for PDF ou imagem, use `from flowdesk_sdk import extract_document` "

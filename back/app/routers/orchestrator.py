@@ -171,16 +171,14 @@ CONSTRUTOR_PROMPT = (
     "output_path, log` (o módulo chama-se EXATAMENTE flowdesk_sdk, NUNCA 'flowdesk'). "
     "Use get_file() para a entrada, output_path('nome.xlsx') para a saída, "
     "set_output({...}) com a chave 'resumo' e 'arquivo_resultado' quando gerar "
-    "arquivo. Quando a automação usa MAIS DE UM arquivo de entrada (ex.: conciliar "
-    "extrato e razão), leia cada um na ordem com get_file(0), get_file(1), e assim "
+    "arquivo. Quando a automação usa MAIS DE UM arquivo de entrada (ex.: comparar "
+    "duas planilhas), leia cada um na ordem com get_file(0), get_file(1), e assim "
     "por diante, um get_file por arquivo (isso define quantos campos de upload o "
     "formulário terá). "
     "Use pandas 2.x (NUNCA df.append; use pd.concat) e NUNCA omita a linha "
     "que grava o arquivo. Para PDF/imagem use extract_document; para tabelas em PDF "
     "use pdfplumber pela posição das palavras. Só use require_env quando o plano "
-    "indicar integração externa real (e-mail/API). Quando o plano for contábil, "
-    "respeite o perfil contábil fornecido (plano de contas, regime, layout do ERP "
-    "destino). Responda SOMENTE em JSON: {\"message\": \"explicação curta e amigável, "
+    "indicar integração externa real (e-mail/API). Responda SOMENTE em JSON: {\"message\": \"explicação curta e amigável, "
     "em português simples, do que a automação faz\", \"actions\": [{\"kind\": "
     "\"create_file|edit_file|create_stage|require_env\", ...}]}. Inclua SEMPRE ao "
     "menos um create_file com o script Python completo."
@@ -222,7 +220,7 @@ def run_construtor(plan: dict, profile: dict, project_context: str) -> dict:
         )
         # A1: instruções de domínio do template, injetadas só quando ele casa
         if ref.get("reference"):
-            blocks.append("REGRAS DO DOMÍNIO (aplique quando pertinente):\n" + ref["reference"])
+            blocks.append("REGRAS DO MODELO (aplique quando pertinente):\n" + ref["reference"])
     messages = [{"role": "user", "content": "\n\n".join(blocks)}]
     raw = call_agent("construtor", CONSTRUTOR_PROMPT, messages, json_mode=True)
     try:

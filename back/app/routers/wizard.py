@@ -206,7 +206,7 @@ def _generate_script(db: Session, project_id: int, ws: dict) -> tuple[str, str]:
         if ref.get("reference"):
             messages.append({
                 "role": "system",
-                "content": "REGRAS DO DOMÍNIO (aplique quando pertinente):\n" + ref["reference"],
+                "content": "REGRAS DO MODELO (aplique quando pertinente):\n" + ref["reference"],
             })
     messages.append({"role": "user", "content": intent})
 
