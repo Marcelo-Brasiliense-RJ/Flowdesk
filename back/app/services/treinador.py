@@ -220,8 +220,9 @@ def harvest_project(project_id: int) -> bool:
         items = data.get("items", [])
         items.append({"plan": anon, "code": code, "fingerprint": fp, "project_id": project_id})
         _save(_examples_path(), {"items": items})
-        # sinaliza que há exemplos novos para a destilação por limiar (Task 8)
+        # sinaliza que há exemplos novos e destila propostas ao atingir o limiar
         _bump_new_examples()
+        maybe_distill()
         return True
     except Exception:
         return False
@@ -260,3 +261,109 @@ def record_repair(project_id: int, symptom: str, root_cause: str, fix: str,
         return True
     except Exception:
         return False
+
+
+# ---- Destilação por limiar + propostas de prompt (aprovação humana) ----
+
+DISTILL_THRESHOLD = 10  # exemplos novos até propor uma melhoria de prompt
+_BUILD_AGENTS = ["planejador", "construtor", "nomeador"]
+
+
+def new_examples_count() -> int:
+    return int(_load(_meta_path()).get("new_examples", 0))
+
+
+def maybe_distill(agent_ids=None) -> None:
+    """Best-effort: quando acumula exemplos novos suficientes, destila propostas e
+    zera o contador. Chamado pelo hook de colheita, fora do caminho crítico."""
+    try:
+        if new_examples_count() < DISTILL_THRESHOLD:
+            return
+        distill(agent_ids or _BUILD_AGENTS)
+        meta = _load(_meta_path())
+        meta["new_examples"] = 0
+        _save(_meta_path(), meta)
+    except Exception:
+        pass
+
+
+def _proposal_id(agent_id: str, proposed_prompt: str) -> str:
+    return hashlib.sha1(f"{agent_id}|{proposed_prompt}".encode("utf-8")).hexdigest()[:12]
+
+
+def _distill_agent(agent_id: str, exemplos: list[dict], repairs: list[dict]) -> dict | None:
+    """Chama o Treinador em modo DESTILAR: propõe um prompt melhor para o agente a
+    partir dos exemplos validados e dos reparos. None se a IA falhar."""
+    from ..config import settings
+    if not settings.ai_enabled:
+        return None
+    from ..routers.orchestrator import call_agent  # treinador.py está em services/
+    from . import ai_config
+
+    atual = ai_config.get_prompt(agent_id) or ""
+    ex_txt = "\n\n".join(
+        json.dumps(e.get("plan") or {}, ensure_ascii=False) + "\n" + (e.get("code") or "")[:1500]
+        for e in exemplos[:5]
+    )
+    rep_txt = "\n".join(f"- {r.get('symptom', '')} -> {r.get('fix', '')}" for r in repairs[:10])
+    raw = call_agent(
+        "treinador", TREINADOR_PROMPT,
+        [{"role": "user", "content":
+          f"TAREFA: DESTILAR\nAGENTE: {agent_id}\nPROMPT ATUAL:\n{atual}\n\n"
+          f"EXEMPLOS VALIDADOS:\n{ex_txt}\n\nREPAROS OBSERVADOS:\n{rep_txt}"}],
+        json_mode=True,
+    )
+    try:
+        d = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return d if isinstance(d, dict) and d.get("proposed_prompt") else None
+
+
+def distill(agent_ids=None) -> None:
+    """Gera uma proposta de prompt (status pending) por agente. Best-effort."""
+    exemplos, repairs = _examples(), _repairs()
+    data = _load(_proposals_path())
+    items = data.get("items", [])
+    existing = {p.get("id") for p in items}
+    for agent_id in (agent_ids or _BUILD_AGENTS):
+        try:
+            prop = _distill_agent(agent_id, exemplos, repairs)
+        except Exception:
+            prop = None
+        if not prop or not prop.get("proposed_prompt"):
+            continue
+        pid = _proposal_id(agent_id, prop["proposed_prompt"])
+        if pid in existing:
+            continue
+        items.append({"id": pid, "agent_id": agent_id,
+                      "proposed_prompt": prop["proposed_prompt"],
+                      "rationale": prop.get("rationale", ""), "status": "pending"})
+        existing.add(pid)
+    _save(_proposals_path(), {"items": items})
+
+
+def list_proposals(status: str | None = None) -> list[dict]:
+    return [p for p in _proposals() if status is None or p.get("status") == status]
+
+
+def resolve_proposal(proposal_id: str, approved: bool) -> bool:
+    """Aprova (aplica o prompt na fonte que get_prompt lê) ou rejeita. Retorna
+    False se não achar a proposta ou se a aplicação falhar."""
+    data = _load(_proposals_path())
+    items = data.get("items", [])
+    for p in items:
+        if p.get("id") != proposal_id:
+            continue
+        if approved:
+            try:
+                from . import ai_config
+                ai_config.apply_prompt(p["agent_id"], p["proposed_prompt"])
+            except Exception:
+                return False
+            p["status"] = "approved"
+        else:
+            p["status"] = "rejected"
+        _save(_proposals_path(), {"items": items})
+        return True
+    return False

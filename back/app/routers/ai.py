@@ -201,3 +201,41 @@ def reset_graph(user: User = Depends(get_current_user)):
     _require_admin(user)
     ai_config.clear_graph()
     return {"ok": True}
+
+
+# ---- Treinador: propostas de melhoria de prompt (aprovação humana) ----
+
+@router.get("/treinador/proposals")
+def list_treinador_proposals(status: str | None = None,
+                             user: User = Depends(get_current_user)):
+    _require_admin(user)
+    from ..services import treinador
+    return {"proposals": treinador.list_proposals(status),
+            "new_examples": treinador.new_examples_count()}
+
+
+@router.post("/treinador/proposals/{proposal_id}/approve")
+def approve_treinador_proposal(proposal_id: str, user: User = Depends(get_current_user)):
+    _require_admin(user)
+    from ..services import treinador
+    if not treinador.resolve_proposal(proposal_id, approved=True):
+        raise HTTPException(status_code=404, detail="Proposta não encontrada ou falha ao aplicar.")
+    return {"ok": True}
+
+
+@router.post("/treinador/proposals/{proposal_id}/reject")
+def reject_treinador_proposal(proposal_id: str, user: User = Depends(get_current_user)):
+    _require_admin(user)
+    from ..services import treinador
+    if not treinador.resolve_proposal(proposal_id, approved=False):
+        raise HTTPException(status_code=404, detail="Proposta não encontrada.")
+    return {"ok": True}
+
+
+@router.post("/treinador/distill")
+def run_treinador_distill(user: User = Depends(get_current_user)):
+    """Dispara a destilação manualmente (admin), sem esperar o limiar."""
+    _require_admin(user)
+    from ..services import treinador
+    treinador.distill()
+    return {"ok": True, "proposals": treinador.list_proposals("pending")}
