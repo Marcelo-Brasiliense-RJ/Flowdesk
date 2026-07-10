@@ -5,18 +5,18 @@ isolamento serem testáveis por unidade. A execução fica em run_in_container()
 """
 from __future__ import annotations
 
-import os
+import json
+import shutil
+import subprocess
 from pathlib import Path
-
-from .runner import _ENV_PASSTHROUGH
 
 
 def container_env(env_vars: dict) -> dict[str, str]:
-    """Ambiente do processo DENTRO do container: allowlist de SO + EnvVar do
-    projeto + os FLOWDESK_* já apontando para os caminhos internos (/run, /out).
-    Nunca inclui segredos do servidor."""
-    env = {k: v for k, v in os.environ.items() if k.upper() in _ENV_PASSTHROUGH}
-    env.update({k: str(v) for k, v in env_vars.items()})
+    """Ambiente do processo DENTRO do container. NÃO herda nada do host: a
+    imagem Linux traz seu próprio PATH e ambiente; injetar o env do host
+    (Windows) quebraria o container e vazaria detalhes do servidor. Só as
+    EnvVar do projeto + os FLOWDESK_* apontando para os caminhos internos."""
+    env = {k: str(v) for k, v in env_vars.items()}
     env["FLOWDESK_INPUT"] = "/run/input.json"
     env["FLOWDESK_OUTPUT"] = "/run/output.json"
     env["FLOWDESK_OUTPUT_DIR"] = "/out"
@@ -59,3 +59,75 @@ def build_docker_cmd(
         cmd.extend(["-e", f"{k}={v}"])
     cmd.extend([image, "python", f"/src/{entry}"])
     return cmd
+
+
+def docker_available() -> bool:
+    exe = shutil.which("docker")
+    if not exe:
+        return False
+    try:
+        r = subprocess.run([exe, "info"], capture_output=True, timeout=15)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _cap(b: bytes, limit: int = 100_000) -> str:
+    s = b.decode("utf-8", "replace")
+    return s if len(s) <= limit else s[:limit] + "\n[...saída truncada...]"
+
+
+def _stage_inputs(run_dir: Path) -> None:
+    """Copia para run_dir/in/ os arquivos referenciados por caminho absoluto no
+    input.json e reescreve os caminhos para /run/in/<nome> (visão do container).
+    Sem arquivos referenciados, é no-op."""
+    input_path = run_dir / "input.json"
+    if not input_path.exists():
+        return
+    data = json.loads(input_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return
+    in_dir = run_dir / "in"
+    changed = False
+    for key, value in list(data.items()):
+        if isinstance(value, str):
+            p = Path(value)
+            if p.is_absolute() and p.is_file():
+                in_dir.mkdir(exist_ok=True)
+                shutil.copy2(p, in_dir / p.name)
+                data[key] = f"/run/in/{p.name}"
+                changed = True
+    if changed:
+        input_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def run_in_container(
+    *,
+    src_dir: Path,
+    output_dir: Path,
+    run_dir: Path,
+    entry: str,
+    env_vars: dict,
+    timeout: int,
+) -> tuple[int, str, str]:
+    from ..config import settings
+
+    _stage_inputs(run_dir)
+    cmd = build_docker_cmd(
+        image=settings.container_image,
+        run_dir=run_dir,
+        output_dir=output_dir,
+        src_dir=src_dir,
+        entry=entry,
+        env=container_env(env_vars),
+        memory=settings.container_memory,
+        cpus=settings.container_cpus,
+        pids=settings.container_pids,
+        runtime=settings.container_runtime,
+    )
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        return r.returncode, _cap(r.stdout), _cap(r.stderr)
+    except subprocess.TimeoutExpired as e:
+        err = _cap(e.stderr or b"") + f"\n[runtime] Tempo limite de {timeout}s excedido."
+        return 1, _cap(e.stdout or b""), err
