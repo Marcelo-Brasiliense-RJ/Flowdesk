@@ -7,7 +7,9 @@ import pytest
 BACK = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACK))
 
-from app.runtime.container import docker_available, run_in_container
+import subprocess
+
+from app.runtime.container import _container_name, docker_available, run_in_container
 
 pytestmark = pytest.mark.skipif(
     not docker_available(), reason="daemon Docker indisponível"
@@ -54,6 +56,21 @@ def test_rede_desligada_falha_controlada(tmp_path):
     )
     assert rc != 0
     assert not (run / "output.json").exists()
+
+
+def test_timeout_nao_deixa_container_orfao(tmp_path):
+    src, run, out = _prep(tmp_path, "import time\ntime.sleep(30)\n")
+    rc, so, se = run_in_container(
+        src_dir=src, output_dir=out, run_dir=run, entry="proc.py",
+        env_vars={}, timeout=3,
+    )
+    assert rc == 1
+    assert "Tempo limite" in se
+    ps = subprocess.run(
+        ["docker", "ps", "--filter", f"name={_container_name(run)}", "--format", "{{.Names}}"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert _container_name(run) not in ps.stdout  # container encerrado, sem órfão
 
 
 def test_escrita_fora_do_run_dir_falha(tmp_path):
@@ -106,6 +123,6 @@ def test_staging_copia_upload_e_reescreve_caminho(tmp_path):
         env_vars={}, timeout=60,
     )
     assert rc == 0, se
-    assert (run / "in" / "planilha.csv").exists()
+    assert (run / "in" / "arquivo" / "planilha.csv").exists()
     saida = json.loads((run / "output.json").read_text(encoding="utf-8"))
     assert saida["linhas"] == 1

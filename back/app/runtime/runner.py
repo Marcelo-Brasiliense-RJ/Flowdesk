@@ -252,7 +252,7 @@ class RuntimeManager:
         if settings.execution_backend == "container":
             from .container import run_in_container
 
-            return await asyncio.get_event_loop().run_in_executor(
+            return await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: run_in_container(
                     src_dir=src_dir,
