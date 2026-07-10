@@ -216,7 +216,13 @@ class RuntimeManager:
             code, out, err = await self._spawn(**spawn_kwargs)
             # cold start de numpy/pandas falha de forma intermitente no Windows;
             # uma única nova tentativa resolve sem mascarar erros reais de código.
-            if code != 0 and not output_path.exists() and _is_transient_import_error(err):
+            # B5 (ponytail): retry ÚNICO e só quando a falha é de IMPORT (antes do
+            # código de negócio) E nada foi gravado (not output_path.exists()) e não
+            # houve stdout — assim um efeito colateral já ocorrido (ex.: e-mail
+            # enviado) não é reexecutado. Se o heurístico _is_transient_import_error
+            # um dia casar com erro pós-efeito, este guard evita a dupla execução.
+            if (code != 0 and not output_path.exists() and not (out or "").strip()
+                    and _is_transient_import_error(err)):
                 code, out, err = await self._spawn(**spawn_kwargs)
 
             output_data: dict = {}
