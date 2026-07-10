@@ -251,8 +251,13 @@ def app_salvar_regras(subdomain: str, body: dict, token: str | None = None,
     return salvar_regras_interno(db, project.id, regras)
 
 
-def _resolve_download_target(root: Path, output_folder_name: str, path: str) -> Path:
+def _resolve_download_target(root: Path, output_folder_name: str, path: str) -> Path | None:
     candidate = Path(path)
+    # B4: rejeita traversal explícito na entrada (defense-in-depth; a validação de
+    # parents no app_download também cobre). Absoluto sob a raiz continua válido
+    # (é o arquivo_resultado, gerado por output_path()).
+    if ".." in candidate.parts:
+        return None
     target = (candidate if candidate.is_absolute() else (root / path)).resolve()
     # scripts às vezes gravam só o nome do arquivo; o real vive na pasta de saída
     if not target.exists() and not candidate.is_absolute():
@@ -270,7 +275,7 @@ def app_download(subdomain: str, path: str, token: str | None = None, db: Sessio
 
     target = _resolve_download_target(root, project.output_folder_name, path)
     root_r = root.resolve()
-    if root_r not in target.parents and target != root_r:
+    if target is None or (root_r not in target.parents and target != root_r):
         raise HTTPException(status_code=400, detail="Caminho inválido")
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
