@@ -13,6 +13,8 @@ openai==2.44.0
 httpx==0.28.1
 # Postgres driver (Supabase). Sem SUPABASE_DB_URL no .env o app usa SQLite.
 psycopg[binary]==3.3.4
+# I4: migrações de schema (baseline a partir dos modelos; rodar `alembic upgrade head` no deploy)
+alembic==1.18.5
 # Used by the seeded "Conciliador de Planilhas" example script (runs in subprocess)
 pandas==2.2.3
 openpyxl==3.1.5
