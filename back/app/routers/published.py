@@ -11,7 +11,7 @@ import datetime as dt
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from ..auth import ALGORITHM, verify_password
 from ..config import settings
 from ..database import get_db
 from ..models import Edge, Execution, Project, ProjectMember, Stage, User
+from ..ratelimit import _client_ip, enforce
 from ..runtime.runner import runtime
 from ..services import storage
 
@@ -103,10 +104,15 @@ def app_info(subdomain: str, db: Session = Depends(get_db)):
 @router.post("/{subdomain}/login")
 def app_login(
     subdomain: str,
+    request: Request,
     email: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
+    # Anti brute-force do app publicado: por conta e teto por IP (ver auth.login).
+    _email = (email or "").strip().lower()
+    enforce(f"applogin:email:{_email}", 10, 300, context=f"ip={_client_ip(request)}")
+    enforce(f"applogin:ip:{_client_ip(request)}", 50, 300)
     project = _get_live_project(db, subdomain)
     # authenticate the identity against a real user account (credential required)
     user = db.query(User).filter(User.email == email.lower().strip()).first()

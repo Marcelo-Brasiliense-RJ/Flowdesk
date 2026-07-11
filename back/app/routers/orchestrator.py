@@ -9,7 +9,8 @@ import json
 import re
 
 from ..config import settings
-from ..services import ai_config
+from ..services import ai_call, ai_config
+from ..services.ai_guard import SECURITY_PREAMBLE
 from ..services.plan_schema import Plan, plan_is_complete, plan_missing_fields
 from ..services.reference_code import reference_for_task, REF_LOW, REF_HIGH
 
@@ -24,13 +25,6 @@ _EDIT_VERB = re.compile(
     r"\b(mud\w*|alter\w*|ajust\w*|troc\w*|corrig\w*|renome\w*|adicion\w*|remov\w*)\b", re.I
 )
 _QUESTION = re.compile(r"\?\s*$|^\s*(o que|como|por ?que|qual|quando|quem)\b", re.I)
-_REASONING_MODEL = re.compile(r"gpt-5|o3|o4|codex", re.I)
-
-
-def _client():
-    from openai import OpenAI
-
-    return OpenAI(api_key=settings.openai_api_key)
 
 
 def call_agent(
@@ -50,20 +44,19 @@ def call_agent(
         return ""
     prompt = ai_config.get_prompt(agent_id, default_prompt)
     model = ai_config.get_agent_model(agent_id)
-    full = [{"role": "system", "content": prompt}, *messages]
-    client = _client()
-    if _REASONING_MODEL.search(model):
-        resp = client.responses.create(model=model, input=full)
-        return resp.output_text or ""
-    kw = {
-        "model": model,
-        "temperature": ai_config.get_temp(agent_id),
-        "messages": full,
-    }
-    if json_mode:
-        kw["response_format"] = {"type": "json_object"}
-    resp = client.chat.completions.create(**kw)
-    return resp.choices[0].message.content or ""
+    # preâmbulo de segurança sempre à frente (vale mesmo com prompt customizado no builder)
+    full = [
+        {"role": "system", "content": SECURITY_PREAMBLE},
+        {"role": "system", "content": prompt},
+        *messages,
+    ]
+    return ai_call.complete(
+        model,
+        full,
+        temperature=ai_config.get_temp(agent_id),
+        json_mode=json_mode,
+        reasoning_effort=ai_config.get_reasoning_effort(agent_id),
+    )
 
 
 def route_intent(last_user: str, has_workflow: bool) -> str:
@@ -143,6 +136,12 @@ def run_planejador(messages: list[dict], plan: dict, context: str = "") -> dict:
     except (json.JSONDecodeError, TypeError):
         data = {}
     merged = _deep_merge(plan or {}, data.get("plan") or {})
+    # gatilho tem default documentado ('manual' salvo indicação em contrário), mas o
+    # modelo frequentemente o omite do JSON. Sem este default no código, o plano ficava
+    # eternamente "incompleto" e a construção nunca disparava mesmo após o usuário
+    # confirmar ("pode montar") — a entrevista morria numa mensagem sem ações.
+    if not str(merged.get("gatilho") or "").strip():
+        merged["gatilho"] = "manual"
     # saída do modelo é fronteira de confiança: se vier com tipo errado num campo,
     # Plan(**merged) lança. Instanciamos uma vez e caímos para um Plan vazio em vez
     # de propagar a exceção (o modelo devolve o plano completo a cada turno).
@@ -317,15 +316,18 @@ def next_phase(current: str, intent: str, plan: Plan, user_confirmed: bool) -> s
     return current
 
 
-def _build_turn(plan: dict, profile: dict, project_context: str) -> dict:
+def _build_turn(plan: dict, profile: dict, project_context: str, progress=None) -> dict:
     """Roda o Construtor (com enriquecimento contábil quando aplicável) e o Nomeador,
     devolvendo o turno de construção. Reusado pelo build explícito e pela convergência
-    da entrevista."""
+    da entrevista. `progress(label)` reporta a fase atual para o stream (no-op por padrão)."""
+    progress = progress or (lambda label: None)
     plan2 = plan or {}
     profile2 = profile or {}
     if plan2.get("contabil"):
+        progress("Consultando regras contábeis")
         en = enrich_accounting(plan2, profile2)
         plan2, profile2 = en["plan"], en["profile"]
+    progress("Escrevendo o código")
     cons = run_construtor(plan2, profile2, project_context)
     actions = cons.get("actions") or []
     code = next(
@@ -333,6 +335,7 @@ def _build_turn(plan: dict, profile: dict, project_context: str) -> dict:
          if a.get("kind") in ("create_file", "edit_file") and (a.get("path") or "").endswith(".py")),
         "",
     )
+    progress("Finalizando")
     nm = run_nomeador(plan2, code)
     return {
         "mode": "building", "text": cons.get("message") or "", "questions": [],
@@ -343,9 +346,12 @@ def _build_turn(plan: dict, profile: dict, project_context: str) -> dict:
 
 
 def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
-                     user_confirmed: bool, history: list[dict], project_context: str) -> dict:
+                     user_confirmed: bool, history: list[dict], project_context: str,
+                     progress=None) -> dict:
     """Dispatch determinístico de um turno do chat. Decide a próxima fase e roda o
-    agente da vez. mode='answer' significa: responda normalmente, sem orquestrar."""
+    agente da vez. mode='answer' significa: responda normalmente, sem orquestrar.
+    `progress(label)` reporta a fase atual para o stream (no-op por padrão)."""
+    progress = progress or (lambda label: None)
     try:
         plan_obj = Plan(**(plan or {}))
     except Exception:
@@ -356,6 +362,7 @@ def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
         return {"mode": "answer", "phase": phase or "", "plan": plan or {}, "profile": profile or {}}
 
     if new_phase == "planning":
+        progress("Planejando a automação")
         pj = run_planejador(history, plan or {}, project_context)
         questions = list(pj.get("questions") or []) + list(pj.get("profile_questions") or [])
         pj_plan = pj.get("plan") or {}
@@ -363,7 +370,7 @@ def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
         # está completo, mesmo que a completude só tenha ocorrido agora. Sem isso, a
         # entrevista entraria em loop esperando um estado persistido que nunca chega.
         if user_confirmed and not (pj.get("missing") or []):
-            return _build_turn(pj_plan, profile, project_context)
+            return _build_turn(pj_plan, profile, project_context, progress=progress)
         return {
             "mode": "planning", "text": pj.get("message") or "", "questions": questions,
             "actions": [], "phase": "planning", "plan": pj_plan, "profile": profile or {},
@@ -371,6 +378,6 @@ def orchestrate_turn(*, phase: str, plan: dict, profile: dict, intent: str,
         }
 
     if new_phase == "building":
-        return _build_turn(plan or {}, profile, project_context)
+        return _build_turn(plan or {}, profile, project_context, progress=progress)
 
     return {"mode": "answer", "phase": phase or "", "plan": plan or {}, "profile": profile or {}}

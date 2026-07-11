@@ -118,6 +118,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FlowDesk API", version="1.0.0", lifespan=lifespan)
 
+from app.ratelimit import rate_limit_middleware
+
+# Ordem importa: o Starlette torna o ÚLTIMO middleware registrado o mais externo.
+# Registramos rate limit e métrica primeiro, e o CORS por último, para que o CORS
+# envolva tudo. Assim uma resposta 429 do rate limit sai COM os cabeçalhos CORS
+# (senão o navegador trataria o 429 cross-origin como erro de CORS, não como 429).
+app.middleware("http")(rate_limit_middleware)
+
+
+@app.middleware("http")
+async def _count_requests(request, call_next):
+    metrics.record_request(request.method)
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin, "http://localhost:5173", "http://127.0.0.1:5173"],
@@ -125,11 +140,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.middleware("http")
-async def _count_requests(request, call_next):
-    metrics.record_request(request.method)
-    return await call_next(request)
 
 
 for module in (

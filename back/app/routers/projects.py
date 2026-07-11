@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_admin
 from ..config import settings
-from ..services import ai_config
+from ..services import ai_call, ai_config
+from ..services.ai_guard import SECURITY_PREAMBLE
 from ..database import get_db
 from ..models import (
     ApiKey,
@@ -336,8 +337,10 @@ def _purge_project(db: Session, project: Project) -> None:
         db.query(DataRow).filter(DataRow.table_id.in_(table_ids)).delete(
             synchronize_session=False
         )
+    # ordem importa no Postgres (FKs enforced): Execution referencia builds.id e
+    # stages.id, então apaga Execution antes de Build. Stages caem depois via cascade.
     for model in (
-        Build, Execution, Role, ProjectMember, EnvVar, ApiKey, Connector,
+        Execution, Build, Role, ProjectMember, EnvVar, ApiKey, Connector,
         DataTable, ChatMessage, PendingAction,
     ):
         db.query(model).filter(model.project_id == project_id).delete(
@@ -402,19 +405,17 @@ def auto_name(
         "Responda apenas com o título."
     )
     try:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=ai_config.get_model(),
-            messages=[
+        raw = ai_call.complete(
+            ai_config.get_model(),
+            [
+                {"role": "system", "content": SECURITY_PREAMBLE},
                 {"role": "system", "content": instr},
                 {"role": "user", "content": prompt[:1000]},
             ],
             temperature=0.3,
             max_tokens=20,
         )
-        name = (resp.choices[0].message.content or "").strip().strip('"').strip()[:60]
+        name = (raw or "").strip().strip('"').strip()[:60]
         if name:
             project.name = name
             db.commit()

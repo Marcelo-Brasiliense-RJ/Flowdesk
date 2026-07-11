@@ -14,7 +14,10 @@ def test_planejador_merges_plan_and_reports_missing(monkeypatch):
     out = orchestrator.run_planejador([{"role": "user", "content": "somar planilha"}], {})
     assert out["plan"]["fonte"]["formato"] == "xlsx"
     assert out["plan"]["regra_negocio"] == "somar por cliente"
-    assert "saida.formato" in out["missing"] and "gatilho" in out["missing"]
+    assert "saida.formato" in out["missing"]
+    # gatilho tem default 'manual' aplicado no código: nunca deve travar o plano
+    assert "gatilho" not in out["missing"]
+    assert out["plan"]["gatilho"] == "manual"
     assert "fonte.formato" not in out["missing"]
     assert out["questions"][0]["id"] == "saida"
     assert out["contabil"] is False

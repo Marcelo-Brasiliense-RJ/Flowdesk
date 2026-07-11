@@ -6,7 +6,7 @@ import { Logo, StatusBadge } from "./ui";
 
 const NAV = [
   ["assistente", "Assistente", "✦"],
-  ["editor", "Editor", "✎"],
+  ["editor", "Editor Avançado", "✎"],
   ["workflow", "Workflow", "⌗"],
   ["builds", "Versões", "⎘"],
   ["logs", "Logs", "≣"],

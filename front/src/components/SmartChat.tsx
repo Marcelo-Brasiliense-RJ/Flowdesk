@@ -31,9 +31,13 @@ export default function SmartChat({
   const [input, setInput] = useState(initialInput ?? "");
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Fase | null>(null);
+  // rótulo de fase real vindo do backend durante a construção (Planejando / Escrevendo o
+  // código / Finalizando). Sobrepõe o status genérico enquanto a IA orquestra.
+  const [phaseLabel, setPhaseLabel] = useState<string | null>(null);
   const [ctx, setCtx] = useState({ percent: 0, ai_enabled: false });
   const [attached, setAttached] = useState<File[]>([]);
   const [envDrafts, setEnvDrafts] = useState<Record<number, string>>({});
+  const [resolving, setResolving] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoStartedFor = useRef<number | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -126,6 +130,7 @@ export default function SmartChat({
     let content = base;
     setBusy(true);
     setStreaming("");
+    setPhaseLabel(null);
     setPhase(files.length ? "uploading" : "thinking");
     try {
       // already-uploaded project paths (e.g. from the interview) + new File uploads
@@ -172,8 +177,11 @@ export default function SmartChat({
           if (evt.type === "token") {
             acc += evt.text;
             setStreaming(acc);
+          } else if (evt.type === "phase") {
+            setPhaseLabel(evt.label);
           } else if (evt.type === "done") {
             setStreaming("");
+            setPhaseLabel(null);
             await load();
             onApplied();
           }
@@ -196,6 +204,7 @@ export default function SmartChat({
       setBusy(false);
       setAttached([]);
       setPhase(null);
+      setPhaseLabel(null);
     }
   }
 
@@ -216,11 +225,19 @@ export default function SmartChat({
   }
 
   async function resolve(actionId: number, approve: boolean) {
-    await api.post(
-      `/api/projects/${projectId}/pending-actions/${actionId}/${approve ? "approve" : "reject"}`
-    );
-    await load();
-    if (approve) onApplied();
+    if (resolving !== null) return;
+    setResolving(actionId);
+    try {
+      await api.post(
+        `/api/projects/${projectId}/pending-actions/${actionId}/${approve ? "approve" : "reject"}`
+      );
+      // tira o card já (sai suave via AnimatePresence); load() reconcilia o resto
+      setPending((p) => p.filter((x) => x.id !== actionId));
+      await load();
+      if (approve) onApplied();
+    } finally {
+      setResolving(null);
+    }
   }
 
   async function saveEnv(action: PendingAction) {
@@ -307,7 +324,7 @@ export default function SmartChat({
               }}
             />
           )}
-          {busy && !streaming && <TypingIndicator phase={phase} />}
+          {busy && !streaming && <TypingIndicator phase={phase} label={phaseLabel} />}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -321,10 +338,16 @@ export default function SmartChat({
             Pendências ({pending.length})
           </div>
           <div className="space-y-2">
+            <AnimatePresence initial={false}>
             {pending.map((a) =>
               a.kind === "require_env" ? (
-                <div
+                <motion.div
                   key={a.id}
+                  layout
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.2 }}
                   className="rounded-lg border bg-surface p-2.5"
                   style={{ borderColor: "var(--warn2)" }}
                 >
@@ -362,10 +385,15 @@ export default function SmartChat({
                   <p className="mt-1 text-[10px] text-warn2">
                     Necessário preencher para testar a automação.
                   </p>
-                </div>
+                </motion.div>
               ) : (
-                <div
+                <motion.div
                   key={a.id}
+                  layout
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.2 }}
                   className="rounded-lg border bg-surface p-2.5"
                   style={{ borderColor: "var(--warn2)" }}
                 >
@@ -379,20 +407,23 @@ export default function SmartChat({
                   <div className="mt-2 flex gap-2">
                     <button
                       onClick={() => resolve(a.id, true)}
-                      className="btn-accent px-2.5 py-1 text-xs"
+                      disabled={resolving !== null}
+                      className="btn-accent px-2.5 py-1 text-xs disabled:opacity-50"
                     >
-                      Aprovar
+                      {resolving === a.id ? "Aplicando…" : "Aprovar"}
                     </button>
                     <button
                       onClick={() => resolve(a.id, false)}
-                      className="btn-outline px-2.5 py-1 text-xs"
+                      disabled={resolving !== null}
+                      className="btn-outline px-2.5 py-1 text-xs disabled:opacity-50"
                     >
                       Rejeitar
                     </button>
                   </div>
-                </div>
+                </motion.div>
               )
             )}
+            </AnimatePresence>
           </div>
         </div>
       )}
@@ -585,11 +616,12 @@ function WaveText({ text, animate }: { text: string; animate: boolean }) {
   );
 }
 
-/** Indicador de status: mostra a fase atual (com onda nas letras), sem pontinhos e sem loop. */
-function TypingIndicator({ phase }: { phase: Fase | null }) {
+/** Indicador de status: mostra a fase atual (com onda nas letras), sem pontinhos e sem loop.
+ * `label` (progresso real da construção vindo do backend) tem prioridade sobre o status genérico. */
+function TypingIndicator({ phase, label }: { phase: Fase | null; label?: string | null }) {
   const reduce = useReducedMotion();
   const key = phase ?? "thinking";
-  const s = STATUS[key];
+  const s = label ? { text: label, emoji: "⚙️" } : STATUS[key];
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -604,7 +636,7 @@ function TypingIndicator({ phase }: { phase: Fase | null }) {
       >
         <AnimatePresence mode="wait">
           <motion.span
-            key={key}
+            key={label ?? key}
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
@@ -917,7 +949,13 @@ const MD_COMPONENTS = {
   ),
 };
 
-function MessageContent({ text, markdown }: { text: string; markdown?: boolean }) {
+/** Só permite links http(s)/mailto. Esquemas perigosos (javascript:, data:) viram
+ * href vazio. react-markdown já não renderiza HTML cru; isto trava o vetor de link. */
+export function safeUrl(url: string): string {
+  return /^(https?:|mailto:)/i.test(url.trim()) ? url : "";
+}
+
+export function MessageContent({ text, markdown }: { text: string; markdown?: boolean }) {
   const parts = useMemo(() => splitCode(text), [text]);
   return (
     <>
@@ -925,7 +963,7 @@ function MessageContent({ text, markdown }: { text: string; markdown?: boolean }
         p.type === "code" ? (
           <CodeBlock key={i} lang={p.lang} body={p.body} />
         ) : markdown ? (
-          <ReactMarkdown key={i} components={MD_COMPONENTS}>
+          <ReactMarkdown key={i} components={MD_COMPONENTS} urlTransform={safeUrl}>
             {p.body}
           </ReactMarkdown>
         ) : (

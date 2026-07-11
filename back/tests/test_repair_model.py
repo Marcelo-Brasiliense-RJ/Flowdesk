@@ -1,5 +1,6 @@
 import types
 import app.routers.repair as repair
+from app.services import ai_call
 
 
 class _FakeCompletions:
@@ -13,7 +14,7 @@ class _FakeCompletions:
 def test_repair_usa_modelo_do_reparador(monkeypatch):
     sink = {}
     fake_client = types.SimpleNamespace(chat=types.SimpleNamespace(completions=_FakeCompletions(sink)))
-    monkeypatch.setattr(repair, "OpenAI", lambda **kw: fake_client, raising=False)
+    monkeypatch.setattr(ai_call, "_client", lambda: fake_client)
     monkeypatch.setattr(repair.ai_config, "get_agent_model", lambda a: f"modelo-de-{a}")
     # neutraliza acesso a DB/arquivos
     monkeypatch.setattr(repair, "_stage_source", lambda db, pid, st: None)

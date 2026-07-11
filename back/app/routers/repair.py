@@ -7,12 +7,12 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..config import settings
-from ..services import ai_config
+from ..services import ai_call, ai_config
+from ..services.ai_guard import SECURITY_PREAMBLE, wrap_untrusted
 from ..database import get_db
 from ..models import ChatMessage, Execution, PendingAction, SourceFile, Stage, User
 from ..schemas import (
@@ -127,27 +127,32 @@ def run_repair(db: Session, project, stage: Stage, execution_id: str, hint: str 
     input_data = (execu.input_data if execu else {}) or {}
 
     paths = [v for v in input_data.values() if isinstance(v, str) and v]
+    # _attachment_context já devolve o bloco delimitado como não confiável
     ctx = _attachment_context(project.id, paths) if paths else ""
 
-    messages = [{"role": "system", "content": _REPAIR_INSTR}]
+    messages = [
+        {"role": "system", "content": SECURITY_PREAMBLE},
+        {"role": "system", "content": _REPAIR_INSTR},
+    ]
     if ctx:
-        messages.append({"role": "system", "content": ctx})
+        messages.append({"role": "user", "content": ctx})
     pp_ctx = _plan_profile_context(project.plan, project.accounting_profile)
     if pp_ctx:
         messages.append({"role": "system", "content": pp_ctx})
-    user_msg = f"CÓDIGO ATUAL:\n\n{code[:6000]}\n\n{exec_ctx}"
+    # stderr/output vêm da execução do script sobre dados do usuário: não confiável.
+    exec_block = wrap_untrusted(exec_ctx, label="saída da execução") if exec_ctx else ""
+    user_msg = f"CÓDIGO ATUAL:\n\n{code[:6000]}\n\n{exec_block}"
     if hint and hint.strip():
         user_msg += f"\n\nO QUE O USUÁRIO DIZ QUE ESTÁ ERRADO: {hint.strip()}"
     messages.append({"role": "user", "content": user_msg})
 
-    client = OpenAI(api_key=settings.openai_api_key)
-    resp = client.chat.completions.create(
-        model=ai_config.get_agent_model("reparador"),
-        messages=messages,
-        response_format={"type": "json_object"},
+    raw = ai_call.complete(
+        ai_config.get_agent_model("reparador"),
+        messages,
         temperature=0.1,
+        json_mode=True,
     )
-    data = json.loads(resp.choices[0].message.content or "{}")
+    data = ai_call.parse_json(raw)
     fixed = (data.get("fixed_code") or "").strip()
     return RepairProposeOut(
         diagnosis=(data.get("diagnosis") or "").strip(),
@@ -202,6 +207,15 @@ def repair_apply(
         row.content = body.code
     else:
         db.add(SourceFile(project_id=project_id, path=stage.entry_file, content=body.code))
+    db.flush()
+    # o código reparado pode ter passado a ler arquivos (ou mais arquivos): garante o
+    # Form de entrada faltante e reconcilia os campos, senão a automação continua "sem
+    # entrada" e o teste falha com "arquivo não encontrado".
+    from .chat import _ensure_input_form_for_script, _sync_input_file_fields
+
+    stages = db.query(Stage).filter(Stage.project_id == project_id).all()
+    _ensure_input_form_for_script(db, project_id, stage.entry_file, stages)
+    _sync_input_file_fields(db, project_id, stage.entry_file)
     db.commit()
     return {"ok": True}
 

@@ -21,14 +21,17 @@ from .repair import _REPAIR_INSTR
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
-# Modelos realmente utilizáveis pelo provedor configurado (cliente OpenAI-
-# compatível). Não listamos modelos de outros provedores que o backend não chama.
+# Modelos realmente utilizáveis pela chave configurada (confirmados em
+# client.models.list()). Curadoria enxuta da série GPT-5, do econômico ao topo.
+# Todos são de raciocínio: o roteamento para a Responses API fica em ai_call, para
+# que qualquer um deles funcione em todos os fluxos (chat, wizard, reparo, etc.).
 MODEL_CATALOG = [
-    {"value": "gpt-4o-mini", "provider": "OpenAI", "note": "Econômico"},
-    {"value": "gpt-4o", "provider": "OpenAI", "note": "Equilibrado"},
-    {"value": "gpt-4.1", "provider": "OpenAI", "note": "Mais capaz"},
-    {"value": "gpt-4.1-mini", "provider": "OpenAI", "note": "Rápido"},
-    {"value": "o3-mini", "provider": "OpenAI", "note": "Raciocínio"},
+    {"value": "gpt-5-nano", "provider": "OpenAI", "note": "Econômico"},
+    {"value": "gpt-5-mini", "provider": "OpenAI", "note": "Rápido"},
+    {"value": "gpt-5", "provider": "OpenAI", "note": "Equilibrado"},
+    {"value": "gpt-5.5", "provider": "OpenAI", "note": "Mais capaz"},
+    {"value": "gpt-5.5-pro", "provider": "OpenAI", "note": "Raciocínio"},
+    {"value": "gpt-5.3-codex", "provider": "OpenAI", "note": "Geração de código"},
 ]
 
 # Estado real de aplicação no pipeline (após a Fase 2, o motor de orquestração

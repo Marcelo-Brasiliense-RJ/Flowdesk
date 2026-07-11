@@ -36,18 +36,21 @@ vi.mock("../lib/api", () => ({
 import ProjectSettings from "./ProjectSettings";
 
 describe("ProjectSettings (Configurações)", () => {
-  it("renderiza a nav lateral e a visão geral no novo design", async () => {
+  it("renderiza as abas e a aba Geral editável no novo design", async () => {
     renderScreen(<ProjectSettings />, {
       route: "/projects/1/settings",
       path: "/projects/:id/settings/*",
     });
 
-    expect(await screen.findByText("Configurações do Projeto")).toBeInTheDocument();
-    // itens da nav lateral (inclui a seção Tabelas, ausente no mockup mas preservada)
+    expect(await screen.findByRole("heading", { name: "Geral" })).toBeInTheDocument();
+    // aba Geral agora edita Nome e Subdomínio (Subdomínio deixou de ser aba própria)
+    expect(screen.getByDisplayValue("Conciliação de Razão")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("concilia-razao")).toBeInTheDocument();
+    // abas horizontais (Tabelas preservada apesar de ausente no mockup)
     expect(screen.getByRole("link", { name: /Conectores/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Chaves de API/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Tabelas/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Subdomínio/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Variáveis de Ambiente/ })).toBeInTheDocument();
   });
 
   it("renderiza a seção Conectores com grid e botão", async () => {

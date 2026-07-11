@@ -293,7 +293,7 @@ export default function Chat() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-1 flex-col overflow-hidden bg-surface-2"
+            className="mx-auto flex w-full max-w-7xl flex-1 flex-col overflow-hidden bg-surface-2"
           >
             <motion.div
               initial={{ opacity: 0, y: -8 }}
