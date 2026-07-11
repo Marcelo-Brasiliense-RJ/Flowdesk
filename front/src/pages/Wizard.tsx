@@ -1067,6 +1067,48 @@ function AutomationDescription({ projectId, initial }: { projectId: number; init
   );
 }
 
+/**
+ * Casa arquivos já enviados (pasta uploads) com os campos de arquivo do teste,
+ * por semelhança de nome e extensão. `arquivos` deve vir do mais recente ao mais
+ * antigo: no empate (ex: nomes sem pista), cada campo pega o próximo mais novo
+ * ainda não usado, sem repetir arquivo.
+ * ponytail: heurística simples; se errar, o usuário troca no próprio campo.
+ */
+export function matchUploads(
+  fields: { name: string; label: string }[],
+  arquivos: { name: string; path: string }[]
+): Record<string, { path: string; name: string }> {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const out: Record<string, { path: string; name: string }> = {};
+  const used = new Set<string>();
+  const score = (field: string, fileName: string) => {
+    const tokens = norm(field).split(" ").filter((t) => t.length > 1);
+    const nf = norm(fileName);
+    const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+    let s = 0;
+    for (const t of tokens) if (nf.includes(t)) s += 2;
+    if (ext && tokens.includes(ext)) s += 3; // rótulo cita a extensão (ex: "Pdf")
+    return s;
+  };
+  for (const f of fields) {
+    let best: { path: string; name: string } | null = null;
+    let bestScore = -1;
+    for (const a of arquivos) {
+      if (used.has(a.path)) continue;
+      const sc = score(`${f.label} ${f.name}`, a.name);
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = a;
+      }
+    }
+    if (best) {
+      out[f.name] = { path: best.path, name: best.name };
+      used.add(best.path);
+    }
+  }
+  return out;
+}
+
 function TestPanel({
   projectId, scriptStageId, state, inputFields = [], onFlow,
   subdomain, alreadyPublished = false, onPublished,
@@ -1122,23 +1164,26 @@ function TestPanel({
   const fields = state.input?.fields ?? [];
   const passed = exec?.status === "success";
 
-  // conveniência: só com UM arquivo esperado, pré-seleciona o upload mais recente
-  // (com dois ou mais, ex: extrato + razão, seria ambíguo; a pessoa escolhe cada um).
+  // conveniência: pré-preenche cada campo de arquivo com os uploads já feitos
+  // (ex: no Smart Chat), casando por nome/extensão. Vale para 1 ou N campos; o
+  // usuário troca no próprio campo se o palpite errar.
   useEffect(() => {
-    if (effectiveFileFields.length !== 1) return;
-    const only = effectiveFileFields[0].name;
-    if (sampleFiles[only]) return;
+    const empties = effectiveFileFields.filter((f) => !sampleFiles[f.name]);
+    if (empties.length === 0) return;
     api
       .get<{ entries: { name: string; path: string; is_dir: boolean; modified_at: string }[] }>(
         `/api/projects/${projectId}/fs?path=uploads`
       )
       .then((r) => {
-        const arquivos = (r.entries || []).filter((e) => !e.is_dir);
+        const arquivos = (r.entries || [])
+          .filter((e) => !e.is_dir)
+          .sort((a, b) => (b.modified_at || "").localeCompare(a.modified_at || ""));
         if (!arquivos.length) return;
-        const ultimo = [...arquivos].sort((a, b) =>
-          (b.modified_at || "").localeCompare(a.modified_at || "")
-        )[0];
-        setSampleFiles((s) => ({ ...s, [only]: { path: ultimo.path, name: ultimo.name } }));
+        const matched = matchUploads(
+          empties.map((f) => ({ name: f.name, label: f.label })),
+          arquivos.map((a) => ({ name: a.name, path: a.path }))
+        );
+        if (Object.keys(matched).length) setSampleFiles((s) => ({ ...s, ...matched }));
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

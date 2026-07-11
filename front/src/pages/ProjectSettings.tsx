@@ -6,12 +6,11 @@ import type { EnvVar, Project } from "../lib/types";
 import ProjectLayout, { useProject } from "../components/ProjectLayout";
 
 const SUB = [
-  ["", "Visão geral", "📋"],
+  ["", "Geral", "📋"],
   ["tables", "Tabelas", "🗄️"],
   ["connectors", "Conectores", "🔌"],
   ["keys", "Chaves de API", "🔑"],
   ["env", "Variáveis de Ambiente", "🔒"],
-  ["subdomain", "Subdomínio", "🌐"],
 ];
 
 export default function ProjectSettings() {
@@ -21,33 +20,29 @@ export default function ProjectSettings() {
 
   return (
     <ProjectLayout project={project}>
-      <div className="flex h-full">
-        <nav className="w-56 shrink-0 border-r border-line bg-surface p-3">
-          <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-ink3">
-            Configurações
-          </div>
+      <div className="flex h-full flex-col">
+        <nav className="glass flex shrink-0 gap-1 border-b border-line px-4">
           {SUB.map(([key, label, icon]) => (
             <Link
               key={key}
               to={`/projects/${id}/settings${key ? "/" + key : ""}`}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
+              className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm transition ${
                 sub === key
-                  ? "bg-surface-2 font-medium text-brandv shadow-token-sm"
-                  : "text-ink2 hover:bg-surface-2 hover:text-accentv"
+                  ? "border-accentv font-medium text-accentv"
+                  : "border-transparent text-ink2 hover:text-accentv"
               }`}
             >
-              <span className="w-4 text-center text-xs">{icon}</span>
+              <span className="text-xs opacity-70">{icon}</span>
               {label}
             </Link>
           ))}
         </nav>
         <div className="flex-1 overflow-auto p-6">
-          {sub === "" && <Overview project={project} />}
+          {sub === "" && project && <Overview project={project} setProject={setProject} />}
           {sub === "tables" && <Tables id={id} />}
           {sub === "connectors" && <Connectors id={id} />}
           {sub === "keys" && <ApiKeys id={id} />}
           {sub === "env" && <EnvVars id={id} />}
-          {sub === "subdomain" && project && <Subdomain project={project} setProject={setProject} />}
         </div>
       </div>
     </ProjectLayout>
@@ -63,16 +58,64 @@ function Header({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-function Overview({ project }: { project: any }) {
+function Overview({ project, setProject }: { project: Project; setProject: (p: Project) => void }) {
+  const [name, setName] = useState(project.name);
+  const [sub, setSub] = useState(project.subdomain);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const dirty = name !== project.name || sub !== project.subdomain;
+
+  async function save() {
+    setSaving(true);
+    setErr("");
+    try {
+      const p = await api.patch<Project>(`/api/projects/${project.id}`, { name, subdomain: sub });
+      setProject(p);
+      setName(p.name);
+      setSub(p.subdomain);
+    } catch (e: any) {
+      setErr(e?.message || "Erro ao salvar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div>
-      <Header title="Configurações do Projeto" />
-      <div className="card max-w-lg divide-y divide-[color:var(--border)] p-5 text-sm">
-        <Row label="Nome" value={project?.name} />
-        <Row label="Subdomínio" value={`/app/${project?.subdomain}`} />
-        <Row label="Status" value={project?.status} />
-        <Row label="Pasta de saída" value={project?.output_folder_name} />
-        <Row label="Política de acesso" value={project?.access_mode} />
+      <Header title="Geral" sub="Informações e endereço público do projeto" />
+      <div className="card max-w-lg space-y-4 p-5">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">Nome</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">Subdomínio</label>
+          <div className="flex items-center gap-1">
+            <span className="rounded-l-lg border border-r-0 border-line bg-surface-2 px-3 py-2 text-sm text-ink3">/app/</span>
+            <input
+              className="input rounded-l-none font-mono"
+              value={sub}
+              onChange={(e) => setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+            />
+          </div>
+          <p className="mt-1 text-xs text-ink3">
+            URL: <code>{location.origin}/app/{sub}</code>
+          </p>
+        </div>
+        {err && <div className="text-sm text-err">{err}</div>}
+        <div className="flex items-center gap-2 border-t border-line pt-4">
+          <button onClick={save} disabled={saving || !dirty} className="btn-primary py-1.5 text-sm disabled:opacity-50">
+            {saving ? "Salvando…" : "Salvar alterações"}
+          </button>
+          <a href={`/app/${project.subdomain}`} target="_blank" rel="noreferrer" className="btn-outline py-1.5 text-sm">
+            Abrir aplicação →
+          </a>
+        </div>
+      </div>
+      <div className="card mt-4 max-w-lg divide-y divide-[color:var(--border)] p-5 text-sm">
+        <Row label="Status" value={project.status} />
+        <Row label="Pasta de saída" value={project.output_folder_name} />
+        <Row label="Política de acesso" value={project.access_mode} />
       </div>
     </div>
   );
@@ -407,57 +450,6 @@ function EnvVars({ id }: { id: number }) {
             )}
           </tbody>
         </table>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Subdomínio (editável) ---------------- */
-function Subdomain({ project, setProject }: { project: Project; setProject: (p: Project) => void }) {
-  const dlg = useDialog();
-  const [sub, setSub] = useState(project.subdomain);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function save() {
-    setSaving(true);
-    setErr("");
-    try {
-      const p = await api.patch<Project>(`/api/projects/${project.id}`, { subdomain: sub });
-      setProject(p);
-      setSub(p.subdomain);
-    } catch (e: any) {
-      setErr(e?.message || "Erro ao salvar");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div>
-      <Header title="Subdomínio" sub="URL pública da aplicação publicada" />
-      <div className="card max-w-lg p-5">
-        <label className="mb-1 block text-sm font-medium text-ink">Endereço</label>
-        <div className="flex items-center gap-1">
-          <span className="rounded-l-lg border border-r-0 border-line bg-surface-2 px-3 py-2 text-sm text-ink3">/app/</span>
-          <input
-            className="input rounded-l-none font-mono"
-            value={sub}
-            onChange={(e) => setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
-          />
-        </div>
-        {err && <div className="mt-2 text-sm text-err">{err}</div>}
-        <div className="mt-4 flex items-center gap-2">
-          <button onClick={save} disabled={saving} className="btn-primary py-1.5 text-sm">
-            {saving ? "Salvando…" : "Salvar subdomínio"}
-          </button>
-          <a href={`/app/${project.subdomain}`} target="_blank" rel="noreferrer" className="btn-outline py-1.5 text-sm">
-            Abrir aplicação →
-          </a>
-        </div>
-        <p className="mt-3 text-xs text-ink3">
-          URL completa: <code>{location.origin}/app/{sub}</code>
-        </p>
       </div>
     </div>
   );

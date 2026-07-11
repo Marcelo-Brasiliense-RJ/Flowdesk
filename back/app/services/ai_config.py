@@ -28,6 +28,13 @@ def _agent_model_defaults() -> dict:
     }
 
 
+def _agent_effort_defaults() -> dict:
+    """Esforço de raciocínio por agente (só afeta modelos gpt-5/o3/o4/codex).
+    'medium' no Construtor troca profundidade por latência: gera código mais rápido
+    sem cair para um modelo mais fraco. Agentes fora do mapa usam o default do provedor."""
+    return {"construtor": "medium"}
+
+
 def _load() -> dict:
     try:
         return json.loads(_PATH.read_text(encoding="utf-8"))
@@ -157,3 +164,13 @@ def get_agent_model(agent_id: str) -> str:
     if d:
         return d
     return get_model()
+
+
+def get_reasoning_effort(agent_id: str) -> str | None:
+    """Esforço de raciocínio efetivo (Responses API): nó do grafo -> default por
+    agente -> None (default do provedor). Só tem efeito em modelos de raciocínio."""
+    a = _graph_agent(agent_id)
+    raw = (a or {}).get("reasoning_effort")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return _agent_effort_defaults().get(agent_id)

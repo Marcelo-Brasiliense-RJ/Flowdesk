@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import ast
 import json
+import queue
 import re
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -34,7 +36,8 @@ from ..models import (
     User,
 )
 from ..schemas import ChatMessageOut, ChatSendRequest, PendingActionOut
-from ..services import ai_config, storage
+from ..services import ai_call, ai_config, storage
+from ..services.ai_guard import SECURITY_PREAMBLE, guarded, wrap_untrusted
 from .projects import get_project, slugify, unsafe_source_path
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -255,12 +258,16 @@ def _attachment_context(project_id: int, paths: list[str]) -> str:
             blocks.append(f"Arquivo {rel}: não foi possível ler ({exc})")
     if not blocks:
         return ""
-    return (
+    body = (
         "O usuário anexou arquivos ao projeto. Abaixo estão os dados REAIS deles. "
         "Baseie suas perguntas e seu código nessas colunas e amostras; NÃO pergunte "
         "informações que já estão visíveis aqui (como nomes de colunas):\n\n"
         + "\n\n".join(blocks)
     )
+    # Conteúdo de arquivo enviado pelo usuário é entrada não confiável: uma célula de
+    # planilha ou linha de PDF pode conter uma tentativa de prompt injection. Marca
+    # como dado externo para os agentes tratarem como dado, nunca como instrução.
+    return wrap_untrusted(body, label="arquivos anexados")
 
 
 def _context_usage(db: Session, project_id: int) -> dict:
@@ -350,8 +357,11 @@ def chat_stream(
     cur_plan = (project.plan if project else {}) or {}
     cur_profile = (project.accounting_profile if project else {}) or {}
 
-    # orquestra só com IA ligada; sem IA, cai no caminho mock (_generate)
+    # orquestra só com IA ligada; sem IA, cai no caminho mock (_generate).
+    # A orquestração roda DENTRO do stream (thread), emitindo progresso por fase:
+    # antes ela bloqueava a resposta inteira (30-90s) sem nenhum feedback ao usuário.
     turn = {"mode": "answer"}
+    _run_orchestration = None
     if settings.ai_enabled:
         from .orchestrator import orchestrate_turn, route_intent
 
@@ -366,24 +376,55 @@ def chat_stream(
         _src_ctx = _source_context(db, project_id)
         if _src_ctx:
             _orch_ctx = _orch_ctx + "\n\n" + _src_ctx
-        turn = orchestrate_turn(
-            phase=cur_phase, plan=cur_plan, profile=cur_profile, intent=intent,
-            user_confirmed=user_confirmed,
-            history=[{"role": m.role, "content": m.content} for m in history[-20:]],
-            project_context=_orch_ctx,
-        )
+        _orch_history = [{"role": m.role, "content": m.content} for m in history[-20:]]
+
+        def _run_orchestration(progress):
+            return orchestrate_turn(
+                phase=cur_phase, plan=cur_plan, profile=cur_profile, intent=intent,
+                user_confirmed=user_confirmed, history=_orch_history,
+                project_context=_orch_ctx, progress=progress,
+            )
 
     # mensagens do caminho "answer" (dúvida / sem IA): igual ao fluxo anterior
     messages = [
-        {"role": "system", "content": ai_config.get_prompt("assistente", SYSTEM_PROMPT)},
+        {"role": "system", "content": guarded(ai_config.get_prompt("assistente", SYSTEM_PROMPT))},
         {"role": "system", "content": _project_context(db, project_id)},
     ]
     ctx_block = _attachment_context(project_id, body.attachments)
     if ctx_block:
-        messages.append({"role": "system", "content": ctx_block})
+        # dado não confiável (já delimitado) vai como mensagem do usuário, não do sistema
+        messages.append({"role": "user", "content": ctx_block})
     messages += [{"role": m.role, "content": m.content} for m in history[-20:]]
 
     def event_stream():
+        nonlocal turn
+        # roda a orquestração numa thread e transmite o progresso por fase enquanto ela
+        # trabalha (Planejando / Escrevendo o código / Finalizando). Sem isto o usuário
+        # esperava a construção inteira com o indicador "Analisando" congelado.
+        if _run_orchestration is not None:
+            q: "queue.Queue[str | None]" = queue.Queue()
+            box: dict = {}
+
+            def _work():
+                try:
+                    box["turn"] = _run_orchestration(lambda label: q.put(label))
+                except Exception as exc:  # degrada para resposta normal em vez de 500
+                    box["error"] = exc
+                finally:
+                    q.put(None)
+
+            th = threading.Thread(target=_work, daemon=True)
+            th.start()
+            while True:
+                label = q.get()
+                if label is None:
+                    break
+                yield f"data: {json.dumps({'type': 'phase', 'label': label})}\n\n"
+            th.join()
+            if "turn" in box:
+                turn = box["turn"]
+            # se orquestração falhou, turn continua {"mode": "answer"} e cai no mock/IA
+
         if turn.get("mode") == "answer":
             full_text = ""
             for chunk in _generate(messages, body.content):
@@ -475,16 +516,7 @@ def _generate(messages: list[dict], last_user: str):
     """Yield text chunks. Real OpenAI streaming when configured, else a mock."""
     if settings.ai_enabled:
         try:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=settings.openai_api_key)
-            stream = client.chat.completions.create(
-                model=ai_config.get_model(), messages=messages, stream=True,
-            )
-            for event in stream:
-                delta = event.choices[0].delta.content if event.choices else None
-                if delta:
-                    yield delta
+            yield from ai_call.stream_text(ai_config.get_model(), messages)
             return
         except Exception as exc:  # fall back to mock on any API error
             yield f"[IA indisponível: {exc}. Usando modo simulado.]\n\n"
@@ -804,6 +836,57 @@ def _input_file_fields(n: int, code: str = "", plan_files: list[dict] | None = N
     ]
 
 
+def _ensure_input_form_for_script(
+    db: Session, project_id: int, script_path: str, stages: list
+) -> bool:
+    """Cria o Form de entrada (com campos de arquivo) para um script que usa get_file
+    quando NENHUM Form de entrada existe. Fecha o buraco em que um script avulso ficava
+    sem entrada, deixando a automação como 'não recebe entrada' e o teste falhando com
+    'arquivo de entrada não foi encontrado'. Devolve True se criou."""
+    src = (
+        db.query(SourceFile)
+        .filter(SourceFile.project_id == project_id, SourceFile.path == script_path)
+        .first()
+    )
+    code = src.content if src else ""
+    if not re.search(r"get_file\(", code or ""):
+        return False  # script não lê arquivos: não precisa de upload
+    has_input = any(
+        (s.config or {}).get("mode") == "input" for s in stages if s.type == "form"
+    )
+    if has_input:
+        return False  # já há entrada; _sync_input_file_fields reconcilia os campos
+    script = next(
+        (s for s in stages if s.type == "script" and s.entry_file == script_path),
+        next((s for s in stages if s.type == "script"), None),
+    )
+    if script is None:
+        return False
+    used = {s.key for s in stages}
+    base, key, n = "entrada", "entrada", 1
+    while key in used:
+        n += 1
+        key = f"{base}-{n}"
+    form_in = Stage(
+        project_id=project_id, type="form", name="Entrada", key=key,
+        config={
+            "title": "Enviar arquivo",
+            "mode": "input",
+            "submit_label": "Executar",
+            "fields": _input_file_fields(_count_input_files(code), code),
+        },
+        pos_x=40, pos_y=120,
+    )
+    db.add(form_in)
+    db.flush()
+    db.add(
+        Edge(project_id=project_id, source_stage_id=form_in.id,
+             target_stage_id=script.id, variable_label="entrada")
+    )
+    db.flush()
+    return True
+
+
 def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) -> None:
     """Garante Form(entrada) -> Script -> Form(resultado) para um script gerado,
     quando o projeto ainda não tem nenhum nó executável. Sem isso, o Chat entrega
@@ -811,7 +894,12 @@ def _ensure_runnable_workflow(db: Session, project_id: int, script_path: str) ->
     arquivo quantos o script usa (get_file(0), get_file(1), ...)."""
     stages = db.query(Stage).filter(Stage.project_id == project_id).all()
     if any(s.type == "script" for s in stages):
-        return False  # já existe workflow; não duplica
+        # já existe workflow; não duplica. Mas garante que um script que LÊ arquivos
+        # tenha um Form de entrada: sem ele o teste falha com "arquivo não encontrado"
+        # e a automação aparece como "não recebe entrada". Cobre projetos cujo Form de
+        # entrada nunca foi criado (ex.: script veio de um create_stage avulso).
+        _ensure_input_form_for_script(db, project_id, script_path, stages)
+        return False
 
     src = (
         db.query(SourceFile)

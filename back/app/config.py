@@ -84,5 +84,29 @@ class Settings(BaseSettings):
         return bool(self.openai_api_key.strip())
 
 
+_DEFAULT_SECRET = "flowdesk-dev-secret"
+
+
+def validate_secret(s: Settings) -> None:
+    """Segurança: o default de secret_key é PÚBLICO (está no código). Um JWT assinado
+    com ele é forjável por qualquer um (inclusive tokens de admin e do app publicado).
+    Em produção o app se recusa a subir sem SECRET_KEY próprio. Sinal de produção:
+    banco Postgres/Supabase configurado (db_url). Em dev (SQLite) apenas avisa."""
+    if s.secret_key.strip() != _DEFAULT_SECRET:
+        return
+    if s.db_url:
+        raise RuntimeError(
+            "SECRET_KEY não configurado em produção. Defina SECRET_KEY no .env com uma "
+            "string longa e aleatória (ex.: `python -c \"import secrets; "
+            "print(secrets.token_urlsafe(48))\"`). JWTs assinados com o default são forjáveis."
+        )
+    print(
+        "[SEGURANÇA] Usando SECRET_KEY de desenvolvimento (público). NÃO use em produção; "
+        "defina SECRET_KEY no .env.",
+        file=sys.stderr,
+    )
+
+
 settings = Settings()
+validate_secret(settings)
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)

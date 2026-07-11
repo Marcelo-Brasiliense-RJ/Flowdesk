@@ -8,14 +8,13 @@ marcado em `config["_wizard_role"]`, então reconstruir atualiza em vez de dupli
 """
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..config import settings
-from ..services import ai_config
+from ..services import ai_call, ai_config
+from ..services.ai_guard import SECURITY_PREAMBLE
 from ..database import get_db
 from ..models import Edge, SourceFile, Stage, User
 from ..schemas import ExplanationUpdate, WizardAnalyzeIn, WizardBuildOut
@@ -242,21 +241,21 @@ def _analyze_prompt(db: Session, project_id: int, prompt: str, sample_file: str 
                         "question": None if p else "O que a automação deve fazer com os dados?"},
             "output": {"kind": "download", "confident": True, "question": None},
         }
-    messages = [{"role": "system", "content": _ANALYZE_INSTR}]
+    messages = [
+        {"role": "system", "content": SECURITY_PREAMBLE},
+        {"role": "system", "content": _ANALYZE_INSTR},
+    ]
     if sample_file:
-        ctx = _attachment_context(project_id, [sample_file])
+        ctx = _attachment_context(project_id, [sample_file])  # já delimitado como não confiável
         if ctx:
-            messages.append({"role": "system", "content": ctx})
+            messages.append({"role": "user", "content": ctx})
     messages.append({"role": "user", "content": f"PEDIDO: {prompt}"})
     try:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=ai_config.get_model(), messages=messages,
-            response_format={"type": "json_object"}, temperature=0.1,
+        raw = ai_call.complete(
+            ai_config.get_model(), messages,
+            temperature=0.1, json_mode=True,
         )
-        return json.loads(resp.choices[0].message.content or "{}")
+        return ai_call.parse_json(raw)
     except Exception as exc:
         p = prompt.strip()
         return {
@@ -425,17 +424,14 @@ def _describe_automation(code: str) -> str:
         "Responda apenas com o texto da descrição."
     )
     messages = [
+        {"role": "system", "content": SECURITY_PREAMBLE},
         {"role": "system", "content": instr},
         {"role": "user", "content": f"Código da automação:\n\n{code[:6000]}"},
     ]
     try:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=ai_config.get_model(), messages=messages, temperature=0.2,
-        )
-        return (resp.choices[0].message.content or "").strip()
+        return ai_call.complete(
+            ai_config.get_model(), messages, temperature=0.2,
+        ).strip()
     except Exception:
         return ""
 

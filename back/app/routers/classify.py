@@ -6,15 +6,14 @@ agência/conta e CNPJ nunca saem da máquina.
 """
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..config import settings
-from ..services import ai_config
+from ..services import ai_call, ai_config
+from ..services.ai_guard import SECURITY_PREAMBLE
 from ..database import get_db
 from ..models import DataRow, DataTable, User
 from .projects import get_project
@@ -142,8 +141,6 @@ def classificar_grupos(project_id: int, req: SugestaoRequest,
                               "confianca": 0.3 if alvo else 0.0})
         return {"sugestoes": sugestoes}
 
-    from openai import OpenAI
-    client = OpenAI(api_key=settings.openai_api_key)
     contas_txt = "\n".join(f"{c.codigo} = {c.nome}" for c in contas[:400])
     validos = {c.codigo for c in contas}
     sugestoes: list[dict] = []
@@ -168,17 +165,17 @@ def classificar_grupos(project_id: int, req: SugestaoRequest,
             "padrao do grupo (nunca resuma nem categorize); confianca entre 0 e 1; "
             "conta_codigo vazio se não houver conta adequada (NUNCA invente código fora da lista)."
         )
-        resp = client.chat.completions.create(
-            model=ai_config.get_model(),
-            messages=[{"role": "user", "content": prompt}],
+        raw = ai_call.complete(
+            ai_config.get_model(),
+            [
+                {"role": "system", "content": SECURITY_PREAMBLE},
+                {"role": "user", "content": prompt},
+            ],
             temperature=0,
-            response_format={"type": "json_object"},
+            json_mode=True,
         )
-        try:
-            data = json.loads(resp.choices[0].message.content or "{}")
-            parte = data.get("sugestoes", [])
-        except json.JSONDecodeError:
-            parte = []
+        data = ai_call.parse_json(raw)
+        parte = data.get("sugestoes", [])
         # descarta padrões que o modelo inventou e códigos fora da lista
         padroes_lote = {g.padrao for g in lote}
         for s in parte:

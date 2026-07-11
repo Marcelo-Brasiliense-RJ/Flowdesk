@@ -1,0 +1,14 @@
+# Scan de segredos antes de cada commit. Bloqueia API keys, tokens e senhas.
+#
+# Instalar (uma vez por clone):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Rodar contra todo o histórico manualmente:
+#   pre-commit run gitleaks --all-files
+#   gitleaks detect --source . --redact   # se tiver o binário instalado
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

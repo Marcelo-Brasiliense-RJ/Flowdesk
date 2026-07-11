@@ -1,5 +1,6 @@
 import types
 from app.routers import orchestrator
+from app.services import ai_call
 
 
 def _fake_client(sink):
@@ -18,20 +19,20 @@ def _fake_client(sink):
 
 def test_codex_vai_para_responses(monkeypatch):
     sink = {}
-    monkeypatch.setattr(orchestrator.settings, "openai_api_key", "x")
-    monkeypatch.setattr(orchestrator, "_client", lambda: _fake_client(sink))
+    monkeypatch.setattr(ai_call, "_client", lambda: _fake_client(sink))
     monkeypatch.setattr(orchestrator.ai_config, "get_agent_model", lambda a: "gpt-5.3-codex")
     monkeypatch.setattr(orchestrator.ai_config, "get_prompt", lambda a, d: "sys")
     out = orchestrator.call_agent("construtor", "sys", [{"role": "user", "content": "oi"}], json_mode=True)
     assert sink["path"] == "responses"
     assert "temperature" not in sink["kw"]
+    # Construtor troca profundidade por latência: esforço medium na Responses API
+    assert sink["kw"]["reasoning"] == {"effort": "medium"}
     assert out == '{"ok":1}'
 
 
 def test_chat_model_continua_em_chat(monkeypatch):
     sink = {}
-    monkeypatch.setattr(orchestrator.settings, "openai_api_key", "x")
-    monkeypatch.setattr(orchestrator, "_client", lambda: _fake_client(sink))
+    monkeypatch.setattr(ai_call, "_client", lambda: _fake_client(sink))
     monkeypatch.setattr(orchestrator.ai_config, "get_agent_model", lambda a: "gpt-4o-mini")
     monkeypatch.setattr(orchestrator.ai_config, "get_prompt", lambda a, d: "sys")
     monkeypatch.setattr(orchestrator.ai_config, "get_temp", lambda a: 0.2)
