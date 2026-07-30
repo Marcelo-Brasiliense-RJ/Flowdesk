@@ -234,7 +234,7 @@ export default function Manage() {
                       )}
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => nav(`/projects/${a.id}/chat`)}
+                          onClick={() => nav(`/projects/${a.id}/assistente`)}
                           className="text-left font-semibold text-ink transition hover:text-accentv"
                         >
                           {a.name}

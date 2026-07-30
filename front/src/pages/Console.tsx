@@ -501,7 +501,7 @@ function ProjectCard({
         e.dataTransfer.effectAllowed = "move";
       }}
       onClick={() =>
-        selectMode ? onToggleSelect(project.id) : nav(`/projects/${project.id}/chat`)
+        selectMode ? onToggleSelect(project.id) : nav(`/projects/${project.id}/assistente`)
       }
       className={`card group relative flex cursor-pointer flex-col p-5 pl-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-token active:cursor-grabbing ${
         selectMode && selected ? "ring-2" : ""
