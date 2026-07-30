@@ -7,6 +7,7 @@ Idempotente: pula os subdomínios que já existem.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import random
 import sys
 import uuid
@@ -22,6 +23,7 @@ from app.models import (  # noqa: E402
     Edge,
     Execution,
     Organization,
+    PendingAction,
     Project,
     ProjectFolder,
     Role,
@@ -30,6 +32,7 @@ from app.models import (  # noqa: E402
     utcnow,
 )
 from app.services import storage  # noqa: E402
+from scripts.demo_conversas import CONVERSAS  # noqa: E402
 
 CONCILIACAO_CARTOES = '''"""Concilia vendas do sistema com o extrato da operadora de cartão."""
 import pandas as pd
@@ -528,31 +531,76 @@ PEDIDOS = {
 }
 
 
-def add_chat(db, proj: Project, spec: dict) -> bool:
-    """Conversa que originou a automação, para o Smart Chat não abrir vazio.
-    Idempotente: não faz nada se o projeto já tem mensagens."""
-    if db.query(ChatMessage).filter(ChatMessage.project_id == proj.id).first():
-        return False
-    campos = ", ".join(f["label"] for f in spec["fields"])
-    quando = utcnow() - dt.timedelta(days=61)
-    resposta = (
-        f"Montei a **{spec['name']}** em três etapas:\n\n"
-        f"1. **Entrada** — formulário com: {campos}.\n"
-        f"2. **Processar** — script `{spec['file']}` que faz o trabalho.\n"
-        f"3. **Resultado** — a planilha para baixar, com o resumo do que foi processado.\n\n"
-        + (
-            "Está no ar. Pode rodar pelo Assistente ou pelo link publicado."
-            if spec["status"] == "live"
-            else "Ainda é rascunho. Teste pelo Assistente e publique quando estiver bom."
-        )
-    )
-    db.add_all([
-        ChatMessage(project_id=proj.id, role="user", content=PEDIDOS[spec["sub"]],
-                    created_at=quando),
-        ChatMessage(project_id=proj.id, role="assistant", content=resposta,
-                    created_at=quando + dt.timedelta(seconds=40)),
-    ])
-    return True
+def add_chat(db, proj: Project, spec: dict) -> int:
+    """Grava a conversa que originou a automação, no mesmo formato que o Smart Chat
+    produz de verdade: pedido -> entrevista (bloco flowdesk-actions com "questions")
+    -> respostas -> código + ação aprovada -> ajuste -> publicação.
+
+    Regrava a cada execução (apaga a conversa anterior do seed). São projetos de
+    demonstração; conversa real do usuário não vive aqui."""
+    conv = CONVERSAS[spec["sub"]]
+    db.query(ChatMessage).filter(ChatMessage.project_id == proj.id).delete()
+    db.query(PendingAction).filter(PendingAction.project_id == proj.id).delete()
+
+    t = utcnow() - dt.timedelta(days=62 if spec["status"] == "live" else 9)
+    msgs: list[ChatMessage] = []
+
+    def diga(role: str, content: str, minutos: float, meta: dict | None = None) -> None:
+        nonlocal t
+        t = t + dt.timedelta(minutes=minutos)
+        msgs.append(ChatMessage(project_id=proj.id, role=role, content=content,
+                                meta={"seed": True, **(meta or {})}, created_at=t))
+
+    def bloco(payload: dict) -> str:
+        return "\n\n```flowdesk-actions\n" + json.dumps(payload, ensure_ascii=False) + "\n```"
+
+    # 1. pedido -> 2. entrevista (as perguntas viajam no bloco; a UI as mostra uma a uma)
+    perguntas = [
+        {k: q[k] for k in ("id", "label", "options", "recommended") if k in q}
+        for q in conv["perguntas"]
+    ]
+    diga("user", conv["pedido"], 0)
+    diga("assistant", conv["contexto"] + bloco({"questions": perguntas}), 0.6,
+         {"questions": perguntas})
+
+    # 3. respostas, no formato exato que o painel de entrevista envia
+    respostas = "\n".join(f"- {q['label']} {q['resposta']}" for q in conv["perguntas"])
+    diga("user", "Respostas da entrevista:\n" + respostas, 3.5)
+
+    # 4. código pronto + a ação que o usuário aprovou para criar o arquivo
+    acao = {"kind": "create_file", "title": f"Criar {spec['file']}", "path": spec["file"]}
+    diga("assistant",
+         conv["montagem"] + f"\n\n```python\n{spec['code'].strip()}\n```" + bloco({"actions": [acao]}),
+         2.0)
+    db.add(PendingAction(project_id=proj.id, kind="create_file",
+                         title=f"Criar {spec['file']}", status="approved",
+                         payload={"path": spec["file"], "content": spec["code"], "seed": True},
+                         created_at=t))
+
+    # 5. o problema que aparece no primeiro uso -> 6. correção
+    diga("user", conv["ajuste_user"], 44)
+    patch = f"\n\n```python\n{conv['patch']}\n```" if conv.get("patch") else ""
+    diga("assistant", conv["ajuste_ia"] + patch, 2.5)
+
+    # 7. fecho (publicação, ou entrevista ainda aberta / ação aguardando aprovação)
+    if conv.get("fecho_user"):
+        diga("user", conv["fecho_user"], 170)
+    if conv.get("fecho_ia"):
+        abertas = conv.get("entrevista_aberta")
+        extra = bloco({"questions": abertas}) if abertas else ""
+        diga("assistant", conv["fecho_ia"] + extra, 1.5,
+             {"questions": abertas} if abertas else None)
+
+    if conv.get("pendente"):
+        p = conv["pendente"]
+        db.add(PendingAction(
+            project_id=proj.id, kind=p["kind"], title=p["title"], status="pending",
+            payload={"path": spec["file"], "content": spec["code"], "seed": True},
+            created_at=t,
+        ))
+
+    db.add_all(msgs)
+    return len(msgs)
 
 
 def get_folder(db, org_id: int, name: str | None) -> int | None:
@@ -617,9 +665,8 @@ def main() -> None:
         for spec in SPECS:
             existente = db.query(Project).filter(Project.subdomain == spec["sub"]).first()
             if existente:
-                novo_chat = add_chat(db, existente, spec)
-                print(f"- {spec['name']}: já existe"
-                      + (", conversa adicionada" if novo_chat else ", pulando"))
+                print(f"- {spec['name']}: já existe, conversa regravada "
+                      f"({add_chat(db, existente, spec)} mensagens)")
                 continue
 
             proj = Project(
