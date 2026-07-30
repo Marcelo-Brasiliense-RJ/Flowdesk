@@ -15,8 +15,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.database import SessionLocal  # noqa: E402
+from app.config import settings  # noqa: E402
 from app.models import (  # noqa: E402
     Build,
+    ChatMessage,
     Edge,
     Execution,
     Organization,
@@ -25,6 +27,7 @@ from app.models import (  # noqa: E402
     Role,
     SourceFile,
     Stage,
+    utcnow,
 )
 from app.services import storage  # noqa: E402
 
@@ -503,6 +506,55 @@ SPECS = [
 ]
 
 
+# Pedido original que deu origem a cada automação. A resposta do assistente é
+# derivada do próprio spec, para não repetir a descrição em dois lugares.
+PEDIDOS = {
+    "conciliacao-cartoes": "Preciso cruzar as vendas do nosso sistema com o extrato da "
+    "operadora de cartão e ver o que não caiu na conta.",
+    "valida-nfe": "Recebo um zip com os XMLs das notas do mês. Quero validar a chave de "
+    "acesso de cada uma e somar os totais por emitente.",
+    "confere-folha": "Todo mês eu comparo a folha com a do mês anterior no olho. Quero que "
+    "o sistema aponte quem variou acima de um limite que eu escolho.",
+    "extrato-dominio": "Tenho o extrato do banco em CSV e preciso do arquivo pronto para "
+    "importar no Domínio, já classificado pelo histórico do lançamento.",
+    "contratos-vencendo": "Quero uma rotina que olhe a base de contratos e liste o que vence "
+    "nos próximos dias, para eu avisar o cliente antes.",
+    "amostragem-auditoria": "Para a auditoria eu preciso selecionar uma amostra do razão: os "
+    "maiores valores mais alguns aleatórios, e saber quanto do total isso cobre.",
+    "horas-cliente": "Preciso consolidar os apontamentos de horas por cliente e por "
+    "colaborador para fechar o faturamento do mês.",
+    "faturamento-mensal": "Quero consolidar as notas emitidas por serviço, por cliente e por "
+    "competência, com a variação de um mês para o outro.",
+}
+
+
+def add_chat(db, proj: Project, spec: dict) -> bool:
+    """Conversa que originou a automação, para o Smart Chat não abrir vazio.
+    Idempotente: não faz nada se o projeto já tem mensagens."""
+    if db.query(ChatMessage).filter(ChatMessage.project_id == proj.id).first():
+        return False
+    campos = ", ".join(f["label"] for f in spec["fields"])
+    quando = utcnow() - dt.timedelta(days=61)
+    resposta = (
+        f"Montei a **{spec['name']}** em três etapas:\n\n"
+        f"1. **Entrada** — formulário com: {campos}.\n"
+        f"2. **Processar** — script `{spec['file']}` que faz o trabalho.\n"
+        f"3. **Resultado** — a planilha para baixar, com o resumo do que foi processado.\n\n"
+        + (
+            "Está no ar. Pode rodar pelo Assistente ou pelo link publicado."
+            if spec["status"] == "live"
+            else "Ainda é rascunho. Teste pelo Assistente e publique quando estiver bom."
+        )
+    )
+    db.add_all([
+        ChatMessage(project_id=proj.id, role="user", content=PEDIDOS[spec["sub"]],
+                    created_at=quando),
+        ChatMessage(project_id=proj.id, role="assistant", content=resposta,
+                    created_at=quando + dt.timedelta(seconds=40)),
+    ])
+    return True
+
+
 def get_folder(db, org_id: int, name: str | None) -> int | None:
     if not name:
         return None
@@ -552,6 +604,8 @@ def add_executions(db, proj: Project, stage: Stage, spec: dict, rnd: random.Rand
 
 
 def main() -> None:
+    alvo = settings.db_url.split("@")[-1].split("/")[0] if settings.db_url else "sqlite local"
+    print(f"Banco alvo: {alvo}")
     db = SessionLocal()
     rnd = random.Random(7)
     try:
@@ -561,8 +615,11 @@ def main() -> None:
 
         criados = 0
         for spec in SPECS:
-            if db.query(Project).filter(Project.subdomain == spec["sub"]).first():
-                print(f"- {spec['name']}: já existe, pulando")
+            existente = db.query(Project).filter(Project.subdomain == spec["sub"]).first()
+            if existente:
+                novo_chat = add_chat(db, existente, spec)
+                print(f"- {spec['name']}: já existe"
+                      + (", conversa adicionada" if novo_chat else ", pulando"))
                 continue
 
             proj = Project(
@@ -629,6 +686,7 @@ def main() -> None:
                              framework_version="1.0.0", status="live",
                              snapshot={"note": "build de demonstração"}))
 
+            add_chat(db, proj, spec)
             add_executions(db, proj, script, spec, rnd)
             storage.materialize_sources(db, proj)
             criados += 1

@@ -6,7 +6,7 @@ venv/
 *.egg-info/
 
 # FlowDesk runtime data and DB
-back/flowdesk.db
+back/flowdesk.db*
 back/storage/
 
 # Env com segredos (senha do banco, chaves) — NUNCA versionar, em qualquer pasta.
